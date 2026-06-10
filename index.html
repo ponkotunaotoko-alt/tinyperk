@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>TINYPERK</title>
+  
+  <!-- SEO Tags -->
+  <meta name="description" content="個人事業主やフリーランスのための、本格的なタスク管理と請求金額の自動計算ができるウェブアプリ。iPhoneからのサクサク操作と、クライアントとの安全な進捗共有に対応。">
+  
+  <!-- PWA Capabilities for iOS and Android -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="TINYPERK">
+  <meta name="apple-touch-fullscreen" content="yes">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="apple-touch-icon" href="./app-icon.png">
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d0b14" media="(prefers-color-scheme: dark)">
+
+  <!-- OGP / SNS Share -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="TINYPERK — フリーランスのタスク・請求管理">
+  <meta property="og:description" content="個人事業主・フリーランスのためのタスク管理と請求管理アプリ。スマホ対応PWA。">
+  <meta property="og:image" content="./app-icon.png">
+  <meta property="og:url" content="https://tinyperk.netlify.app/">
+  <meta property="og:locale" content="ja_JP">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="TINYPERK">
+  <meta name="twitter:description" content="個人事業主・フリーランスのためのタスク管理と請求管理アプリ">
+  <meta name="twitter:image" content="./app-icon.png">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="./styles.css">
+
+  <!-- Google GIS Client Library -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+  <!-- Pull-to-refresh indicator -->
+  <div id="ptr-indicator" aria-live="polite">
+    <span class="ptr-arrow">↓ 引いて更新</span>
+    <span class="ptr-spinner"></span>
+    <span class="ptr-text">更新中...</span>
+  </div>
+
+  <!-- #3 Onboarding Modal -->
+  <div id="onboarding-overlay" role="dialog" aria-modal="true" aria-label="ようこそ" style="display:none;">
+    <div id="onboarding-card">
+      <div class="onb-steps">
+        <div class="onb-dot active" id="onb-dot-0"></div>
+        <div class="onb-dot" id="onb-dot-1"></div>
+        <div class="onb-dot" id="onb-dot-2"></div>
+      </div>
+      <div id="onb-icon" class="onb-icon">📋</div>
+      <div id="onb-title" class="onb-title">TINYPERKへようこそ</div>
+      <div id="onb-body" class="onb-body">フリーランス・個人事業主のためのタスク管理と請求管理アプリです。まず今日のタスクを追加してみましょう。</div>
+      <button id="onb-primary-btn" class="btn btn-primary">次へ →</button>
+      <button id="onb-skip-btn" type="button">スキップ</button>
+    </div>
+  </div>
+
+  <!-- PWA Install Modal -->
+  <div id="pwa-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
+    <div id="pwa-modal" style="background:#1e1e2e;border-radius:16px;padding:24px;max-width:320px;width:calc(100% - 48px);text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.4);">
+      <div style="font-size:48px;margin-bottom:12px;">📲</div>
+      <h3 style="margin:0 0 8px;color:#fff;font-size:18px;">ホーム画面に追加</h3>
+      <p id="pwa-modal-desc" style="margin:0 0 20px;color:#aaa;font-size:14px;line-height:1.6;"></p>
+      <button id="pwa-modal-install-btn" style="display:none;width:100%;padding:12px;background:#7c6af5;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:10px;">インストール</button>
+      <button id="pwa-modal-close-btn" style="width:100%;padding:10px;background:transparent;color:#888;border:1px solid #333;border-radius:10px;font-size:14px;cursor:pointer;">閉じる（次回から表示しない）</button>
+    </div>
+  </div>
+
+    <!-- Confetti Canvas layer -->
+  <canvas id="confetti-canvas"></canvas>
+
+  <!-- Main Application Wrapper -->
+  <div class="app-container">
+    
+    <!-- Sidebar Navigation (Desktop View) -->
+    <aside class="sidebar">
+      <div class="logo-container">
+        <img src="./app-icon.png" alt="Logo" class="logo-img">
+        <span class="logo-text">TINYPERK</span>
+      </div>
+      
+      <ul class="nav-menu">
+        <li>
+          <a class="nav-item active" data-tab="dashboard" id="nav-dashboard">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+            <span class="sidebar-label">ダッシュボード</span>
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="tasks" id="nav-tasks">
+            <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><polyline points="3 6 4 7 6 5"></polyline><polyline points="3 12 4 13 6 11"></polyline><polyline points="3 18 4 19 6 17"></polyline></svg>
+            <span class="sidebar-label">タスク</span>
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="calendar" id="nav-calendar">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            <span class="sidebar-label">スケジュール</span>
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="reports" id="nav-reports">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+            <span class="sidebar-label">請求確認レポート</span>
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="journal" id="nav-journal">
+            <svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+            <span class="sidebar-label">日誌</span>
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="deals" id="nav-deals">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            <span class="sidebar-label">案件管理</span>
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="contacts" id="nav-contacts">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            <span class="sidebar-label">コンタクト</span>
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="goals" id="nav-goals">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+            <span class="sidebar-label">目標管理</span>
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="expenses" id="nav-expenses">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <span class="sidebar-label">経費管理</span>
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="ideas" id="nav-ideas">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            <span class="sidebar-label">ひらめきメモ</span>
+          </a>
+        </li>
+        <li>
+          <a class="nav-item" data-tab="settings" id="nav-settings">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>
+            <span class="sidebar-label">連携設定</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-bottom" style="margin-top: auto; display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 0.85rem; color: var(--text-muted);">テーマ切り替え</span>
+        <button id="theme-toggle" class="btn btn-secondary btn-icon-only" aria-label="テーマ切替"></button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- 0. DASHBOARD SCREEN -->
+      <section id="dashboard-screen" class="screen active">
+        <div class="screen-header">
+          <h1 class="screen-title">ダッシュボード</h1>
+          <button class="btn btn-primary btn-add-task">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            タスク追加
+          </button>
+        </div>
+
+        <!-- 今週サマリー（全幅・モバイル最上部） -->
+        <div class="report-card" id="weekly-summary-card" style="margin-bottom:1.5rem;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+            <h3 style="font-size:1.05rem;margin:0;">📅 今週のサマリー</h3>
+            <span id="weekly-summary-range" style="font-size:0.8rem;color:var(--text-muted);"></span>
+          </div>
+          <!-- 金額・時間サマリー行 -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1.25rem;">
+            <div style="background:var(--primary-glow);border-radius:12px;padding:0.85rem 1rem;">
+              <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">今週の完了金額（税込）</div>
+              <div id="weekly-amount" style="font-size:1.35rem;font-weight:700;color:var(--primary);">¥0</div>
+            </div>
+            <div style="background:var(--bg-hover);border-radius:12px;padding:0.85rem 1rem;">
+              <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">今週の稼働時間</div>
+              <div id="weekly-hours-total" style="font-size:1.35rem;font-weight:700;color:var(--text-primary);">0h</div>
+            </div>
+          </div>
+          <!-- 曜日バーチャート -->
+          <div id="weekly-hours-chart" style="display:grid;grid-template-columns:repeat(7,1fr);gap:0.4rem;align-items:end;height:80px;"></div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:0.4rem;margin-top:0.35rem;">
+            <div style="text-align:center;font-size:0.7rem;color:var(--danger);">日</div>
+            <div style="text-align:center;font-size:0.7rem;color:var(--text-muted);">月</div>
+            <div style="text-align:center;font-size:0.7rem;color:var(--text-muted);">火</div>
+            <div style="text-align:center;font-size:0.7rem;color:var(--text-muted);">水</div>
+            <div style="text-align:center;font-size:0.7rem;color:var(--text-muted);">木</div>
+            <div style="text-align:center;font-size:0.7rem;color:var(--text-muted);">金</div>
+            <div style="text-align:center;font-size:0.7rem;color:var(--secondary);">土</div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+
+          <!-- Column 1: Time Card & Daily Report -->
+          <div style="display: flex; flex-direction: column; gap: 2rem;">
+            
+            <!-- Attendance card (タイムカード + 休憩・移動) -->
+            <div class="report-card attendance-card">
+              <h3 style="font-size: 1.1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">タイムカード打刻</h3>
+              <div class="attendance-buttons">
+                <button id="btn-clock-in" class="btn-clock in">
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  出勤
+                </button>
+                <button id="btn-clock-out" class="btn-clock out">
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="10" y1="15" x2="14" y2="9"></line></svg>
+                  退勤
+                </button>
+              </div>
+
+              <div class="attendance-status-log">
+                <div class="log-row">
+                  <span class="log-label">出勤:</span>
+                  <span id="dash-clock-in-val" class="log-value">--:--</span>
+                </div>
+                <div class="log-row">
+                  <span class="log-label">退勤:</span>
+                  <span id="dash-clock-out-val" class="log-value">--:--</span>
+                </div>
+                <!-- 休憩行 -->
+                <div class="log-row bt-log-row-inline">
+                  <span class="log-label">🍱 休憩:</span>
+                  <div class="bt-inline-right">
+                    <span id="dash-break-total" class="log-value bt-break-val">--</span>
+                    <button id="btn-break-toggle" class="btn-bt-inline break" onclick="toggleBreakTravelTimer('break')">開始</button>
+                  </div>
+                </div>
+                <!-- 移動行 -->
+                <div class="log-row bt-log-row-inline">
+                  <span class="log-label">🚗 移動:</span>
+                  <div class="bt-inline-right">
+                    <span id="dash-travel-total" class="log-value bt-travel-val">--</span>
+                    <button id="btn-travel-toggle" class="btn-bt-inline travel" onclick="toggleBreakTravelTimer('travel')">開始</button>
+                  </div>
+                </div>
+                <!-- アクティブタイマー行（計測中のみ表示） -->
+                <div id="bt-active-display" style="display:none;" class="log-row bt-active-inline">
+                  <span id="bt-active-label" class="log-label"></span>
+                  <span id="bt-active-timer" class="bt-timer-val">00:00</span>
+                </div>
+                <!-- 実稼働時間 -->
+                <div class="log-row" style="border-top: 1px solid var(--border-color); padding-top: 0.5rem; margin-top: 0.25rem;">
+                  <span class="log-label">実稼働時間:</span>
+                  <span id="dash-total-hours-val" class="log-value" style="color: var(--secondary);">--</span>
+                </div>
+              </div>
+
+              <!-- Manual Correction toggle -->
+              <a href="#" id="manual-log-toggle" style="color: var(--primary); font-size: 0.85rem; font-weight: 700; text-decoration: underline; text-align: right;">打刻を忘れた・手動で修正する</a>
+              
+              <!-- Manual overwrite log form -->
+              <div id="manual-log-form-container" style="display: none; flex-direction: column; gap: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                <form id="manual-timecard-form" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label" style="font-size:0.75rem;">日付</label>
+                      <input type="date" id="manual-log-date" class="form-control" style="min-height:38px; padding:0.5rem;">
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label" style="font-size:0.75rem;">出勤時間</label>
+                      <input type="time" id="manual-log-in" class="form-control" style="min-height:38px; padding:0.5rem;">
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label" style="font-size:0.75rem;">退勤時間</label>
+                      <input type="time" id="manual-log-out" class="form-control" style="min-height:38px; padding:0.5rem;">
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label" style="font-size:0.75rem;">作業前気分</label>
+                      <select id="manual-log-mood-before" class="form-control" style="min-height:38px; padding:0.5rem;">
+                        <option value="">未設定</option>
+                        <option value="😆">😆 絶好調</option>
+                        <option value="😊">😊 良い</option>
+                        <option value="😐">😐 普通</option>
+                        <option value="😔">😔 少し疲れ</option>
+                        <option value="😢">😢 しんどい</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label" style="font-size:0.75rem;">作業後気分</label>
+                      <select id="manual-log-mood-after" class="form-control" style="min-height:38px; padding:0.5rem;">
+                        <option value="">未設定</option>
+                        <option value="😆">😆 絶好調</option>
+                        <option value="😊">😊 良い</option>
+                        <option value="😐">😐 普通</option>
+                        <option value="😔">😔 少し疲れ</option>
+                        <option value="😢">😢 しんどい</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label" style="font-size:0.75rem;">メモ</label>
+                      <input type="text" id="manual-log-memo" class="form-control" placeholder="手動修正の理由など" style="min-height:38px; padding:0.5rem;">
+                    </div>
+                  </div>
+                  <button type="submit" class="btn btn-primary" style="padding:0.6rem; font-size:0.85rem;">勤怠を手動保存</button>
+                </form>
+              </div>
+
+            </div>
+
+            <!-- Mood & Daily Report -->
+            <div class="report-card">
+              <h3 style="font-size: 1.1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin-bottom: 1rem;">本日の気分 ＆ 日報登録</h3>
+              
+              <!-- Mood before work -->
+              <div class="form-group" style="margin-bottom: 1rem;">
+                <span class="form-label">始業時の気分は？</span>
+                <div class="mood-picker" data-type="before">
+                  <button type="button" class="mood-btn" data-mood="😆" aria-label="絶好調">😆</button>
+                  <button type="button" class="mood-btn" data-mood="😊" aria-label="良い">😊</button>
+                  <button type="button" class="mood-btn" data-mood="😐" aria-label="普通">😐</button>
+                  <button type="button" class="mood-btn" data-mood="😔" aria-label="疲れ">😔</button>
+                  <button type="button" class="mood-btn" data-mood="😢" aria-label="しんどい">😢</button>
+                </div>
+              </div>
+
+              <!-- Mood after work -->
+              <div class="form-group" style="margin-bottom: 1.25rem;">
+                <span class="form-label">終業時の気分は？</span>
+                <div class="mood-picker" data-type="after">
+                  <button type="button" class="mood-btn" data-mood="😆" aria-label="絶好調">😆</button>
+                  <button type="button" class="mood-btn" data-mood="😊" aria-label="良い">😊</button>
+                  <button type="button" class="mood-btn" data-mood="😐" aria-label="普通">😐</button>
+                  <button type="button" class="mood-btn" data-mood="😔" aria-label="疲れ">😔</button>
+                  <button type="button" class="mood-btn" data-mood="😢" aria-label="しんどい">😢</button>
+                </div>
+              </div>
+
+              <!-- nippon daily report with micro-mic -->
+              <div class="form-group">
+                <label class="form-label" for="dashboard-nippo-memo">
+                  今日やったこと（日報メモ）
+                </label>
+                <div class="input-with-mic">
+                  <textarea id="dashboard-nippo-memo" class="form-control" rows="3" placeholder="今日進めたタスクやメモを音声やキーボードで残せます。"></textarea>
+                  <button type="button" id="mic-btn-nippo" class="btn-mic" aria-label="音声入力開始">
+                    <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v1a7 7 0 0 1-14 0v-1"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                  </button>
+                </div>
+              </div>
+
+              <button type="button" id="btn-save-daily-report" class="btn btn-primary" style="margin-top: 1rem; width: 100%;">
+                日報・気分を保存する
+              </button>
+            </div>
+
+          </div>
+
+          <!-- Column 2: Progress ring & Stats -->
+          <div style="display: flex; flex-direction: column; gap: 2rem;">
+            
+            <div class="report-card" id="pomodoro-card" style="background:linear-gradient(135deg,var(--bg-card),var(--primary-glow));border:1px solid var(--border-color);">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+                <span class="form-label" style="margin:0;">🍅 ポモドーロ</span>
+                <span id="pomo-session-count" style="font-size:0.8rem;color:var(--text-muted);">本日 0 セッション</span>
+              </div>
+              <div id="pomo-display" style="font-size:2.5rem;font-weight:700;text-align:center;letter-spacing:0.05em;color:var(--primary);font-variant-numeric:tabular-nums;line-height:1;">25:00</div>
+              <div id="pomo-label" style="text-align:center;font-size:0.8rem;color:var(--text-muted);margin:0.25rem 0 0.75rem;">集中タイム</div>
+              <div style="display:flex;gap:0.5rem;">
+                <button id="btn-pomo-start" class="btn btn-primary" onclick="togglePomodoro()" style="flex:1;font-size:0.9rem;">▶ 開始</button>
+                <button class="btn btn-secondary" onclick="resetPomodoro()" style="font-size:0.85rem;padding:0.5rem 0.75rem;">↺</button>
+              </div>
+            </div>
+
+            <div class="report-card" style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 1.5rem;">
+              <h3 style="font-size: 1.1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; text-align: center;">現在の全体進捗割合</h3>
+              
+              <div class="chart-container">
+                <div class="svg-chart-wrapper">
+                  <svg width="140" height="140" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="var(--border-color)" stroke-width="12"></circle>
+                    <circle id="dash-progress-ring" class="progress-ring-circle" cx="60" cy="60" r="50" fill="none" stroke="var(--primary)" stroke-width="12" stroke-linecap="round"></circle>
+                  </svg>
+                  <div class="chart-center-text">
+                    <span id="dash-chart-percentage" class="chart-center-val">0%</span>
+                    <span class="chart-center-lbl">完了</span>
+                  </div>
+                </div>
+
+                <div class="chart-legend">
+                  <div class="legend-item">
+                    <div class="legend-color" style="background-color: var(--primary);"></div>
+                    <span>未着手: <strong id="lbl-cnt-not-started">0</strong>件</span>
+                  </div>
+                  <div class="legend-item">
+                    <div class="legend-color" style="background-color: var(--secondary);"></div>
+                    <span>進行中: <strong id="lbl-cnt-in-progress">0</strong>件</span>
+                  </div>
+                  <div class="legend-item">
+                    <div class="legend-color" style="background-color: var(--success);"></div>
+                    <span>完了済: <strong id="lbl-cnt-completed">0</strong>件</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Motivator Advice Card -->
+            <div class="report-card" style="background: linear-gradient(135deg, var(--bg-card) 0%, var(--primary-glow) 100%); display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 2rem; gap: 0.75rem;">
+              <div id="motivator-emoji" style="font-size: 2.5rem;">📊</div>
+              <h4 id="motivator-title" style="font-size: 1.1rem; color: var(--primary);">今月の状況</h4>
+              <div id="motivator-body" style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.8; display:flex; flex-direction:column; gap:0.25rem;"></div>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+      <!-- 1. SCHEDULE SCREEN -->
+      <section id="calendar-screen" class="screen">
+        <div class="screen-header">
+          <h1 class="screen-title">スケジュール</h1>
+          <button class="btn btn-primary btn-add-task">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            タスク追加
+          </button>
+        </div>
+
+        <div class="calendar-wrapper">
+          <div class="calendar-header">
+            <div class="calendar-title-container">
+              <h2 id="calendar-month-year" class="calendar-month-year">2026年 6月</h2>
+              <button id="today-btn" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.85rem;">今日</button>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button id="prev-month" class="calendar-nav-btn" aria-label="前月">
+                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              </button>
+              <button id="next-month" class="calendar-nav-btn" aria-label="次月">
+                <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </button>
+            </div>
+          </div>
+
+          <div id="calendar-grid" class="calendar-grid">
+            <div class="calendar-weekday" style="color: var(--danger);">日</div>
+            <div class="calendar-weekday">月</div>
+            <div class="calendar-weekday">火</div>
+            <div class="calendar-weekday">水</div>
+            <div class="calendar-weekday">木</div>
+            <div class="calendar-weekday">金</div>
+            <div class="calendar-weekday" style="color: var(--secondary);">土</div>
+          </div>
+        </div>
+
+        <!-- 日程未定タスク & AI提案パネル -->
+        <div id="unscheduled-panel" style="margin-top:1.5rem;display:none;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
+            <h3 style="font-size:1.05rem;font-weight:700;margin:0;">📋 日程未定タスク</h3>
+            <button class="btn btn-primary" onclick="runAIScheduler()" id="btn-run-ai" style="font-size:0.85rem;padding:0.5rem 1rem;">
+              ✨ AIが日程を提案する
+            </button>
+          </div>
+          <div id="unscheduled-tasks-list"></div>
+          <div id="ai-proposals-section" style="display:none;margin-top:1.25rem;">
+            <div style="font-size:0.9rem;font-weight:700;color:var(--primary);margin-bottom:0.75rem;">🤖 AI提案 — 承認または却下してください</div>
+            <div id="ai-proposals-list"></div>
+          </div>
+        </div>
+
+        <div class="mobile-day-tasks-container">
+          <h3 id="selected-day-title" class="mobile-selected-day-title">選ばれた日のタスク</h3>
+          <div id="selected-day-tasks-list" class="task-list">
+            <!-- Injected by JS -->
+          </div>
+
+          <!-- NEW: Daily View diary details trigger button -->
+          <button type="button" id="btn-open-daily-view" class="btn btn-secondary" style="width: 100%; margin-top: 1rem; font-weight: 700; height:48px;">
+            📅 この日の詳細・日報（デイリービュー）を開く
+          </button>
+        </div>
+      </section>
+
+      <!-- 2. INVOICE CONFIRMATION REPORT SCREEN -->
+      <section id="reports-screen" class="screen">
+        <div class="screen-header">
+          <h1 class="screen-title">請求確認レポート</h1>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button class="btn btn-secondary" onclick="exportCSV()" style="font-size:0.85rem;">
+              <svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              CSV出力
+            </button>
+            <button class="btn btn-secondary" onclick="window.print()" style="font-size:0.85rem;">
+              <svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+              印刷
+            </button>
+          </div>
+        </div>
+
+        <div class="report-filters-card">
+          <div class="form-group">
+            <label class="form-label" for="report-month-filter">対象月</label>
+            <input type="month" id="report-month-filter" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="report-client-filter">クライアント名</label>
+            <select id="report-client-filter" class="form-control">
+              <option value="all">すべてのクライアント</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="report-grid">
+          <div class="report-card">
+            <span class="report-card-title">完了タスク件数</span>
+            <div id="report-total-count" class="report-card-value">0</div>
+          </div>
+          <div class="report-card">
+            <span class="report-card-title">総稼働時間 (月間)</span>
+            <div id="report-total-hours" class="report-card-value" style="color: var(--primary);">0 時間</div>
+            
+            <!-- NEW: Breakdown detailed stats (Stopwatch vs Timecard) -->
+            <div id="report-hours-breakdown"></div>
+          </div>
+          <div class="report-card">
+            <span class="report-card-title">合計請求金額 (税込)</span>
+            <div id="report-total-amount" class="report-card-value amount">￥0</div>
+          </div>
+        </div>
+
+
+        <!-- 週次・月次トレンドグラフ -->
+        <div id="trend-chart-section" class="calendar-wrapper" style="padding: 2rem;">
+          <h3 style="margin-bottom:1.25rem;">📈 月別稼働時間トレンド</h3>
+          <canvas id="trend-chart-canvas" height="120"></canvas>
+        </div>
+
+        <!-- クライアント別稼働集計 -->
+        <div id="client-breakdown-section" class="calendar-wrapper" style="padding: 2rem; display:none;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+            <h3 style="margin:0;">📊 クライアント別稼働集計</h3>
+            <button class="btn btn-primary" onclick="openInvoiceModal()" style="font-size:0.85rem;">
+              🧾 請求書を作成
+            </button>
+          </div>
+          <div id="client-breakdown-chart"></div>
+        </div>
+
+        <!-- 業務種別別 売上・実績サマリー -->
+        <div id="work-type-revenue-section" class="calendar-wrapper" style="padding: 2rem; display:none;">
+          <h3 style="margin-bottom:0.5rem;">🎬 業務種別 売上・実績サマリー</h3>
+          <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:1.25rem;">どの業務で売上が立っているか、実際どのくらい時間がかかっているかを把握できます。</p>
+          <div id="work-type-revenue-table"></div>
+        </div>
+
+        <!-- 見積もり参考データ（全期間） -->
+        <div id="estimation-guide-section" class="calendar-wrapper" style="padding: 2rem; display:none;">
+          <h3 style="margin-bottom:0.5rem;">📐 見積もり参考データ <span style="font-size:0.78rem;font-weight:400;color:var(--text-muted);">（全期間の実績から算出）</span></h3>
+          <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:1.25rem;">過去の実績から次の案件の見積もり時間・単価の参考にしてください。</p>
+          <div id="estimation-guide-table"></div>
+        </div>
+
+        <!-- 予定 vs 実績 振り返り -->
+        <div id="time-comparison-section" class="calendar-wrapper" style="padding: 2rem; display:none;">
+          <h3 style="margin-bottom:0.5rem;">⏱️ 予定 vs 実績 振り返り</h3>
+          <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:1.25rem;">今月の案件で見積もり時間と実際にかかった時間を比較します。</p>
+          <div id="time-comparison-table"></div>
+        </div>
+
+        <!-- 業務内容別 平均時間・単価分析（今月） -->
+        <div id="work-type-section" class="calendar-wrapper" style="padding: 2rem; display:none;">
+          <h3 style="margin-bottom:1.25rem;">📊 業務内容別 分析（今月）</h3>
+          <div id="work-type-table"></div>
+        </div>
+
+        <div class="calendar-wrapper" style="padding: 2rem; overflow-x: auto;">
+          <h3 style="margin-bottom: 1rem;">完了タスク明細一覧</h3>
+          <table style="width: 100%; border-collapse: collapse; text-align: left; min-width: 600px;">
+            <thead>
+              <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-muted); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">
+                <th style="padding: 0.75rem 0.5rem;">タスク名</th>
+                <th style="padding: 0.75rem 0.5rem;">クライアント</th>
+                <th style="padding: 0.75rem 0.5rem;">完了日</th>
+                <th style="padding: 0.75rem 0.5rem; text-align: right;">金額 (単価)</th>
+              </tr>
+            </thead>
+            <tbody id="report-table-body">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TASKS LIST SCREEN -->
+      <section id="tasks-screen" class="screen">
+        <div class="screen-header">
+          <h1 class="screen-title">タスク一覧</h1>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:flex-end;">
+            <button class="btn btn-secondary" onclick="openSmartScheduleModal()" style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;">
+              ✨ スマートスケジュール
+            </button>
+            <button class="btn btn-primary" onclick="openAddTaskModal()" style="display:flex;align-items:center;gap:0.4rem;">
+              <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.5;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              タスク追加
+            </button>
+          </div>
+        </div>
+
+        <!-- #5 検索バー -->
+        <div id="task-search-wrap">
+          <input type="search" id="task-search-input" placeholder="🔍 タスク名・クライアントで検索…" autocomplete="off" aria-label="タスクを検索">
+        </div>
+
+        <!-- フィルター＆ソート -->
+        <div class="tasks-list-controls">
+          <div class="tasks-filter-row" id="tasks-status-filter">
+            <button class="tl-filter-btn active" data-filter="active">未完了</button>
+            <button class="tl-filter-btn" data-filter="all">すべて</button>
+            <button class="tl-filter-btn" data-filter="not-started">未着手</button>
+            <button class="tl-filter-btn" data-filter="in-progress">進行中</button>
+            <button class="tl-filter-btn" data-filter="revision">修正中</button>
+            <button class="tl-filter-btn" data-filter="completed">完了</button>
+          </div>
+          <div class="tasks-sort-row">
+            <span style="font-size:0.8rem;color:var(--text-muted);">並び替え：</span>
+            <select id="tasks-sort-select" class="form-control" style="width:auto;font-size:0.85rem;padding:0.3rem 0.6rem;height:auto;">
+              <option value="dueDate">納期順</option>
+              <option value="client">クライアント順</option>
+              <option value="status">ステータス順</option>
+              <option value="created">登録順</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 週間インフォグラフ -->
+        <div id="weekly-chart" class="weekly-chart"></div>
+
+        <!-- 容量サマリー -->
+        <div id="tasks-capacity-bar" class="tasks-capacity-bar"></div>
+
+        <!-- タスクリスト本体 -->
+        <div id="tasks-list-body" class="tasks-list-body"></div>
+      </section>
+
+      <!-- JOURNAL SCREEN -->
+      <section id="journal-screen" class="screen">
+        <div class="screen-header">
+          <h1 class="screen-title">📓 日誌</h1>
+        </div>
+
+        <!-- 日付ナビゲーター -->
+        <div class="journal-date-nav">
+          <button id="journal-prev-day" class="btn btn-secondary journal-nav-btn" aria-label="前日">
+            <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <div class="journal-date-center">
+            <span id="journal-date-display" class="journal-date-label">2026年6月9日（月）</span>
+            <button id="journal-today-btn" class="journal-today-chip">今日</button>
+          </div>
+          <button id="journal-next-day" class="btn btn-secondary journal-nav-btn" aria-label="翌日">
+            <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+        </div>
+
+        <!-- その日の作業サマリー -->
+        <div id="journal-work-summary" class="journal-work-summary">
+          <!-- JS で描画 -->
+        </div>
+
+        <!-- 時間割タイムライン (9:00-18:00) -->
+        <div class="journal-timeline-section">
+          <div class="journal-timeline-header">
+            <h3 class="journal-timeline-title">🕐 時間割</h3>
+            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+          <span class="journal-timeline-hint">タスクをドラッグして配置</span>
+          <button class="btn btn-secondary tl-quick-btn" onclick="showAddSpecialSlotModal('break')">🍱 休憩</button>
+          <button class="btn btn-secondary tl-quick-btn" onclick="showAddSpecialSlotModal('travel')">🚗 移動</button>
+          <button class="btn btn-secondary tl-quick-btn" onclick="showFreeTimeModal()">📋 空き時間を共有</button>
+        </div>
+          </div>
+          <div id="journal-timeline" class="journal-timeline">
+            <!-- JS で描画 -->
+          </div>
+        </div>
+
+        <!-- ジャーナル記入エリア -->
+        <div class="report-card journal-write-card">
+          <div class="journal-write-header">
+            <span class="form-label" style="margin:0;">✏️ 今日の振り返り</span>
+            <span id="journal-char-count" class="journal-char-count">0文字</span>
+          </div>
+          <textarea id="journal-text" class="form-control journal-textarea"
+            rows="7" placeholder="今日はどんな一日でしたか？&#10;&#10;進んだこと、学んだこと、明日やること…何でも書き留めておきましょう。"></textarea>
+          <div class="journal-write-footer">
+            <span id="journal-saved-at" class="journal-saved-at"></span>
+            <button id="btn-save-journal" class="btn btn-primary">
+              <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+              保存する
+            </button>
+          </div>
+        </div>
+
+        <!-- 過去の日誌一覧 -->
+        <div class="journal-history-section">
+          <div class="journal-history-header">
+            <h3 class="journal-history-title">📅 過去の記録</h3>
+            <span id="journal-entry-count" class="journal-entry-count"></span>
+          </div>
+          <div id="journal-history-list" class="journal-history-list">
+            <!-- JS で描画 -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. SETTINGS & GOOGLE CALENDAR SYNC SCREEN -->
+      <section id="settings-screen" class="screen">
+        <div class="screen-header">
+          <h1 class="screen-title">連携設定</h1>
+        </div>
+
+        <!-- クラウド同期 -->
+        <div class="settings-section">
+          <h3 class="settings-title">☁️ クラウド同期</h3>
+          <p style="color:var(--text-muted);font-size:0.95rem;margin-bottom:1rem;">ログインするとデータを複数デバイスで共有できます。</p>
+          <div id="sync-login-area">
+            <div id="sync-logged-out" style="display:flex;gap:0.75rem;align-items:center;">
+              <button class="btn btn-primary" onclick="showAuthModal()">ログイン / 新規登録</button>
+            </div>
+            <div id="sync-logged-in" style="display:none;align-items:center;gap:1rem;">
+              <span id="sync-user-email" style="color:var(--text-muted);font-size:0.9rem;"></span>
+              <button class="btn btn-secondary" onclick="authLogout()">ログアウト</button>
+              <button class="btn btn-primary" onclick="forceSyncNow()">今すぐ同期</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 事業者情報 -->
+        <div class="settings-section">
+          <h3 class="settings-title">🏢 事業者情報</h3>
+          <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.25rem;">
+            請求書に印刷される情報です。正確に入力してください。
+          </p>
+          <div style="display: flex; flex-direction: column; gap: 1rem; max-width: 500px;">
+            <div class="form-group">
+              <label class="form-label">氏名・屋号</label>
+              <input type="text" id="biz-name" class="form-control" placeholder="例: 山田 太郎 / タロウ制作">
+            </div>
+            <div class="form-group">
+              <label class="form-label">会社名（任意）</label>
+              <input type="text" id="biz-company" class="form-control" placeholder="例: 合同会社タロウ">
+            </div>
+            <div class="form-group">
+              <label class="form-label">住所</label>
+              <input type="text" id="biz-address" class="form-control" placeholder="例: 東京都渋谷区〇〇 1-2-3">
+            </div>
+            <div class="form-group">
+              <label class="form-label">電話番号</label>
+              <input type="tel" id="biz-phone" class="form-control" placeholder="例: 090-1234-5678">
+            </div>
+            <div class="form-group">
+              <label class="form-label">メールアドレス</label>
+              <input type="email" id="biz-email" class="form-control" placeholder="例: taro@example.com">
+            </div>
+            <hr style="border-color: var(--border-color); margin: 0.5rem 0;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+              <div class="form-group" style="margin:0;">
+                <label class="form-label">銀行名</label>
+                <input type="text" id="biz-bank-name" class="form-control" placeholder="例: ゆうちょ銀行">
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label class="form-label">支店名</label>
+                <input type="text" id="biz-bank-branch" class="form-control" placeholder="例: 渋谷支店">
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+              <div class="form-group" style="margin:0;">
+                <label class="form-label">口座種別</label>
+                <select id="biz-account-type" class="form-control">
+                  <option value="普通">普通</option>
+                  <option value="当座">当座</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label class="form-label">口座番号</label>
+                <input type="text" id="biz-account-number" class="form-control" placeholder="例: 1234567">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">口座名義（カナ）</label>
+              <input type="text" id="biz-account-holder" class="form-control" placeholder="例: ヤマダ タロウ">
+            </div>
+            <div class="form-group">
+              <label class="form-label">インボイス登録番号（任意）</label>
+              <input type="text" id="biz-invoice-number" class="form-control" placeholder="例: T1234567890123">
+            </div>
+            <button class="btn btn-primary" onclick="saveBusinessInfo()" style="margin-top:0.5rem;">
+              💾 事業者情報を保存
+            </button>
+            <div id="biz-save-msg" style="display:none; color:var(--success); font-size:0.9rem; text-align:center;">✅ 保存しました</div>
+          </div>
+        </div>
+
+        <!-- 稼働時間設定 -->
+        <div class="settings-section">
+          <h3 class="settings-title">⏰ 稼働時間設定（AI自動スケジュール用）</h3>
+          <p style="color:var(--text-muted);font-size:0.95rem;margin-bottom:1.25rem;">日程未定タスクをAIが自動配置するときに使用する1日の稼働時間帯と稼働曜日を設定します。</p>
+          <div style="display:flex;flex-direction:column;gap:1rem;max-width:480px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+              <div class="form-group" style="margin:0;">
+                <label class="form-label">開始時刻</label>
+                <input type="time" id="work-start-time" class="form-control" value="09:00">
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label class="form-label">終了時刻</label>
+                <input type="time" id="work-end-time" class="form-control" value="18:00">
+              </div>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">稼働曜日</label>
+              <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.25rem;">
+                <label class="work-day-label"><input type="checkbox" class="work-day-cb" value="0"> 日</label>
+                <label class="work-day-label"><input type="checkbox" class="work-day-cb" value="1" checked> 月</label>
+                <label class="work-day-label"><input type="checkbox" class="work-day-cb" value="2" checked> 火</label>
+                <label class="work-day-label"><input type="checkbox" class="work-day-cb" value="3" checked> 水</label>
+                <label class="work-day-label"><input type="checkbox" class="work-day-cb" value="4" checked> 木</label>
+                <label class="work-day-label"><input type="checkbox" class="work-day-cb" value="5" checked> 金</label>
+                <label class="work-day-label"><input type="checkbox" class="work-day-cb" value="6"> 土</label>
+              </div>
+            </div>
+            <button class="btn btn-primary" onclick="saveWorkSettings()" style="align-self:flex-start;">💾 稼働設定を保存</button>
+            <div id="work-settings-save-msg" style="display:none;color:var(--success);font-size:0.9rem;">✅ 保存しました</div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3 class="settings-title">Googleカレンダー同期設定</h3>
+          <p style="color: var(--text-muted); font-size: 0.95rem;">
+            登録したタスクの期日を、お使いのGoogleカレンダーへ自動的に同期することができます。
+          </p>
+
+          <div style="display: flex; flex-direction: column; gap: 1.5rem; max-width: 500px;">
+            <div class="form-group">
+              <label class="form-label" for="google-client-id-input">Google OAuth クライアント ID</label>
+              <input type="text" id="google-client-id-input" class="form-control" placeholder="xxxxxxxxxx.apps.googleusercontent.com">
+            </div>
+            
+            <div style="display: flex; gap: 1rem;">
+              <button id="google-client-id-save" class="btn btn-secondary" style="flex: 1;">IDを保存</button>
+              <button id="google-connect-btn" class="btn btn-primary" style="flex: 1;">Google接続認証</button>
+            </div>
+          </div>
+
+          <div style="margin-top: 1rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 0.5rem;">
+            <span class="form-label">接続ステータス</span>
+            <div id="google-status-container">
+              <span style="font-size: 0.9rem; color: var(--text-muted);">未接続</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- クライアント報告文テンプレート -->
+        <div class="settings-section">
+          <h3 class="settings-title">📨 クライアント報告文テンプレート</h3>
+          <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1rem;">
+            タスク完了時に自動で報告文を生成します。クライアントごとにテンプレートを登録してください。<br>
+            使える変数：<code>{タスク名}</code>　<code>{クライアント名}</code>　<code>{納期}</code>　<code>{完了日}</code>
+          </p>
+
+          <div style="display: flex; flex-direction: column; gap: 1rem; max-width: 600px;">
+            <div style="display: flex; gap: 0.75rem; align-items: flex-end;">
+              <div class="form-group" style="flex: 1; margin: 0;">
+                <label class="form-label">クライアント名</label>
+                <input type="text" id="template-client-input" class="form-control" placeholder="例: 株式会社テクノロジー" list="template-client-suggestions" autocomplete="off">
+                <datalist id="template-client-suggestions"></datalist>
+              </div>
+              <button id="template-load-btn" class="btn btn-secondary" style="white-space: nowrap; height: 42px;">読み込む</button>
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label class="form-label">テンプレート本文</label>
+              <textarea id="template-body-input" class="form-control" rows="8" style="font-family: inherit; resize: vertical;" placeholder="{クライアント名} ご担当者様&#10;&#10;お世話になっております。&#10;「{タスク名}」が完了しましたのでご報告いたします。&#10;&#10;完了日：{完了日}&#10;納期：{納期}&#10;&#10;引き続きよろしくお願いいたします。"></textarea>
+            </div>
+            <div style="display: flex; gap: 0.75rem;">
+              <button id="template-save-btn" class="btn btn-primary" style="flex: 1;">💾 保存</button>
+              <button id="template-delete-btn" class="btn btn-secondary" style="flex: 1; color: var(--danger);">🗑️ 削除</button>
+            </div>
+
+            <div id="template-list-wrap" style="margin-top: 0.5rem;">
+              <p class="form-label" style="margin-bottom: 0.5rem;">登録済みテンプレート</p>
+              <div id="template-client-list" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3 class="settings-title">Google Cloud OAuth ID設定手順（初心者向け）</h3>
+          <ol style="margin-left: 1.5rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.95rem;">
+            <li>
+              <a href="https://console.cloud.google.com/" target="_blank" rel="noopener" style="color: var(--primary); text-decoration: underline;">Google Cloud Console</a> にアクセスし、新しいプロジェクトを作成します。
+            </li>
+            <li>「APIとサービス」のライブラリから「Google Calendar API」を検索し、有効化します。</li>
+            <li>「OAuth 同意画面」を設定し、公開ステータスを「テスト」にし、ご自身のテストユーザーメールアドレスを追加します。</li>
+            <li>「認証情報」から「認証情報を作成」をクリックし、「OAuth クライアント ID」を選択します。</li>
+            <li>アプリケーションの種類に「ウェブ アプリケーション」を指定し、承認済みの JavaScript 生成元に現在の実行URL (例: <code>http://localhost:8000</code>) を登録します。</li>
+            <li>生成された「クライアント ID」を上の入力欄にコピー＆ペーストして「IDを保存」をクリックした後、「Google接続認証」ボタンを押して連携を完了させます。</li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- DEALS SCREEN -->
+      <section id="deals-screen" class="screen">
+        <div class="screen-header">
+          <h1 class="screen-title">💼 案件管理</h1>
+          <button class="btn btn-primary" onclick="openDealModal()">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            案件を追加
+          </button>
+        </div>
+        <div id="deals-pipeline-stats" class="deals-stats-row"></div>
+        <div id="deals-kanban" class="deals-kanban"></div>
+      </section>
+
+      <!-- CONTACTS SCREEN -->
+      <section id="contacts-screen" class="screen">
+        <div class="screen-header">
+          <h1 class="screen-title">👤 コンタクト</h1>
+          <button class="btn btn-primary" onclick="openContactModal()">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            追加
+          </button>
+        </div>
+        <div id="contacts-filters" class="tag-filter-row"></div>
+        <div id="contacts-list" class="contacts-grid"></div>
+      </section>
+
+      <!-- GOALS SCREEN -->
+      <section id="goals-screen" class="screen">
+        <div class="screen-header">
+          <h1 class="screen-title">🎯 目標管理</h1>
+        </div>
+        <div id="goals-content"></div>
+      </section>
+
+      <!-- EXPENSES SCREEN -->
+      <section id="expenses-screen" class="screen">
+        <div class="screen-header">
+          <h1 class="screen-title">💴 経費管理</h1>
+          <button class="btn btn-primary" onclick="openExpenseModal()">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            経費を追加
+          </button>
+        </div>
+        <div id="expenses-content"></div>
+      </section>
+
+      <!-- IDEAS SCREEN -->
+      <section id="ideas-screen" class="screen">
+        <div class="screen-header">
+          <h1 class="screen-title">💡 ひらめきメモ</h1>
+        </div>
+        <div id="ideas-content"></div>
+      </section>
+    </main>
+
+    <!-- Mobile More Drawer -->
+    <div id="more-drawer-overlay" class="more-drawer-overlay" onclick="closeMoreDrawer()"></div>
+    <div id="more-drawer" class="more-drawer">
+      <div class="more-drawer-handle"></div>
+      <div class="more-drawer-grid">
+        <a class="more-drawer-item" data-tab="deals" onclick="switchTab('deals');closeMoreDrawer()">
+          <span class="more-drawer-icon">💼</span>
+          <span>案件</span>
+        </a>
+        <a class="more-drawer-item" data-tab="contacts" onclick="switchTab('contacts');closeMoreDrawer()">
+          <span class="more-drawer-icon">👤</span>
+          <span>コンタクト</span>
+        </a>
+        <a class="more-drawer-item" data-tab="goals" onclick="switchTab('goals');closeMoreDrawer()">
+          <span class="more-drawer-icon">🎯</span>
+          <span>目標管理</span>
+        </a>
+        <a class="more-drawer-item" data-tab="expenses" onclick="switchTab('expenses');closeMoreDrawer()">
+          <span class="more-drawer-icon">💴</span>
+          <span>経費管理</span>
+        </a>
+        <a class="more-drawer-item" data-tab="ideas" onclick="switchTab('ideas');closeMoreDrawer()">
+          <span class="more-drawer-icon">💡</span>
+          <span>ひらめき</span>
+        </a>
+        <a class="more-drawer-item" data-tab="calendar" onclick="switchTab('calendar');closeMoreDrawer()">
+          <span class="more-drawer-icon">📅</span>
+          <span>カレンダー</span>
+        </a>
+        <a class="more-drawer-item" data-tab="reports" onclick="switchTab('reports');closeMoreDrawer()">
+          <span class="more-drawer-icon">📊</span>
+          <span>レポート</span>
+        </a>
+        <a class="more-drawer-item" data-tab="settings" onclick="switchTab('settings');closeMoreDrawer()">
+          <span class="more-drawer-icon">⚙️</span>
+          <span>設定</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Bottom Navigation Bar (iPhone / Mobile Portrait View) -->
+    <nav class="mobile-nav">
+      <a class="mobile-nav-item active" data-tab="dashboard" id="mobile-nav-dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+        <span>ホーム</span>
+      </a>
+      <a class="mobile-nav-item" data-tab="tasks" id="mobile-nav-tasks">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><polyline points="3 6 4 7 6 5"></polyline><polyline points="3 12 4 13 6 11"></polyline><polyline points="3 18 4 19 6 17"></polyline></svg>
+        <span>タスク</span>
+      </a>
+      <a class="mobile-nav-item" data-tab="deals" id="mobile-nav-deals">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <span>案件</span>
+      </a>
+      <a class="mobile-nav-item" data-tab="journal" id="mobile-nav-journal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+        <span>日誌</span>
+      </a>
+      <a class="mobile-nav-item" id="mobile-nav-more" onclick="openMoreDrawer()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+        <span>もっと</span>
+      </a>
+    </nav>
+
+  </div>
+
+
+  <!-- INVOICE PDF MODAL -->
+  <div id="invoice-modal-overlay" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true">
+    <div class="modal-content" style="max-width:800px; width:95vw; max-height:90vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h2 class="modal-title">🧾 請求書プレビュー</h2>
+        <button onclick="closeInvoiceModal()" class="modal-close" aria-label="閉じる">✕</button>
+      </div>
+      <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem; padding: 0 1.5rem;">
+        <button class="btn btn-primary" onclick="printInvoice()" style="flex:1; min-width:120px;">🖨️ 印刷・PDF保存</button>
+        <button class="btn btn-secondary" onclick="closeInvoiceModal()" style="flex:1; min-width:120px;">閉じる</button>
+      </div>
+      <div id="invoice-preview" style="padding: 0 1.5rem 1.5rem;">
+        <!-- generated by JS -->
+      </div>
+    </div>
+  </div>
+
+
+  <!-- AUTH MODAL -->
+  <div id="auth-modal-overlay" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.65);z-index:99999;display:none;align-items:center;justify-content:center;" role="dialog" aria-modal="true">
+    <div style="background:#ffffff;color:#37352f;border-radius:16px;padding:2rem;width:92vw;max-width:400px;box-shadow:0 8px 40px rgba(0,0,0,0.3);">
+      <div style="text-align:center;margin-bottom:1.5rem;">
+        <div style="font-size:2rem;margin-bottom:0.5rem;">✦</div>
+        <h2 style="font-size:1.3rem;font-weight:600;margin:0;">TINYPERK</h2>
+        <p style="color:#9b9997;font-size:0.9rem;margin-top:0.25rem;">ログインしてデータを同期</p>
+      </div>
+      <div id="auth-error" style="display:none;background:var(--danger-glow);color:var(--danger);border-radius:8px;padding:0.75rem;font-size:0.85rem;margin-bottom:1rem;"></div>
+      <div class="form-group">
+        <label class="form-label" style="color:#37352f;">メールアドレス</label>
+        <input type="email" id="auth-email" class="form-control" style="background:#f7f7f5;color:#37352f;border-color:#e9e8e2;" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="color:#37352f;">パスワード</label>
+        <input type="password" id="auth-password" class="form-control" style="background:#f7f7f5;color:#37352f;border-color:#e9e8e2;" placeholder="8文字以上" autocomplete="current-password">
+      </div>
+      <div style="display:flex;gap:0.75rem;margin-top:1.25rem;">
+        <button class="btn btn-primary" onclick="authLogin()" style="flex:1;" id="btn-auth-login">ログイン</button>
+        <button class="btn btn-secondary" onclick="authSignup()" style="flex:1;" id="btn-auth-signup">新規登録</button>
+      </div>
+      <p style="text-align:center;font-size:0.8rem;color:#9b9997;margin-top:1rem;">
+        初めて使う方は「新規登録」でアカウント作成
+      </p>
+    </div>
+  </div>
+
+  <!-- SYNC STATUS -->
+  <div id="sync-status" style="display:none;position:fixed;bottom:5rem;right:1rem;background:var(--bg-card);border:1px solid var(--border-color);border-radius:2rem;padding:0.4rem 1rem;font-size:0.8rem;color:var(--text-muted);z-index:100;box-shadow:var(--pop-shadow);"></div>
+
+  <!-- SLIDE-UP MODAL (Add / Edit / Detail Panel) -->
+  <div id="task-modal-overlay" class="modal-overlay">
+    <div class="modal-content">
+      <form id="task-form">
+        
+        <div class="modal-header">
+          <h2 id="modal-title">新しいタスクを追加</h2>
+          <button type="button" class="close-btn" aria-label="閉じる">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <input type="hidden" id="task-id">
+
+          <!-- Task Status -->
+          <div class="form-group">
+            <span class="form-label">ステータス</span>
+            <div class="segmented-control">
+              <div class="segment-option">
+                <input type="radio" name="task-status" id="status-not-started" value="not-started" checked>
+                <label class="segment-label" for="status-not-started">未着手</label>
+              </div>
+              <div class="segment-option">
+                <input type="radio" name="task-status" id="status-in-progress" value="in-progress">
+                <label class="segment-label" for="status-in-progress">進行中</label>
+              </div>
+              <div class="segment-option">
+                <input type="radio" name="task-status" id="status-revision" value="revision">
+                <label class="segment-label" for="status-revision" style="color: var(--warning);">修正中</label>
+              </div>
+              <div class="segment-option">
+                <input type="radio" name="task-status" id="status-completed" value="completed">
+                <label class="segment-label" for="status-completed">完了</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- NEW: Task Stopwatch Timer Widget -->
+          <div id="modal-stopwatch-section" class="form-group" style="display: none; flex-direction: column; gap: 0.75rem; border-top: 1px solid var(--border-color); padding-top: 1rem; padding-bottom: 1rem;">
+            <span class="form-label">⏳ 作業時間計測 (ストップウォッチ)</span>
+            <div class="stopwatch-section">
+              <div id="task-stopwatch-val" class="stopwatch-display">00:00:00</div>
+              <div class="stopwatch-controls">
+                <button type="button" id="btn-timer-start" class="btn btn-primary" style="background: linear-gradient(135deg, var(--secondary) 0%, hsl(190, 80%, 40%) 100%);">
+                  <svg viewBox="0 0 24 24" style="fill: currentColor;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                  スタート
+                </button>
+                <button type="button" id="btn-timer-pause" class="btn btn-danger" style="display: none;">
+                  <svg viewBox="0 0 24 24" style="fill: currentColor;"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                  一時停止
+                </button>
+                <button type="button" id="btn-timer-reset" class="btn btn-secondary">
+                  <svg viewBox="0 0 24 24"><path d="M2.5 2v6h6M21.5 22v-6h-6M22 11.5A10 10 0 0 0 3.2 7.2M2 12.5a10 10 0 0 0 18.8 4.3"></path></svg>
+                  リセット
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Task Name with voice input mic -->
+          <div class="form-group">
+            <label class="form-label" for="task-name">タスク名</label>
+            <div class="input-with-mic">
+              <input type="text" id="task-name" class="form-control" placeholder="例: Webサイトデザイン案の作成" required>
+              <button type="button" id="mic-btn-task-name" class="btn-mic" aria-label="タスク名の音声入力開始">
+                <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v1a7 7 0 0 1-14 0v-1"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Client Name -->
+          <div class="form-group">
+            <label class="form-label" for="task-client">クライアント名</label>
+            <div class="input-with-mic">
+              <input type="text" id="task-client" class="form-control" placeholder="例: 株式会社テクノロジー" required list="client-suggestions" autocomplete="off">
+              <button type="button" id="mic-btn-client" class="btn-mic" aria-label="クライアント名の音声入力">
+                <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v1a7 7 0 0 1-14 0v-1"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+              </button>
+            </div>
+            <datalist id="client-suggestions"></datalist>
+            <div id="client-chips" class="client-chips" aria-label="既存クライアント一覧"></div>
+          </div>
+
+          <div class="form-row">
+            <!-- Due Date -->
+            <div class="form-group">
+              <label class="form-label" for="task-due-date">納期・期日</label>
+              <input type="date" id="task-due-date" class="form-control">
+              <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;cursor:pointer;">
+                <input type="checkbox" id="task-unscheduled" style="width:16px;height:16px;cursor:pointer;">
+                <span style="font-size:0.82rem;color:var(--text-muted);">日程未定（AIに提案させる）</span>
+              </label>
+            </div>
+            <!-- Financial Amount -->
+            <div class="form-group">
+              <label class="form-label" for="task-amount">金額（税別単価）</label>
+              <input type="number" id="task-amount" class="form-control" placeholder="例: 50000" min="0">
+            </div>
+            <!-- Estimated Hours -->
+            <div class="form-group">
+              <label class="form-label" for="task-estimated-hours">想定時間（h）</label>
+              <input type="number" id="task-estimated-hours" class="form-control" placeholder="例: 3" min="0" step="0.5">
+            </div>
+            <!-- 業務内容 -->
+            <div class="form-group">
+              <label class="form-label" for="task-work-type">業務内容</label>
+              <input type="text" id="task-work-type" class="form-control"
+                placeholder="例: デザイン / コーディング / ミーティング"
+                list="work-type-suggestions" autocomplete="off">
+              <datalist id="work-type-suggestions">
+              <option value="動画撮影">
+              <option value="スチール撮影">
+              <option value="動画編集">
+              <option value="スチール編集">
+              <option value="インタビュー">
+              <option value="HP制作">
+            </datalist>
+            </div>
+            <!-- Priority -->
+            <div class="form-group">
+              <label class="form-label" for="task-priority">優先度</label>
+              <select id="task-priority" class="form-control">
+                <option value="high">🔴 高（急ぎ）</option>
+                <option value="medium" selected>🟡 中（通常）</option>
+                <option value="low">🟢 低（余裕あり）</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Predecessor & Deadline options -->
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="task-predecessor">前置タスク (この前に行う作業)</label>
+              <select id="task-predecessor" class="form-control" style="min-height: 48px;"></select>
+            </div>
+            <div class="form-group" style="justify-content: center;">
+              <label class="form-label" style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-weight:700; user-select:none; height:100%;">
+                <input type="checkbox" id="task-deadline-fixed" style="width:22px; height:22px; cursor:pointer;">
+                <span>この期日は絶対動かさない (締切固定)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Task Details -->
+          <div class="form-group">
+            <label class="form-label" for="task-details">詳細（メモ）</label>
+            <textarea id="task-details" class="form-control" rows="3" placeholder="作業内容やメモなどを入力してください。"></textarea>
+          </div>
+
+          <!-- Steps / Sub-task checklist -->
+          <div id="modal-steps-section" class="form-group" style="border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+              <span class="form-label" style="margin: 0;">ステップ（作業チェックリスト）</span>
+              <span id="steps-progress-label" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;"></span>
+            </div>
+            <div class="step-progress-bar-wrap"><div id="steps-progress-bar" class="step-progress-bar" style="width: 0%;"></div></div>
+            <div id="modal-steps-list" class="steps-list"></div>
+            <div class="add-step-row">
+              <input type="text" id="new-step-input" class="form-control" placeholder="例: 初回納品 → 修正対応 → 最終完了">
+              <button type="button" id="btn-add-step" class="btn btn-secondary">＋ 追加</button>
+            </div>
+          </div>
+
+          <!-- Client Secure Sharing Options -->
+          <div id="modal-share-section" style="display: flex; flex-direction: column; gap: 0.75rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+            <span class="form-label">クライアント安全共有リンク (金額・勤怠非表示)</span>
+            <div style="display: flex; gap: 0.75rem;">
+              <button type="button" id="btn-share-task" class="btn btn-secondary" style="flex: 1; padding: 0.75rem; font-size: 0.85rem;">
+                <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                このタスクのみ
+              </button>
+              <button type="button" id="btn-share-client" class="btn btn-secondary" style="flex: 1; padding: 0.75rem; font-size: 0.85rem;">
+                <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M12 7a4 4 0 100-8 4 4 0 000 8z"></path><path d="M17 11a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"></path></svg>
+                全タスク一覧
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="btn-delete-task" class="btn btn-danger" style="margin-right: auto; display: none;">
+            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            削除
+          </button>
+          <button type="button" class="btn btn-secondary btn-cancel">キャンセル</button>
+          <button type="submit" class="btn btn-primary">保存する</button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- NEW: SLIDE-UP MODAL (Daily View Diary Details) -->
+  <div id="daily-view-modal-overlay" class="modal-overlay">
+    <div class="modal-content" style="max-width: 650px;">
+      <div class="modal-header" style="background-color:var(--bg-card); border-bottom:1px solid var(--border-color);">
+        <h2 id="daily-view-title">2026年6月8日 の詳細ログ</h2>
+        <button type="button" class="close-btn" aria-label="閉じる">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="background-color:var(--bg-dark); gap: 1.5rem;">
+        
+        <div class="daily-grid">
+          <!-- Attendance & Mood card -->
+          <div class="daily-section-card">
+            <span class="daily-card-title">勤怠・気分記録</span>
+            <div id="daily-view-attendance-body" style="padding-top:0.5rem;">
+              <!-- Injected by JS -->
+            </div>
+          </div>
+          
+          <!-- Nippo diary memo -->
+          <div class="daily-section-card">
+            <span class="daily-card-title">日報・日記メモ</span>
+            <div id="daily-view-nippo-body" style="padding-top:0.5rem;">
+              <!-- Injected by JS -->
+            </div>
+          </div>
+        </div>
+        
+        <!-- Scheduled tasks today -->
+        <div class="daily-section-card" style="width: 100%;">
+          <span class="daily-card-title">当日のタスク一覧 (クリックで編集)</span>
+          <div id="daily-view-tasks-body" style="display: flex; flex-direction: column; gap: 0.75rem; padding-top:0.5rem;">
+            <!-- Injected by JS -->
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer" style="background-color:var(--bg-card); border-top:1px solid var(--border-color); padding: 1rem 1.5rem;">
+        <div class="daily-nav-footer" style="width: 100%;">
+          <button type="button" id="daily-view-prev-day" class="btn btn-secondary" style="padding: 0.5rem 1.25rem; font-size: 0.85rem; font-weight:700;">
+            ← 前日
+          </button>
+          <button type="button" class="btn btn-secondary btn-cancel" style="padding: 0.5rem 1.5rem; font-size: 0.85rem; font-weight:700;">閉じる</button>
+          <button type="button" id="daily-view-next-day" class="btn btn-secondary" style="padding: 0.5rem 1.25rem; font-size: 0.85rem; font-weight:700;">
+            翌日 →
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW: Floating Global Timer Banner (Fixed bottom overlay) -->
+  <div id="floating-timer-banner" class="floating-timer-banner">
+    <div class="floating-timer-info">
+      <span class="floating-timer-icon">⏱️</span>
+      <div style="display: flex; flex-direction: column; overflow: hidden; justify-content:center;">
+        <span id="floating-timer-banner-title" class="floating-timer-text">タスク名...</span>
+        <span style="font-size: 0.65rem; color: var(--text-muted); font-weight:600;">作業時間計測中</span>
+      </div>
+      <span id="floating-timer-banner-clock" class="floating-timer-clock">00:00:00</span>
+    </div>
+    <div class="floating-timer-actions">
+      <button type="button" id="btn-floating-timer-pause" class="btn btn-danger" style="font-weight:700;">一時停止</button>
+      <button type="button" id="btn-floating-timer-open" class="btn btn-primary" style="font-weight:700; background:linear-gradient(135deg, var(--secondary) 0%, hsl(190, 80%, 40%) 100%);">開く</button>
+    </div>
+  </div>
+
+  <!-- Motivator Encouragement Slide-up Toast notification popup -->
+  <div id="motivator-toast" class="motivator-toast">
+    <span id="toast-icon" class="motivator-toast-icon">✨</span>
+    <span id="toast-text" class="motivator-toast-text">今日もお疲れ様でした！</span>
+  </div>
+
+  <!-- TASK TRAY - floating right-side panel -->
+  <div id="task-tray" class="task-tray">
+    <button id="task-tray-toggle" class="task-tray-toggle" aria-label="タスクトレイを開閉">
+      <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.5;"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect></svg>
+      <span style="writing-mode:vertical-rl;font-size:0.78rem;font-weight:800;letter-spacing:0.05em;">タスク一覧</span>
+      <span id="tray-badge" class="tray-badge"></span>
+    </button>
+    <div class="task-tray-body">
+      <div class="task-tray-header">
+        <h3 class="task-tray-title">📋 未完了タスク</h3>
+        <span id="tray-count" class="tray-count">0件</span>
+      </div>
+      <div class="tray-quick-add-wrap">
+        <input type="text" id="tray-quick-input" class="form-control" placeholder="＋ タスク名を入力してEnter…" autocomplete="off">
+      </div>
+      <div class="tray-filter-tabs">
+        <button class="tray-filter-btn active" data-filter="all">すべて</button>
+        <button class="tray-filter-btn" data-filter="not-started">未着手</button>
+        <button class="tray-filter-btn" data-filter="in-progress">進行中</button>
+        <button class="tray-filter-btn" data-filter="revision">修正中</button>
+      </div>
+      <div id="tray-task-list" class="tray-task-list"></div>
+      <p class="tray-hint">カードをカレンダーにドラッグ → 納期を設定</p>
+    </div>
+  </div>
+
+  <!-- 報告文モーダル -->
+  <div id="report-modal-overlay" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
+    <div class="modal-content" style="max-width: 560px;">
+      <div class="modal-header">
+        <h2 id="report-modal-title" class="modal-title">📨 完了報告文</h2>
+        <button id="report-modal-close" class="modal-close" aria-label="閉じる">✕</button>
+      </div>
+      <div class="modal-body" style="gap: 1rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.8rem; background: var(--success-light, rgba(74,222,128,0.12)); border-radius: 8px; font-size: 0.9rem; color: var(--success, #4ade80);">
+          <span>✅</span>
+          <span id="report-task-name" style="font-weight: 700;"></span>
+          <span style="color: var(--text-muted);">が完了しました</span>
+        </div>
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <label class="form-label" style="margin: 0;">報告文</label>
+            <button id="report-copy-btn" class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.3rem 0.8rem;">📋 コピー</button>
+          </div>
+          <textarea id="report-text-area" class="form-control" rows="10" style="font-family: inherit; resize: vertical;"></textarea>
+        </div>
+        <p id="report-no-template-hint" style="display:none; font-size: 0.85rem; color: var(--text-muted);">
+          💡 連携設定でこのクライアントのテンプレートを登録すると、次回から自動で入力されます。
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button id="report-modal-done" class="btn btn-primary" style="min-width: 120px;">完了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main JavaScript File -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script>
+    window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
+    window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
+  </script>
+  <script src="./app.js?v=52"></script>
+
+  <!-- =====================================================
+       FOCUS MODE OVERLAY
+       ===================================================== -->
+  <div id="focus-overlay" class="focus-overlay" aria-hidden="true">
+
+    <!-- Background layers -->
+    <div class="focus-bg-a focus-bg-layer" id="focus-bg-a"></div>
+    <div class="focus-bg-b focus-bg-layer" id="focus-bg-b"></div>
+    <div class="focus-vignette"></div>
+
+    <!-- Top bar -->
+    <div class="focus-topbar">
+      <div class="focus-task-name" id="focus-task-name">作業中...</div>
+      <div class="focus-topbar-actions">
+        <button class="focus-btn" id="focus-settings-btn" onclick="toggleFocusSettings()" title="設定">⚙️</button>
+        <button class="focus-btn" id="focus-fullscreen-btn" onclick="toggleFocusFullscreen()" title="フルスクリーン">⛶</button>
+        <button class="focus-btn focus-btn-close" onclick="closeFocusModeManual()" title="フォーカスモードを終了">✕</button>
+      </div>
+    </div>
+
+    <!-- Settings panel -->
+    <div class="focus-settings-panel" id="focus-settings-panel" style="display:none;">
+      <div class="focus-settings-title">🎛️ フォーカス設定</div>
+      <div class="focus-settings-row">
+        <label>背景テーマ</label>
+        <select id="focus-theme-select" class="focus-select" onchange="changeFocusTheme(this.value)">
+          <option value="nature">🌿 自然</option>
+          <option value="architecture">🏙️ 建築</option>
+          <option value="minimal">⬜ ミニマル</option>
+          <option value="workspace">💻 作業空間</option>
+          <option value="abstract">🎨 アート</option>
+        </select>
+      </div>
+      <div class="focus-settings-row">
+        <label>切り替え速度</label>
+        <select id="focus-speed-select" class="focus-select" onchange="changeFocusSpeed(this.value)">
+          <option value="30">30秒</option>
+          <option value="60" selected>1分</option>
+          <option value="180">3分</option>
+          <option value="300">5分</option>
+          <option value="0">切り替えなし</option>
+        </select>
+      </div>
+      <div class="focus-settings-row">
+        <label>ラジオジャンル</label>
+        <select id="focus-radio-genre" class="focus-select" onchange="loadRadioStations(this.value)">
+          <option value="lofi">🎵 Lo-Fi</option>
+          <option value="jazz">🎷 Jazz</option>
+          <option value="classical">🎻 Classical</option>
+          <option value="ambient">🌊 Ambient</option>
+          <option value="pop">🎤 J-Pop</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Center: Timer -->
+    <div class="focus-center">
+      <div class="focus-timer-ring" id="focus-timer-ring">
+        <svg class="focus-ring-svg" viewBox="0 0 120 120">
+          <circle class="focus-ring-track" cx="60" cy="60" r="54" />
+          <circle class="focus-ring-progress" id="focus-ring-progress" cx="60" cy="60" r="54"
+            stroke-dasharray="339.3" stroke-dashoffset="339.3" />
+        </svg>
+        <div class="focus-timer-display" id="focus-timer-display">00:00:00</div>
+      </div>
+      <div class="focus-phase-label" id="focus-phase-label">集中タイム ⚡</div>
+    </div>
+
+    <!-- Left: Mountain progress -->
+    <div class="focus-mountain-panel" id="focus-mountain-panel">
+      <div class="focus-mountain-label">今日の達成度</div>
+      <div id="focus-mountain-svg-wrap"></div>
+      <div class="focus-mountain-pct" id="focus-mountain-pct">0%</div>
+    </div>
+
+    <!-- Right: Radio player -->
+    <div class="focus-radio-panel" id="focus-radio-panel">
+      <div class="focus-radio-header">
+        <span class="focus-radio-icon">📻</span>
+        <span id="focus-radio-title">ラジオ</span>
+      </div>
+      <div id="focus-radio-stations" class="focus-station-list"></div>
+      <div class="focus-radio-controls">
+        <button class="focus-radio-btn" id="focus-radio-prev" onclick="focusRadioPrev()">⏮</button>
+        <button class="focus-radio-btn focus-radio-play" id="focus-radio-play" onclick="focusRadioToggle()">▶</button>
+        <button class="focus-radio-btn" id="focus-radio-next" onclick="focusRadioNext()">⏭</button>
+      </div>
+      <div class="focus-volume-row">
+        <span>🔈</span>
+        <input type="range" id="focus-volume" min="0" max="1" step="0.05" value="0.5"
+          oninput="setFocusVolume(this.value)" class="focus-volume-slider">
+        <span>🔊</span>
+      </div>
+      <div id="focus-radio-status" class="focus-radio-status">ジャンルを選択してください</div>
+      <audio id="focus-audio" preload="none" crossorigin="anonymous"></audio>
+    </div>
+
+    <!-- Bottom: task dots / pause button -->
+    <div class="focus-bottombar">
+      <div id="focus-task-dots" class="focus-task-dots"></div>
+      <button class="focus-pause-btn" id="focus-pause-btn" onclick="closeFocusModeManual()">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        一時停止
+      </button>
+    </div>
+
+  </div>
+
+</body>
+</html>
