@@ -3396,6 +3396,117 @@ h1, h2, h3, h4 {
   color: var(--text-muted);
   opacity: 0.6;
 }
+
+/* ── タイムラインカード インライン編集 ── */
+.tl-slot-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.35rem 0.5rem 0;
+}
+
+.tl-slot-status-btn {
+  font-size: 0.68rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.tl-slot-status-btn:hover { opacity: 0.8; }
+.tl-slot-status-btn.active.tl-ss-not-started  { background:#e5e7eb; color:#374151; border-color:#d1d5db; }
+.tl-slot-status-btn.active.tl-ss-in-progress  { background:var(--primary); color:#fff; border-color:var(--primary); }
+.tl-slot-status-btn.active.tl-ss-revision     { background:#f97316; color:#fff; border-color:#f97316; }
+.tl-slot-status-btn.active.tl-ss-completed    { background:var(--success); color:#fff; border-color:var(--success); }
+
+.tl-slot-memo-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.3rem;
+  padding: 0.35rem 0.5rem 0.4rem;
+}
+
+.tl-slot-memo {
+  flex: 1;
+  font-size: 0.78rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  resize: none;
+  min-height: 30px;
+  line-height: 1.4;
+  overflow: hidden;
+  transition: border-color 0.15s;
+  font-family: inherit;
+}
+.tl-slot-memo:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+.tl-slot-memo::placeholder { color: var(--text-muted); opacity: 0.6; }
+
+.tl-slot-memo-voice-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  cursor: pointer;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  padding: 0;
+}
+.tl-slot-memo-voice-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+.tl-slot-memo-voice-btn.recording {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+  animation: pulse-mic 1s ease-in-out infinite;
+}
+
+/* ── Whisper マイクボタン共通 ── */
+.whisper-mic-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.15s;
+}
+.whisper-mic-btn:hover { border-color: var(--primary); color: var(--primary); }
+.whisper-mic-btn.recording {
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #ef4444;
+  animation: pulse-mic 1s ease-in-out infinite;
+}
+@keyframes pulse-mic {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+/* ── 日誌テキストエリア Whisperボタン ── */
+.journal-write-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 /* ── 休憩・移動カード ── */
 
 /* インライン休憩・移動行 */

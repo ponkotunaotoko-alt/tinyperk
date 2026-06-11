@@ -697,6 +697,7 @@
           <div class="journal-write-header">
             <span class="form-label" style="margin:0;">✏️ 今日の振り返り</span>
             <span id="journal-char-count" class="journal-char-count">0文字</span>
+            <button id="journal-whisper-btn" class="whisper-mic-btn" onclick="startWhisperRecord('journal-text','journal-whisper-btn')" title="音声入力（Whisper）">🎤 音声入力</button>
           </div>
           <textarea id="journal-text" class="form-control journal-textarea"
             rows="7" placeholder="今日はどんな一日でしたか？&#10;&#10;進んだこと、学んだこと、明日やること…何でも書き留めておきましょう。"></textarea>
@@ -1414,7 +1415,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=52"></script>
+  <script src="./app.js?v=53"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

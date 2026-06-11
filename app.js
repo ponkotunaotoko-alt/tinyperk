@@ -2074,6 +2074,27 @@ function renderJournalTimeline() {
               </div>
               <button class="tl-slot-remove" onclick="removeTimelineSlot('${date}', '${h}')" title="削除">×</button>
             </div>
+            <div class="tl-slot-status-row">
+              ${[
+                {s:'not-started', lbl:'未着手'},
+                {s:'in-progress',  lbl:'進行中'},
+                {s:'revision',     lbl:'修正中'},
+                {s:'completed',    lbl:'完了'}
+              ].map(({s,lbl}) =>
+                `<button class="tl-slot-status-btn tl-ss-${s}${task.status===s?' active':''}"
+                  onclick="event.stopPropagation();updateTaskStatusFromTimeline('${date}','${h}','${s}')">${lbl}</button>`
+              ).join('')}
+            </div>
+            <div class="tl-slot-memo-row">
+              <textarea id="tl-memo-${h}" class="tl-slot-memo" rows="1"
+                placeholder="作業メモ…"
+                onchange="saveTimelineMemo('${date}','${h}',this.value)"
+                oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+                onclick="event.stopPropagation()">${escapeHtml(slot.memo||'')}</textarea>
+              <button class="tl-slot-memo-voice-btn" id="tl-voice-${h}"
+                onclick="event.stopPropagation();startWhisperRecord('tl-memo-${h}','tl-voice-${h}')"
+                title="音声入力">🎤</button>
+            </div>
             <div class="tl-resize-handle" onpointerdown="startSlotResize(event,'${date}','${h}')">
               <div class="tl-resize-handle-icon"></div>
             </div>
@@ -2402,6 +2423,22 @@ function saveTimelineActual(date, hour, value) {
   if (!state.journalEntries[date].timeline[hour]) state.journalEntries[date].timeline[hour] = {};
   state.journalEntries[date].timeline[hour].actualHours = parseFloat(value) || '';
   saveJournalToStorage();
+}
+
+function saveTimelineMemo(date, hour, value) {
+  if (!state.journalEntries[date]?.timeline?.[hour]) return;
+  state.journalEntries[date].timeline[hour].memo = value;
+  saveJournalToStorage();
+}
+
+function updateTaskStatusFromTimeline(date, hour, newStatus) {
+  const slot = state.journalEntries[date]?.timeline?.[hour];
+  if (!slot?.taskId) return;
+  const task = state.tasks.find(t => t.id === slot.taskId);
+  if (!task) return;
+  task.status = newStatus;
+  saveData();
+  renderJournalTimeline();
 }
 
 function removeTimelineSlot(date, hour) {
@@ -6286,10 +6323,133 @@ function exportExpensesCSV() {
 }
 
 // ============================================================
+// 🎙️ WHISPER — ローカル音声文字起こし (Transformers.js)
+// ============================================================
+let _whisperPipeline  = null;
+let _whisperLoading   = false;
+let _mediaRecorder    = null;
+let _audioChunks      = [];
+
+/**
+ * @xenova/transformers の pipeline を動的ロード（初回のみモデルDL）
+ * モデルは whisper-small (日本語精度良好, ~244MB, ブラウザにキャッシュされる)
+ */
+async function _loadWhisperModel() {
+  if (_whisperPipeline) return _whisperPipeline;
+  if (_whisperLoading)  return null; // 二重呼び出し防止
+  _whisperLoading = true;
+  try {
+    const { pipeline, env } = await import(
+      'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2'
+    );
+    env.allowLocalModels = false;
+    _whisperPipeline = await pipeline(
+      'automatic-speech-recognition',
+      'Xenova/whisper-small',
+      { language: 'japanese' }
+    );
+    return _whisperPipeline;
+  } finally {
+    _whisperLoading = false;
+  }
+}
+
+/** 録音した Blob を Float32Array (16kHz) → Whisper で文字起こし */
+async function _transcribeBlob(blob, mimeType) {
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  let decoded;
+  try {
+    decoded = await audioCtx.decodeAudioData(arrayBuffer);
+  } finally {
+    audioCtx.close();
+  }
+  const float32 = decoded.getChannelData(0);
+  const pipe = await _loadWhisperModel();
+  const result = await pipe(float32, { language: 'japanese', task: 'transcribe' });
+  return (result.text || '').trim().replace(/^[。、\s]+/, '');
+}
+
+/**
+ * 汎用 Whisper 音声入力
+ * @param {string}   textareaId  - 結果を追記する textarea の id（省略可）
+ * @param {string}   btnId       - マイクボタンの id
+ * @param {function} [onResult]  - カスタムコールバック (text) => void
+ */
+async function startWhisperRecord(textareaId, btnId, onResult) {
+  const btn = document.getElementById(btnId);
+
+  // 録音中 → 停止して文字起こし開始
+  if (_mediaRecorder && _mediaRecorder.state !== 'inactive') {
+    _mediaRecorder.stop();
+    return;
+  }
+
+  // マイク取得
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (e) {
+    alert('マイクへのアクセスが拒否されました。\nブラウザのアドレスバー横のマイクアイコンから許可してください。');
+    return;
+  }
+
+  _audioChunks = [];
+
+  // 対応 mimeType を自動選択
+  const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg']
+    .find(m => MediaRecorder.isTypeSupported(m)) || '';
+
+  _mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+  _mediaRecorder.ondataavailable = e => { if (e.data?.size > 0) _audioChunks.push(e.data); };
+
+  _mediaRecorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+
+    if (btn) { btn.textContent = '⏳'; btn.disabled = true; btn.classList.remove('recording'); }
+
+    const blob = new Blob(_audioChunks, { type: mimeType || 'audio/webm' });
+    try {
+      if (!_whisperPipeline && btn) {
+        btn.title = 'モデルを初回ダウンロード中 (~244MB)…';
+      }
+      const text = await _transcribeBlob(blob, mimeType);
+      if (!text) return;
+      if (onResult) {
+        onResult(text);
+      } else if (textareaId) {
+        const ta = document.getElementById(textareaId);
+        if (ta) {
+          const sep = ta.value && !ta.value.endsWith('\n') ? '\n' : '';
+          ta.value += sep + text;
+          ta.dispatchEvent(new Event('input',  { bubbles: true }));
+          ta.dispatchEvent(new Event('change', { bubbles: true }));
+          ta.style.height = 'auto';
+          ta.style.height = ta.scrollHeight + 'px';
+        }
+      }
+    } catch (err) {
+      console.error('Whisper error:', err);
+      alert('文字起こしに失敗しました。\n' + (err.message || err));
+    } finally {
+      if (btn) { btn.textContent = '🎤'; btn.disabled = false; btn.title = '音声入力'; }
+      _mediaRecorder = null;
+    }
+  };
+
+  _mediaRecorder.start(200); // 200ms ごとにデータ収集
+  if (btn) {
+    btn.textContent = '⏹';
+    btn.classList.add('recording');
+    btn.title = '録音中 — もう一度クリックで停止';
+  }
+}
+
+// ============================================================
 // 💡 IDEAS — ひらめきメモ
 // ============================================================
 let _voiceRecognition = null;
-let _ideaVoiceActive = false;
+let _ideaVoiceActive  = false;
 
 function renderIdeas() {
   const el = document.getElementById('ideas-content');
@@ -6461,49 +6621,26 @@ function promoteIdeaToDeal(id) {
 }
 
 function toggleVoiceInput() {
-  if (_ideaVoiceActive) {
-    stopVoiceInput();
-  } else {
-    startVoiceInput();
-  }
+  startVoiceInput();
 }
 
 function startVoiceInput() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    alert('お使いのブラウザは音声入力に対応していません。\nChrome または Safari をお試しください。');
-    return;
-  }
-  _voiceRecognition = new SpeechRecognition();
-  _voiceRecognition.lang = 'ja-JP';
-  _voiceRecognition.continuous = false;
-  _voiceRecognition.interimResults = false;
-
-  _voiceRecognition.onstart = () => {
-    _ideaVoiceActive = true;
-    const btn = document.getElementById('idea-voice-btn');
-    const status = document.getElementById('voice-status');
-    if (btn) btn.classList.add('recording');
-    if (status) status.style.display = 'block';
-  };
-  _voiceRecognition.onresult = (e) => {
-    const text = e.results[0][0].transcript;
+  startWhisperRecord('idea-text-input', 'idea-voice-btn', (text) => {
     const input = document.getElementById('idea-text-input');
-    if (input) input.value = text;
+    if (input) { input.value = text; }
+    const status = document.getElementById('voice-status');
+    if (status) status.style.display = 'none';
     addIdeaFromInput();
-    stopVoiceInput();
-  };
-  _voiceRecognition.onerror = () => stopVoiceInput();
-  _voiceRecognition.onend = () => stopVoiceInput();
-  _voiceRecognition.start();
+  });
+  // 録音開始時に voice-status を表示
+  const status = document.getElementById('voice-status');
+  if (status) status.textContent = '🔴 録音中 — もう一度 🎤 を押すと停止';
+  if (status) status.style.display = 'block';
 }
 
 function stopVoiceInput() {
-  _ideaVoiceActive = false;
-  if (_voiceRecognition) { try { _voiceRecognition.stop(); } catch(e){} _voiceRecognition = null; }
-  const btn = document.getElementById('idea-voice-btn');
+  if (_mediaRecorder && _mediaRecorder.state !== 'inactive') _mediaRecorder.stop();
   const status = document.getElementById('voice-status');
-  if (btn) btn.classList.remove('recording');
   if (status) status.style.display = 'none';
 }
 
