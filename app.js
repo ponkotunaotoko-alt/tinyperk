@@ -2673,7 +2673,8 @@ function renderJournal() {
   const charCountEl = document.getElementById('journal-char-count');
   const entry = state.journalEntries[date];
   if (textEl) {
-    textEl.value = entry?.text || '';
+    const rawText = entry?.text || '';
+    textEl.value = (rawText === 'undefined') ? '' : rawText;
     if (charCountEl) charCountEl.textContent = `${textEl.value.length}文字`;
   }
   if (savedAtEl) {
