@@ -889,24 +889,31 @@ h1, h2, h3, h4 {
 .motivator-toast {
   position: fixed;
   bottom: 5rem;
-  right: 2rem;
-  background-color: var(--bg-card);
-  border: 1px solid var(--primary);
-  border-radius: var(--radius-md);
-  box-shadow: var(--pop-shadow);
-  padding: 1.25rem 2rem;
+  right: 1.5rem;
+  background-color: #f5f0e8;
+  border: 1.5px solid #c8a96e;
+  border-radius: 2px;
+  box-shadow: 4px 4px 0 rgba(26,26,24,0.12);
+  padding: 1rem 1.5rem;
   z-index: 200;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  transform: translateY(100px);
+  gap: 0.75rem;
+  transform: translateX(120%) rotate(2deg);
   opacity: 0;
   pointer-events: none;
-  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.4s ease;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.35s ease;
+  max-width: 280px;
+  border-top: 4px solid #c8a96e;
+}
+
+[data-theme="dark"] .motivator-toast {
+  background-color: #252420;
+  border-color: #c8a96e;
 }
 
 .motivator-toast.active {
-  transform: translateY(0);
+  transform: translateX(0) rotate(-0.5deg);
   opacity: 1;
   pointer-events: auto;
 }
@@ -916,10 +923,11 @@ h1, h2, h3, h4 {
 }
 
 .motivator-toast-text {
-  font-weight: 700;
-  font-size: 0.95rem;
+  font-weight: 400;
+  font-size: 0.88rem;
+  font-family: var(--font-hand);
   color: var(--text-main);
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 /* Confetti canvas */
@@ -1218,33 +1226,39 @@ h1, h2, h3, h4 {
 }
 
 .task-badge {
-  font-size: 0.75rem;
-  padding: 3px 10px;
-  border-radius: 3px;
-  font-weight: 600;
-  font-family: var(--font-hand);
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-weight: 400;
+  font-family: var(--font-vintage);
+  letter-spacing: 0.07em;
   border: 1.5px solid currentColor;
-  box-shadow: 2px 2px 0 currentColor;
+  box-shadow: 1.5px 1.5px 0 currentColor;
+  display: inline-block;
 }
 
 .task-badge.not-started {
   background-color: var(--bg-card);
-  color: var(--primary);
+  color: var(--text-muted);
+  transform: rotate(-0.8deg);
 }
 
 .task-badge.in-progress {
-  background-color: var(--secondary-glow);
+  background-color: rgba(140,123,94,0.08);
   color: var(--secondary);
+  transform: rotate(0.5deg);
 }
 
 .task-badge.completed {
-  background-color: var(--success-glow);
+  background-color: rgba(90,138,94,0.10);
   color: var(--success);
+  transform: rotate(0.8deg);
 }
 
 .task-badge.revision {
-  background-color: var(--warning-glow);
+  background-color: rgba(200,169,110,0.12);
   color: var(--warning);
+  transform: rotate(-0.6deg);
 }
 
 /* Revision task card — left accent */
@@ -5576,4 +5590,304 @@ body.drawer-open { overflow: hidden; }
 /* ── 週次レポート 共通 ── */
 #weekly-stat-row .report-card {
   padding: 1rem 0.75rem;
+}
+
+
+/* ============================================================
+   VINTAGE FINAL POLISH — v64
+   ============================================================ */
+
+/* ── Paper grain overlay (全画面) ── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9990;
+  opacity: 0.028;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
+
+/* ── Warm page background vignette ── */
+body {
+  background-image: radial-gradient(ellipse at 20% 50%, rgba(200,169,110,0.04) 0%, transparent 60%),
+                    radial-gradient(ellipse at 80% 20%, rgba(200,169,110,0.03) 0%, transparent 50%);
+}
+
+/* ── Card hover lift ── */
+.report-card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease !important;
+  cursor: default;
+}
+
+.report-card:hover {
+  transform: translate(-2px, -3px) !important;
+  box-shadow: 5px 6px 0 rgba(26,26,24,0.10) !important;
+}
+
+/* ── Screen title — gold underline rule ── */
+.screen-title {
+  position: relative;
+  display: inline-block;
+}
+
+.screen-title::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary) 60%, transparent 100%);
+}
+
+/* ── Task cards — index card style ── */
+.task-card {
+  border-left: 4px solid var(--border-color) !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-left-color 0.2s ease !important;
+}
+
+.task-card[data-status="not-started"] { border-left-color: var(--text-muted) !important; }
+.task-card[data-status="in-progress"] { border-left-color: var(--primary) !important; }
+.task-card[data-status="revision"]    { border-left-color: var(--warning) !important; }
+.task-card[data-status="completed"]   { border-left-color: var(--success) !important; opacity: 0.8; }
+
+.task-card:hover {
+  transform: translate(-2px, -2px) !important;
+  box-shadow: 4px 4px 0 rgba(26,26,24,0.09) !important;
+}
+
+/* ── Task badge — stamp Bebas Neue ── */
+.task-badge {
+  font-family: var(--font-vintage) !important;
+  letter-spacing: 0.06em;
+}
+
+/* ── Form labels — uppercase Bebas ── */
+.form-label {
+  font-family: var(--font-vintage) !important;
+  letter-spacing: 0.08em !important;
+  font-size: 0.82rem !important;
+  text-transform: uppercase;
+}
+
+/* ── Input focus — vintage ink border ── */
+.form-control:focus {
+  outline: none !important;
+  border-color: var(--primary) !important;
+  box-shadow: 2px 2px 0 rgba(200,169,110,0.3), 0 0 0 3px rgba(200,169,110,0.08) !important;
+  background-color: #faf6ee !important;
+}
+
+[data-theme="dark"] .form-control:focus {
+  background-color: #2a2820 !important;
+}
+
+/* ── PUNCH IN/OUT — stamp press animation ── */
+@keyframes stampPress {
+  0%   { transform: scale(1) rotate(0deg); }
+  25%  { transform: scale(0.92) rotate(-1.5deg); }
+  55%  { transform: scale(1.03) rotate(0.5deg); }
+  80%  { transform: scale(0.99) rotate(-0.2deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.btn-clock.stamp-anim {
+  animation: stampPress 0.32s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+/* ── Attendance card — washi tape decoration ── */
+.attendance-card {
+  position: relative;
+  overflow: visible !important;
+}
+
+.attendance-card::before {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 20px;
+  width: 65px;
+  height: 18px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(200,169,110,0.45) 0px,
+    rgba(200,169,110,0.3) 4px,
+    rgba(200,169,110,0.45) 8px
+  );
+  transform: rotate(-1.8deg);
+  border-radius: 2px;
+  z-index: 2;
+}
+
+/* ── Project groups — manila folder tabs ── */
+.project-group {
+  position: relative;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-color) !important;
+  border-radius: 3px !important;
+  margin-bottom: 1rem;
+  box-shadow: 3px 3px 0 rgba(26,26,24,0.07) !important;
+}
+
+.project-group-header {
+  background: linear-gradient(135deg, #d4c9a8 0%, #c8bfa0 100%);
+  color: #1a1a18 !important;
+  border-radius: 3px 3px 0 0;
+  padding: 0.4rem 0.85rem;
+  font-family: var(--font-vintage) !important;
+  letter-spacing: 0.08em;
+  font-size: 0.95rem;
+  border-bottom: 1px solid #b8ad8a;
+}
+
+[data-theme="dark"] .project-group-header {
+  background: linear-gradient(135deg, #3a3628 0%, #2e2c24 100%);
+  color: #c8a96e !important;
+  border-bottom-color: #3a3628;
+}
+
+.project-group-bar {
+  background: rgba(26,26,24,0.12) !important;
+  border-radius: 1px !important;
+}
+
+.project-group-bar-fill {
+  background: linear-gradient(90deg, #c8a96e, #a88950) !important;
+  border-radius: 1px !important;
+}
+
+/* ── Sidebar — active item "opens" to content ── */
+.sidebar .nav-item.active {
+  border-right: 3px solid var(--bg-dark) !important;
+  margin-right: -3px;
+  padding-right: calc(1.25rem + 3px);
+  border-radius: 3px 0 0 3px !important;
+  z-index: 2;
+  position: relative;
+}
+
+/* ── Log rows — dotted separator ── */
+.log-row {
+  border-bottom: 1px dotted rgba(200,169,110,0.3);
+  padding-bottom: 0.4rem;
+}
+
+.log-row:last-child {
+  border-bottom: none;
+}
+
+.log-label {
+  font-family: var(--font-vintage);
+  letter-spacing: 0.06em;
+  font-size: 0.85rem;
+}
+
+/* ── Weekly table — ledger lines ── */
+#weekly-day-table tbody tr:nth-child(even) {
+  background: rgba(212,201,168,0.12) !important;
+}
+
+#weekly-day-table tbody tr:hover {
+  background: rgba(200,169,110,0.10) !important;
+}
+
+/* ── Mood buttons ── */
+.mood-btn {
+  border-radius: 50% !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease !important;
+}
+
+.mood-btn:hover {
+  transform: translateY(-5px) rotate(5deg) scale(1.18) !important;
+  box-shadow: 0 6px 16px rgba(200,169,110,0.25) !important;
+}
+
+/* ── Priority badges — vintage labels ── */
+.priority-badge {
+  font-family: var(--font-vintage) !important;
+  letter-spacing: 0.06em;
+  border-radius: 2px !important;
+  font-size: 0.7rem !important;
+}
+
+/* ── Section dividers ── */
+.report-card > h3:first-child,
+.report-card > h4:first-child {
+  border-bottom: 2px solid var(--primary);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+/* ── Timeline slots — ruled notebook feel ── */
+.timeline-slot {
+  border-bottom: 1px dashed rgba(200,169,110,0.2) !important;
+}
+
+/* ── Empty states ── */
+.empty-state,
+[class*="empty"] {
+  font-family: var(--font-vintage);
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+}
+
+/* ── Toast icon ── */
+.motivator-toast-icon {
+  font-size: 1.5rem !important;
+}
+
+/* ── MOBILE final polish ── */
+@media (max-width: 768px) {
+  /* Washi tape on mobile adjusts for negative margin */
+  .attendance-card::before {
+    left: 30px;
+  }
+
+  .btn-clock {
+    height: 60px !important;
+    font-size: 0.95rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .btn-clock svg {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  /* Task card left border more visible on mobile */
+  .task-card {
+    border-left-width: 5px !important;
+  }
+
+  /* Toast centered on mobile */
+  .motivator-toast {
+    right: 1rem !important;
+    left: 1rem !important;
+    max-width: none !important;
+    bottom: 6rem !important;
+  }
+
+  /* Project group tab label */
+  .project-group-header {
+    font-size: 0.88rem;
+    padding: 0.35rem 0.75rem;
+  }
+}
+
+/* ── PC/Tablet side-by-side cards ── */
+@media (min-width: 769px) {
+  .report-card:hover {
+    transform: translate(-3px, -4px) !important;
+    box-shadow: 6px 7px 0 rgba(26,26,24,0.10) !important;
+  }
+}
+
+/* ── Dark mode grain & vignette ── */
+[data-theme="dark"] body::after,
+@media (prefers-color-scheme: dark) {
+  body::after {
+    opacity: 0.015;
+  }
 }

@@ -1741,6 +1741,15 @@ function renderTaskProgressChart() {
 }
 
 // Attendance Clocking
+function addStampAnim(btnId) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.classList.remove('stamp-anim');
+  void btn.offsetWidth; // reflow
+  btn.classList.add('stamp-anim');
+  btn.addEventListener('animationend', () => btn.classList.remove('stamp-anim'), { once: true });
+}
+
 function clockIn() {
   const todayStr = getLocalDateStr();
   const nowStr = new Date().toTimeString().split(' ')[0].substring(0, 5);
@@ -3725,6 +3734,7 @@ function renderSelectedDayTasks() {
 function createTaskCard(task) {
   const card = document.createElement('div');
   card.className = `task-card ${task.status === 'completed' ? 'completed-task' : ''} ${task.status === 'revision' ? 'revision-task' : ''}`;
+  card.setAttribute('data-status', task.status);
   if (task.isCompressed) card.classList.add('compressed-alert');
   card.setAttribute('data-id', task.id);
   
