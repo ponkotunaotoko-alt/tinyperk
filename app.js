@@ -6114,36 +6114,36 @@ function openDealModal(id = null, defaultStage = 'lead') {
         <input type="hidden" id="deal-edit-id" value="${deal?.id||''}">
         <div class="form-group">
           <label class="form-label">案件名 <span style="color:var(--danger)">*</span></label>
-          <input type="text" id="deal-title" class="form-input" placeholder="例: LP制作" value="${escHtml(deal?.title||'')}">
+          <input type="text" id="deal-title" class="form-control" placeholder="例: LP制作" value="${escHtml(deal?.title||'')}">
         </div>
         <div class="form-group">
           <label class="form-label">クライアント名</label>
-          <input type="text" id="deal-client" class="form-input" placeholder="会社名・個人名" value="${escHtml(deal?.client||'')}">
+          <input type="text" id="deal-client" class="form-control" placeholder="会社名・個人名" value="${escHtml(deal?.client||'')}">
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
           <div class="form-group">
             <label class="form-label">ステージ</label>
-            <select id="deal-stage" class="form-input">${stageOptions}</select>
+            <select id="deal-stage" class="form-control">${stageOptions}</select>
           </div>
           <div class="form-group">
             <label class="form-label">確度 (%)</label>
-            <input type="number" id="deal-probability" class="form-input" min="0" max="100" value="${deal?.probability||50}">
+            <input type="number" id="deal-probability" class="form-control" min="0" max="100" value="${deal?.probability||50}">
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
           <div class="form-group">
             <label class="form-label">金額 (税抜)</label>
-            <input type="number" id="deal-amount" class="form-input" placeholder="0" value="${deal?.amount||''}">
+            <input type="number" id="deal-amount" class="form-control" placeholder="0" value="${deal?.amount||''}">
           </div>
           <div class="form-group">
             <label class="form-label">期限</label>
-            <input type="date" id="deal-due" class="form-input" value="${deal?.dueDate||''}">
+            <input type="date" id="deal-due" class="form-control" value="${deal?.dueDate||''}">
           </div>
         </div>
-        ${contactOptions ? `<div class="form-group"><label class="form-label">コンタクト紐付け</label><select id="deal-contact" class="form-input"><option value="">なし</option>${contactOptions}</select></div>` : ''}
+        ${contactOptions ? `<div class="form-group"><label class="form-label">コンタクト紐付け</label><select id="deal-contact" class="form-control"><option value="">なし</option>${contactOptions}</select></div>` : ''}
         <div class="form-group">
           <label class="form-label">メモ</label>
-          <textarea id="deal-notes" class="form-input" rows="3" placeholder="商談内容・次のアクションなど">${escHtml(deal?.notes||'')}</textarea>
+          <textarea id="deal-notes" class="form-control" rows="3" placeholder="商談内容・次のアクションなど">${escHtml(deal?.notes||'')}</textarea>
         </div>
       </div>
       <div class="modal-footer" style="justify-content:space-between;">
@@ -6336,45 +6336,45 @@ function openContactModal(id = null) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
           <div class="form-group">
             <label class="form-label">お名前 <span style="color:var(--danger)">*</span></label>
-            <input type="text" id="contact-name" class="form-input" placeholder="山田 太郎" value="${escHtml(c?.name||'')}">
+            <input type="text" id="contact-name" class="form-control" placeholder="山田 太郎" value="${escHtml(c?.name||'')}">
           </div>
           <div class="form-group">
             <label class="form-label">会社名</label>
-            <input type="text" id="contact-company" class="form-input" placeholder="株式会社〇〇" value="${escHtml(c?.company||'')}">
+            <input type="text" id="contact-company" class="form-control" placeholder="株式会社〇〇" value="${escHtml(c?.company||'')}">
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
           <div class="form-group">
             <label class="form-label">タグ</label>
-            <select id="contact-tag" class="form-input">${tagOptions}</select>
+            <select id="contact-tag" class="form-control">${tagOptions}</select>
           </div>
           <div class="form-group">
             <label class="form-label">出会った日</label>
-            <input type="date" id="contact-met-date" class="form-input" value="${c?.metDate||''}">
+            <input type="date" id="contact-met-date" class="form-control" value="${c?.metDate||''}">
           </div>
         </div>
         <div class="form-group">
           <label class="form-label">出会った場所・きっかけ</label>
-          <input type="text" id="contact-met-at" class="form-input" placeholder="〇〇交流会、SNSなど" value="${escHtml(c?.metAt||'')}">
+          <input type="text" id="contact-met-at" class="form-control" placeholder="〇〇交流会、SNSなど" value="${escHtml(c?.metAt||'')}">
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
           <div class="form-group">
             <label class="form-label">メール</label>
-            <input type="email" id="contact-email" class="form-input" value="${escHtml(c?.email||'')}">
+            <input type="email" id="contact-email" class="form-control" value="${escHtml(c?.email||'')}">
           </div>
           <div class="form-group">
             <label class="form-label">電話番号</label>
-            <input type="tel" id="contact-phone" class="form-input" value="${escHtml(c?.phone||'')}">
+            <input type="tel" id="contact-phone" class="form-control" value="${escHtml(c?.phone||'')}">
           </div>
         </div>
         <div class="form-group">
           <label class="form-label">フォロー期日 <span style="font-size:0.8em;color:var(--text-muted)">（この日までに連絡する）</span></label>
-          <input type="date" id="contact-followup" class="form-input" value="${c?.followUpDate||''}">
+          <input type="date" id="contact-followup" class="form-control" value="${c?.followUpDate||''}">
         </div>
-        ${dealOptions ? `<div class="form-group"><label class="form-label">紐付け案件</label><select id="contact-deal" class="form-input"><option value="">なし</option>${dealOptions}</select></div>` : ''}
+        ${dealOptions ? `<div class="form-group"><label class="form-label">紐付け案件</label><select id="contact-deal" class="form-control"><option value="">なし</option>${dealOptions}</select></div>` : ''}
         <div class="form-group">
           <label class="form-label">メモ</label>
-          <textarea id="contact-notes" class="form-input" rows="3" placeholder="共通の話題、次回話したいことなど">${escHtml(c?.notes||'')}</textarea>
+          <textarea id="contact-notes" class="form-control" rows="3" placeholder="共通の話題、次回話したいことなど">${escHtml(c?.notes||'')}</textarea>
         </div>
       </div>
       <div class="modal-footer" style="justify-content:space-between;">
@@ -6643,18 +6643,18 @@ function renderGoals() {
     <!-- Goal Setting Form (inline) -->
     <div class="report-card" style="margin-top:1.5rem;" id="goal-settings-card" style="display:none;">
       <h3 style="margin-bottom:1rem;font-size:1.05rem;">⚙️ 目標を設定する</h3>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;">
+      <div style="display:grid;grid-template-columns:1fr;gap:0.8rem;">
         <div class="form-group">
           <label class="form-label">月収目標 (円)</label>
-          <input type="number" id="goal-monthly-revenue" class="form-input" placeholder="500000" value="${state.goals.monthlyRevenue||''}">
+          <input type="number" id="goal-monthly-revenue" class="form-control" placeholder="500000" value="${state.goals.monthlyRevenue||''}">
         </div>
         <div class="form-group">
           <label class="form-label">受注件数目標 (件/月)</label>
-          <input type="number" id="goal-client-count" class="form-input" placeholder="3" value="${state.goals.monthlyClientCount||''}">
+          <input type="number" id="goal-client-count" class="form-control" placeholder="3" value="${state.goals.monthlyClientCount||''}">
         </div>
         <div class="form-group">
           <label class="form-label">月間学習時間目標 (時間)</label>
-          <input type="number" id="goal-learning-hours" class="form-input" placeholder="10" value="${state.goals.monthlyLearningHours||''}">
+          <input type="number" id="goal-learning-hours" class="form-control" placeholder="10" value="${state.goals.monthlyLearningHours||''}">
         </div>
       </div>
       <div style="margin-top:1rem;">
@@ -6783,21 +6783,21 @@ function openExpenseModal(id = null) {
         <input type="hidden" id="expense-edit-id" value="${e?.id||''}">
         <div class="form-group">
           <label class="form-label">カテゴリ</label>
-          <select id="expense-category" class="form-input">${catOptions}</select>
+          <select id="expense-category" class="form-control">${catOptions}</select>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
           <div class="form-group">
             <label class="form-label">金額 (円) <span style="color:var(--danger)">*</span></label>
-            <input type="number" id="expense-amount" class="form-input" placeholder="0" value="${e?.amount||''}">
+            <input type="number" id="expense-amount" class="form-control" placeholder="0" value="${e?.amount||''}">
           </div>
           <div class="form-group">
             <label class="form-label">日付</label>
-            <input type="date" id="expense-date" class="form-input" value="${e?.date||getLocalDateStr()}">
+            <input type="date" id="expense-date" class="form-control" value="${e?.date||getLocalDateStr()}">
           </div>
         </div>
         <div class="form-group">
           <label class="form-label">メモ</label>
-          <input type="text" id="expense-memo" class="form-input" placeholder="内容を簡単に" value="${escHtml(e?.memo||'')}">
+          <input type="text" id="expense-memo" class="form-control" placeholder="内容を簡単に" value="${escHtml(e?.memo||'')}">
         </div>
       </div>
       <div class="modal-footer" style="justify-content:space-between;">
@@ -7285,7 +7285,7 @@ function renderDashboardIdeaWidget() {
   const topIdeas = [...state.ideas].sort((a,b) => (b.count||1)-(a.count||1)).slice(0,3);
   el.innerHTML = `
     <div class="idea-quick-input-row">
-      <input type="text" class="form-input" id="dash-idea-input" placeholder="💡 気になったことを一言..."
+      <input type="text" class="form-control" id="dash-idea-input" placeholder="💡 気になったことを一言..."
         onkeydown="if(event.key==='Enter'){addIdeaFromDash();}">
       <button class="btn btn-primary" onclick="addIdeaFromDash()">記録</button>
     </div>
