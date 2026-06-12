@@ -2067,8 +2067,8 @@ function renderWeeklyChart() {
     </div>
     <div class="weekly-chart-legend">
       <span class="wc-legend-item"><span class="wc-legend-dot" style="background:var(--success)"></span>完了</span>
-      <span class="wc-legend-item"><span class="wc-legend-dot" style="background:var(--primary)"></span>進行中</span>
-      <span class="wc-legend-item"><span class="wc-legend-dot" style="background:var(--text-muted)"></span>未着手</span>
+      <span class="wc-legend-item"><span class="wc-legend-dot" style="background:var(--primary)"></span>IN PROGRESS</span>
+      <span class="wc-legend-item"><span class="wc-legend-dot" style="background:var(--text-muted)"></span>PENDING</span>
     </div>`;
 }
 
@@ -3452,7 +3452,7 @@ function renderTaskTray() {
   }
 
   const statusLabel = { 'not-started': 'PENDING', 'in-progress': 'IN PROGRESS', 'revision': 'REVISION' };
-  const statusColor = { 'not-started': 'var(--text-muted)', 'in-progress': 'var(--primary)', 'revision': 'var(--warning)' };
+  const statusColor = { 'not-started': 'var(--text-muted)', 'in-progress': 'var(--primary)', 'revision': 'var(--warning)', 'completed': 'var(--success)' };
 
   list.innerHTML = '';
   filtered.forEach(task => {
@@ -7943,6 +7943,7 @@ function getWeekDays(offset) {
 function changeWeeklyOffset(delta) {
   const next = (state.weeklyOffset || 0) + delta;
   if (next > 0) return;   // 未来は不可
+  if (next < -52) return; // 1年以上前は不可
   state.weeklyOffset = next;
   renderWeeklyReport();
 }

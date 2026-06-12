@@ -658,10 +658,10 @@
       <section id="weekly-screen" class="screen">
         <div class="screen-header">
           <h1 class="screen-title">週次レポート</h1>
-          <div style="display:flex;gap:0.5rem;align-items:center;">
-            <button class="btn btn-secondary" onclick="changeWeeklyOffset(-1)" style="font-size:1rem;padding:0.4rem 0.8rem;">‹ 前週</button>
-            <span id="weekly-range-label" style="font-size:0.9rem;color:var(--text-muted);white-space:nowrap;"></span>
-            <button class="btn btn-secondary" id="btn-weekly-next" onclick="changeWeeklyOffset(1)" style="font-size:1rem;padding:0.4rem 0.8rem;">次週 ›</button>
+          <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+            <button class="btn btn-secondary" onclick="changeWeeklyOffset(-1)">‹ 前週</button>
+            <span id="weekly-range-label" style="font-size:0.82rem;color:var(--text-muted);white-space:nowrap;"></span>
+            <button class="btn btn-secondary" id="btn-weekly-next" onclick="changeWeeklyOffset(1)">次週 ›</button>
           </div>
         </div>
         <div id="weekly-stat-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;"></div>
@@ -1477,7 +1477,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=62"></script>
+  <script src="./app.js?v=63"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

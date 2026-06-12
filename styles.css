@@ -936,7 +936,7 @@ h1, h2, h3, h4 {
 /* Calendar Schedule Screen styles */
 .calendar-wrapper {
   background-color: var(--bg-card);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   border: var(--pop-border);
   box-shadow: var(--pop-shadow);
   padding: 1.25rem;
@@ -1220,7 +1220,7 @@ h1, h2, h3, h4 {
 .task-badge {
   font-size: 0.75rem;
   padding: 3px 10px;
-  border-radius: 20px 4px 20px 4px;
+  border-radius: 3px;
   font-weight: 600;
   font-family: var(--font-hand);
   border: 1.5px solid currentColor;
@@ -1599,7 +1599,7 @@ h1, h2, h3, h4 {
 
 .report-card {
   background-color: var(--bg-card);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   border: var(--pop-border);
   box-shadow: var(--pop-shadow);
   padding: 1.5rem;
@@ -1897,7 +1897,7 @@ h1, h2, h3, h4 {
 
   .report-card {
     padding: 1rem;
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
   }
   
   .mobile-nav {
@@ -2233,7 +2233,7 @@ h1, h2, h3, h4 {
 .tray-card-status {
   font-weight: 800;
   padding: 0.05rem 0.4rem;
-  border-radius: 20px 3px 20px 3px;
+  border-radius: 3px;
   border: 1.5px solid currentColor;
 }
 
@@ -3422,7 +3422,7 @@ h1, h2, h3, h4 {
 .tl-slot-status-btn {
   font-size: 0.68rem;
   padding: 0.15rem 0.5rem;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   background: var(--bg-primary);
   color: var(--text-muted);
@@ -3498,7 +3498,7 @@ h1, h2, h3, h4 {
   gap: 0.35rem;
   font-size: 0.75rem;
   padding: 0.25rem 0.65rem;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   background: var(--bg-primary);
   color: var(--text-secondary);
@@ -3531,7 +3531,7 @@ h1, h2, h3, h4 {
   align-items: center;
   gap: 0.3rem;
   padding: 0.35rem 0.7rem;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
   color: var(--text-secondary);
@@ -3976,7 +3976,7 @@ h1, h2, h3, h4 {
   gap: 0.3rem;
   padding: 0.35rem 0.7rem;
   border: 1.5px solid var(--border-color);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 600;
@@ -4045,7 +4045,7 @@ h1, h2, h3, h4 {
   gap: 0.5rem;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   padding: 0.5rem 1rem;
   font-size: 0.82rem;
   font-weight: 600;
@@ -4108,7 +4108,7 @@ h1, h2, h3, h4 {
 }
 #onboarding-card {
   background: var(--bg-card);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   padding: 2rem 1.75rem 1.5rem;
   max-width: 420px;
   width: 100%;
@@ -4421,7 +4421,7 @@ body.drawer-open { overflow: hidden; }
 }
 .kanban-count {
   background: var(--bg-hover);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   padding: 0 0.4rem;
   font-size: 0.75rem;
   color: var(--text-muted);
@@ -4462,7 +4462,7 @@ body.drawer-open { overflow: hidden; }
 .tag-filter-btn {
   padding: 0.35rem 0.85rem;
   border: 1.5px solid var(--border-color);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   background: none;
   color: var(--text-secondary);
   font-size: 0.8rem; font-weight: 600;
@@ -4577,7 +4577,7 @@ body.drawer-open { overflow: hidden; }
 }
 .learning-bump-btn {
   font-size: 0.72rem; padding: 0.15rem 0.5rem;
-  border-radius: 20px; border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg); border: 1px solid var(--border-color);
   background: var(--bg-primary); color: var(--primary); cursor: pointer;
   transition: all 0.15s;
 }
@@ -4736,7 +4736,7 @@ body.drawer-open { overflow: hidden; }
 .idea-chip {
   background: var(--primary-glow);
   color: var(--primary);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   padding: 0.2rem 0.6rem;
   font-size: 0.75rem;
   font-weight: 600;
@@ -5313,10 +5313,10 @@ body.drawer-open { overflow: hidden; }
 
 
 /* ============================================================
-   VINTAGE DESIGN OVERRIDES — v61
+   VINTAGE DESIGN OVERRIDES — v63
    ============================================================ */
 
-/* ── Sidebar always dark ── */
+/* ── Sidebar always dark (all breakpoints) ── */
 .sidebar {
   background-color: #1a1a18 !important;
   border-right: 2px solid #c8a96e !important;
@@ -5329,6 +5329,17 @@ body.drawer-open { overflow: hidden; }
   font-size: 1.45rem;
 }
 
+/* iPad icon sidebar も dark */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .sidebar {
+    background-color: #1a1a18 !important;
+    border-right: 2px solid #c8a96e !important;
+  }
+  .nav-item {
+    border-radius: 2px !important;
+  }
+}
+
 .sidebar .nav-item {
   color: #9a8f7a;
   border: 1px solid transparent;
@@ -5336,44 +5347,49 @@ body.drawer-open { overflow: hidden; }
 
 .sidebar .nav-item:hover,
 .sidebar .nav-item.active {
-  color: #c8a96e;
+  color: #c8a96e !important;
   background-color: rgba(200,169,110,0.10) !important;
   border-color: rgba(200,169,110,0.28) !important;
-  box-shadow: none;
-  transform: none;
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 .sidebar .nav-item.active svg {
-  stroke: #c8a96e;
+  stroke: #c8a96e !important;
 }
 
-.sidebar .sidebar-label {
-  color: inherit;
-}
-
-.sidebar-user-info,
-.sidebar-bottom {
-  color: #9a8f7a;
-}
-
-.sidebar-user-name {
-  color: #f0ece2;
-}
+.sidebar .sidebar-label { color: inherit; }
+.sidebar-user-info, .sidebar-bottom { color: #9a8f7a; }
+.sidebar-user-name { color: #f0ece2; }
 
 /* ── Screen titles — Bebas Neue ── */
-.screen-title,
-.report-card h3 {
+.screen-title {
   font-family: var(--font-vintage);
   letter-spacing: 0.08em;
-}
-
-.screen-title {
   font-size: 2.2rem;
 }
 
-/* ── Screen header accent line ── */
+/* ── Screen header accent (PC desktop) ── */
 .screen-header {
-  border-bottom: 2px solid var(--primary);
+  border-bottom: 2px solid var(--primary) !important;
+  background: var(--bg-dark) !important;
+}
+
+/* ── Report card headings ── */
+.report-card h3,
+.report-card h4 {
+  font-family: var(--font-vintage);
+  letter-spacing: 0.06em;
+}
+
+/* ── Cards — paper + offset shadow ── */
+.report-card,
+.task-card,
+.tray-card,
+.stat-card {
+  border-radius: 3px !important;
+  border: 1.5px solid var(--border-color) !important;
+  box-shadow: 3px 3px 0 rgba(26,26,24,0.08) !important;
 }
 
 /* ── Status badges — stamp style ── */
@@ -5381,40 +5397,35 @@ body.drawer-open { overflow: hidden; }
 .tray-card-status {
   font-family: var(--font-vintage);
   letter-spacing: 0.06em;
-  border-radius: 2px;
-  border: 1.5px solid currentColor;
-  padding: 0.1em 0.5em;
-  font-size: 0.78rem;
+  border-radius: 2px !important;
+  border: 1.5px solid currentColor !important;
+  padding: 0.1em 0.55em;
+  font-size: 0.75rem;
 }
 
-/* ── Cards — paper texture effect ── */
-.report-card,
-.task-card,
-.tray-card,
-.stat-card {
-  border-radius: 3px;
-  border: 1.5px solid var(--border-color);
-  box-shadow: 2px 2px 0 rgba(26,26,24,0.06);
-}
-
-/* ── Buttons — square vintage ── */
+/* ── Buttons ── */
 .btn-primary {
-  background: #1a1a18;
-  color: #c8a96e;
-  border: 1.5px solid #c8a96e;
-  border-radius: 2px;
+  background: #1a1a18 !important;
+  color: #c8a96e !important;
+  border: 1.5px solid #c8a96e !important;
+  border-radius: 2px !important;
   font-family: var(--font-vintage);
   letter-spacing: 0.08em;
 }
 
 .btn-primary:hover {
-  background: #c8a96e;
-  color: #1a1a18;
-  border-color: #1a1a18;
+  background: #c8a96e !important;
+  color: #1a1a18 !important;
+  border-color: #1a1a18 !important;
+}
+
+.btn-primary:active {
+  transform: scale(0.97);
+  opacity: 0.9;
 }
 
 .btn-secondary {
-  border-radius: 2px;
+  border-radius: 2px !important;
   font-family: var(--font-vintage);
   letter-spacing: 0.05em;
 }
@@ -5433,23 +5444,21 @@ body.drawer-open { overflow: hidden; }
   font-family: var(--font-vintage);
   font-size: 0.9rem;
   letter-spacing: 0.12em;
-  padding: 0.5rem 0;
+  padding: 0.45rem 0;
   overflow: hidden;
-  border-bottom: 1px solid #c8a96e;
-  border-top: 1px solid #c8a96e;
-  margin-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(200,169,110,0.5);
+  border-top: 1px solid rgba(200,169,110,0.5);
+  margin: -0.5rem -0rem 0.75rem;
+  flex-shrink: 0;
 }
 
 .ticker-inner {
   display: inline-flex;
   white-space: nowrap;
-  animation: tickerScroll 28s linear infinite;
-  gap: 0;
+  animation: tickerScroll 32s linear infinite;
 }
 
-.ticker-inner:hover {
-  animation-play-state: paused;
-}
+.ticker-inner:hover { animation-play-state: paused; }
 
 @keyframes tickerScroll {
   from { transform: translateX(0); }
@@ -5458,11 +5467,17 @@ body.drawer-open { overflow: hidden; }
 
 .ticker-sep {
   margin: 0 1.5rem;
-  color: #c8a96e;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
-/* ── Journal PUNCH IN/OUT buttons ── */
+/* ── Mood buttons ── */
+.mood-btn.active {
+  background-color: rgba(200,169,110,0.15) !important;
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 12px rgba(200,169,110,0.4) !important;
+}
+
+/* ── Journal PUNCH IN/OUT ── */
 .journal-clock-in {
   background: #1a1a18 !important;
   color: #c8a96e !important;
@@ -5484,26 +5499,19 @@ body.drawer-open { overflow: hidden; }
 /* ── Mobile nav — dark ── */
 .mobile-nav {
   background-color: #1a1a18 !important;
-  border-top: 2px solid #c8a96e !important;
+  border-top: 2px solid rgba(200,169,110,0.6) !important;
 }
 
-.mobile-nav-item {
-  color: #9a8f7a !important;
-}
+.mobile-nav-item { color: #9a8f7a !important; }
+.mobile-nav-item.active { color: #c8a96e !important; }
+.mobile-nav-item.active svg { stroke: #c8a96e !important; }
+.mobile-nav-label { font-family: var(--font-vintage); letter-spacing: 0.04em; }
 
-.mobile-nav-item.active {
-  color: #c8a96e !important;
-}
-
-.mobile-nav-item.active svg {
-  stroke: #c8a96e !important;
-}
-
-/* ── Form inputs — paper style ── */
+/* ── Form inputs ── */
 .form-control {
-  border-radius: 2px;
+  border-radius: 2px !important;
   background-color: var(--bg-input);
-  border: 1.5px solid var(--border-color);
+  border: 1.5px solid var(--border-color) !important;
 }
 
 /* ── Project group header ── */
@@ -5513,40 +5521,59 @@ body.drawer-open { overflow: hidden; }
 }
 
 /* ── Attendance card ── */
-.attendance-card .btn-clock {
-  border-radius: 2px !important;
-}
+.attendance-card .btn-clock { border-radius: 2px !important; }
 
-/* ── Invoice amounts ── */
-.invoice-total,
-.stat-value,
-.log-value {
+/* ── Number / value typography ── */
+.invoice-total, .stat-value, .log-value {
   font-family: var(--font-vintage);
   letter-spacing: 0.05em;
 }
 
-/* ── Section headings ── */
-h3 {
-  font-family: var(--font-vintage);
-  letter-spacing: 0.06em;
-}
-
-/* ── Mobile header ── */
+/* ── Mobile header (≤768px) ── */
 @media (max-width: 768px) {
   .screen-header {
-    background: #1a1a18;
-    color: #c8a96e;
-    border-bottom: 2px solid #c8a96e;
-    padding: 0.75rem 1rem;
-    margin: 0 -1rem 0.75rem;
+    background: #1a1a18 !important;
+    color: #c8a96e !important;
+    border-bottom: 2px solid rgba(200,169,110,0.7) !important;
+    padding: 0.65rem 1rem !important;
+    margin: -1rem -1rem 0.75rem !important;
   }
 
   .screen-title {
-    color: #c8a96e;
+    color: #c8a96e !important;
+    font-size: 1.35rem !important;
   }
 
-  .mobile-nav-label {
-    font-family: var(--font-vintage);
-    letter-spacing: 0.05em;
+  .screen-header .btn-primary,
+  .screen-header .btn-secondary {
+    font-size: 0.78rem;
+    padding: 0.4rem 0.65rem;
   }
+
+  .dashboard-ticker {
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    margin: -0.75rem -1rem 0.75rem;
+  }
+
+  /* ── 週次レポート モバイル ── */
+  #weekly-stat-row {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  #weekly-day-table {
+    font-size: 0.78rem;
+  }
+
+  #weekly-day-table th,
+  #weekly-day-table td {
+    padding: 0.4rem 0.4rem !important;
+  }
+
+  .report-card { border-radius: 3px !important; }
+}
+
+/* ── 週次レポート 共通 ── */
+#weekly-stat-row .report-card {
+  padding: 1rem 0.75rem;
 }
