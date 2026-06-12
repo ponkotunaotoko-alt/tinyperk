@@ -16,8 +16,8 @@
   <meta name="format-detection" content="telephone=no">
   <link rel="apple-touch-icon" href="./app-icon.png">
   <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#0d0b14" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#1a1a18" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1a1a18" media="(prefers-color-scheme: dark)">
 
   <!-- OGP / SNS Share -->
   <meta property="og:type" content="website">
@@ -166,6 +166,13 @@
       
       <!-- 0. DASHBOARD SCREEN -->
       <section id="dashboard-screen" class="screen active">
+        <!-- Vintage Ticker -->
+        <div class="dashboard-ticker" id="dashboard-ticker">
+          <div class="ticker-inner" id="ticker-inner">
+            <span id="ticker-text-a"></span>
+            <span id="ticker-text-b"></span>
+          </div>
+        </div>
         <div class="screen-header">
           <h1 class="screen-title">ダッシュボード</h1>
           <button class="btn btn-primary btn-add-task">
@@ -211,25 +218,25 @@
             
             <!-- Attendance card (タイムカード + 休憩・移動) -->
             <div class="report-card attendance-card">
-              <h3 style="font-size: 1.1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">タイムカード打刻</h3>
+              <h3 style="font-size: 1.4rem; border-bottom: 2px solid var(--primary); padding-bottom: 0.5rem; letter-spacing: 0.1em;">TIME CARD</h3>
               <div class="attendance-buttons">
                 <button id="btn-clock-in" class="btn-clock in">
                   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                  出勤
+                  <span class="btn-clock-main">PUNCH IN</span>
                 </button>
                 <button id="btn-clock-out" class="btn-clock out">
                   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="10" y1="15" x2="14" y2="9"></line></svg>
-                  退勤
+                  <span class="btn-clock-main">PUNCH OUT</span>
                 </button>
               </div>
 
               <div class="attendance-status-log">
                 <div class="log-row">
-                  <span class="log-label">出勤:</span>
+                  <span class="log-label">IN:</span>
                   <span id="dash-clock-in-val" class="log-value">--:--</span>
                 </div>
                 <div class="log-row">
-                  <span class="log-label">退勤:</span>
+                  <span class="log-label">OUT:</span>
                   <span id="dash-clock-out-val" class="log-value">--:--</span>
                 </div>
                 <!-- 休憩行 -->
@@ -1448,7 +1455,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=59"></script>
+  <script src="./app.js?v=61"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

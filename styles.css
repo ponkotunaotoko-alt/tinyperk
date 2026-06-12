@@ -1,44 +1,45 @@
 /* Font Import — Clean & Modern */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Klee+One:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+JP:wght@400;500;700&display=swap');
+/* Vintage Design System v61 */
 
 /* ===== MINIMAL LIGHT DESIGN SYSTEM ===== */
 :root {
-  /* Brand */
-  --primary: #5b4cf5;
-  --primary-glow: rgba(91,76,245,0.10);
-  --secondary: #0ea5e9;
-  --secondary-glow: rgba(14,165,233,0.12);
-  --success: #16a34a;
-  --success-glow: rgba(22,163,74,0.12);
-  --danger: #dc2626;
-  --danger-glow: rgba(220,38,38,0.12);
-  --warning: #d97706;
-  --warning-glow: rgba(217,119,6,0.12);
+  /* Brand — Vintage Gold */
+  --primary: #c8a96e;
+  --primary-glow: rgba(200,169,110,0.15);
+  --secondary: #8c7b5e;
+  --secondary-glow: rgba(140,123,94,0.14);
+  --success: #5a8a5e;
+  --success-glow: rgba(90,138,94,0.14);
+  --danger: #b83c3c;
+  --danger-glow: rgba(184,60,60,0.14);
+  --warning: #c8a96e;
+  --warning-glow: rgba(200,169,110,0.14);
 
-  /* Light theme (default) */
-  --bg-dark: #f8f8f7;
-  --bg-card: #ffffff;
-  --bg-secondary: #f1f0ec;
-  --bg-input: #f7f7f5;
-  --bg-hover: #f1f0ec;
-  --text-main: #37352f;
-  --text-primary: #37352f;
-  --text-secondary: #6b6863;
-  --text-muted: #767676; /* WCAG AA: 4.54:1 on white */
-  --border-color: #e9e8e2;
-  --glass-border: #e9e8e2;
+  /* Vintage Light Theme */
+  --bg-dark: #f0ece2;
+  --bg-card: #f5f0e8;
+  --bg-secondary: #ede8dc;
+  --bg-input: #ede8dc;
+  --bg-hover: #e6dfd2;
+  --text-main: #1a1a18;
+  --text-primary: #1a1a18;
+  --text-secondary: #5a5248;
+  --text-muted: #8a7f6a;
+  --border-color: #d4c9a8;
+  --glass-border: #c8bfa8;
   --glass-shadow: none;
 
-  /* Shadows — flat & clean */
-  --pop-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --pop-shadow-hover: 0 4px 16px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04);
-  --pop-border: 1px solid var(--border-color);
-  --pop-radius: 12px;
-  --pop-radius-sm: 8px;
-  --pop-radius-lg: 16px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  /* Shadows — warm & grounded */
+  --pop-shadow: 0 2px 8px rgba(26,26,24,0.10), 0 1px 3px rgba(26,26,24,0.06);
+  --pop-shadow-hover: 0 6px 20px rgba(26,26,24,0.14), 0 3px 8px rgba(26,26,24,0.08);
+  --pop-border: 1.5px solid var(--border-color);
+  --pop-radius: 3px;
+  --pop-radius-sm: 2px;
+  --pop-radius-lg: 4px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
   --transition-fast: 0.15s ease;
   --transition-normal: 0.2s ease;
 
@@ -50,45 +51,46 @@
   --sal: env(safe-area-inset-left, 0px);
 
   /* Typography */
+  --font-vintage: 'Bebas Neue', 'Impact', sans-serif;
   --font-hand: 'Noto Sans JP', 'Hiragino Sans', 'Meiryo', sans-serif;
-  --font-head: 'Noto Sans JP', 'Hiragino Sans', sans-serif;
+  --font-head: 'Bebas Neue', 'Noto Sans JP', sans-serif;
 }
 
-/* Dark Theme */
+/* Dark Theme — Vintage Dark */
 [data-theme="dark"] {
-  --bg-dark: #0d0b14;
-  --bg-card: #1a1625;
-  --bg-secondary: #221e30;
-  --bg-input: #221e30;
-  --bg-hover: #2a2440;
-  --text-main: #f0edf8;
-  --text-primary: #f0edf8;
-  --text-secondary: #c4bbdb;
-  --text-muted: #9993ad; /* dark theme AA on dark bg */
-  --border-color: #302a45;
-  --glass-border: rgba(255,255,255,0.08);
+  --bg-dark: #1a1a18;
+  --bg-card: #252420;
+  --bg-secondary: #2e2c28;
+  --bg-input: #2e2c28;
+  --bg-hover: #353330;
+  --text-main: #f0ece2;
+  --text-primary: #f0ece2;
+  --text-secondary: #c8bfa8;
+  --text-muted: #9a8f7a;
+  --border-color: #3a3830;
+  --glass-border: rgba(200,169,110,0.12);
   --pop-shadow: 0 2px 16px rgba(0,0,0,0.4);
-  --pop-shadow-hover: 0 8px 32px rgba(91,76,245,0.2);
-  --pop-border: 1px solid var(--border-color);
+  --pop-shadow-hover: 0 8px 32px rgba(200,169,110,0.15);
+  --pop-border: 1.5px solid var(--border-color);
 }
 
 /* ── Auto dark mode: follow OS when user hasn't manually chosen ── */
 @media (prefers-color-scheme: dark) {
   html:not([data-theme="light"]):not([data-manual-theme]) {
-    --bg-dark: #0d0b14;
-    --bg-card: #1a1625;
-    --bg-secondary: #221e30;
-    --bg-input: #221e30;
-    --bg-hover: #2a2440;
-    --text-main: #f0edf8;
-    --text-primary: #f0edf8;
-    --text-secondary: #c4bbdb;
-    --text-muted: #9993ad;
-    --border-color: #302a45;
-    --glass-border: rgba(255,255,255,0.08);
+    --bg-dark: #1a1a18;
+    --bg-card: #252420;
+    --bg-secondary: #2e2c28;
+    --bg-input: #2e2c28;
+    --bg-hover: #353330;
+    --text-main: #f0ece2;
+    --text-primary: #f0ece2;
+    --text-secondary: #c8bfa8;
+    --text-muted: #9a8f7a;
+    --border-color: #3a3830;
+    --glass-border: rgba(200,169,110,0.12);
     --pop-shadow: 0 2px 16px rgba(0,0,0,0.4);
-    --pop-shadow-hover: 0 8px 32px rgba(91,76,245,0.2);
-    --pop-border: 1px solid var(--border-color);
+    --pop-shadow-hover: 0 8px 32px rgba(200,169,110,0.15);
+    --pop-border: 1.5px solid var(--border-color);
   }
 }
 
@@ -470,13 +472,25 @@ h1, h2, h3, h4 {
 }
 
 .btn-clock.in {
-  background: linear-gradient(135deg, var(--secondary) 0%, hsl(190, 80%, 40%) 100%);
-  box-shadow: 0 8px 20px var(--secondary-glow);
+  background: #1a1a18;
+  color: #c8a96e;
+  border: 2px solid #c8a96e;
+  box-shadow: none;
+  font-family: var(--font-vintage);
+  letter-spacing: 0.12em;
+  font-size: 1.1rem;
+  border-radius: 2px;
 }
 
 .btn-clock.out {
-  background: linear-gradient(135deg, var(--primary) 0%, hsl(265, 85%, 60%) 100%);
-  box-shadow: 0 8px 20px var(--primary-glow);
+  background: #c8a96e;
+  color: #1a1a18;
+  border: 2px solid #1a1a18;
+  box-shadow: none;
+  font-family: var(--font-vintage);
+  letter-spacing: 0.12em;
+  font-size: 1.1rem;
+  border-radius: 2px;
 }
 
 .btn-clock svg {
@@ -5243,4 +5257,296 @@ body.drawer-open { overflow: hidden; }
   font-weight: 700;
   color: var(--text-primary);
   margin: 0 0 0.75rem;
+}
+
+/* ==============================
+   タイムスロットピッカー（スマホ用）
+   ============================== */
+.timeslot-picker-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.5);
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 1rem;
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+.timeslot-picker-box {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-md) var(--radius-md);
+  padding: 1.25rem;
+  width: 100%; max-width: 480px;
+  box-shadow: var(--pop-shadow);
+}
+.timeslot-picker-title {
+  font-size: 0.95rem; font-weight: 700;
+  margin-bottom: 1rem; text-align: center;
+  line-height: 1.5;
+}
+.timeslot-picker-title small { font-weight: 400; color: var(--text-muted); font-size: 0.8rem; }
+.timeslot-picker-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem;
+}
+.timeslot-picker-btn {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 0.6rem 0.25rem; border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-secondary); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  min-height: 52px;
+}
+.timeslot-picker-btn:hover, .timeslot-picker-btn:active {
+  background: var(--primary-glow); border-color: var(--primary);
+}
+.timeslot-picker-btn.occupied {
+  background: var(--bg-hover); opacity: 0.6;
+}
+.timeslot-hour { font-size: 0.85rem; font-weight: 700; }
+.timeslot-occupied-label { font-size: 0.65rem; color: var(--text-muted); }
+
+/* 📌 ピンボタン */
+.journal-task-pin-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 1rem; padding: 0.1rem 0.3rem;
+  border-radius: 4px; line-height: 1;
+  transition: transform 0.15s;
+}
+.journal-task-pin-btn:hover { transform: scale(1.2); }
+
+
+/* ============================================================
+   VINTAGE DESIGN OVERRIDES — v61
+   ============================================================ */
+
+/* ── Sidebar always dark ── */
+.sidebar {
+  background-color: #1a1a18 !important;
+  border-right: 2px solid #c8a96e !important;
+}
+
+.logo-text {
+  font-family: var(--font-vintage) !important;
+  color: #c8a96e !important;
+  letter-spacing: 0.12em;
+  font-size: 1.45rem;
+}
+
+.sidebar .nav-item {
+  color: #9a8f7a;
+  border: 1px solid transparent;
+}
+
+.sidebar .nav-item:hover,
+.sidebar .nav-item.active {
+  color: #c8a96e;
+  background-color: rgba(200,169,110,0.10) !important;
+  border-color: rgba(200,169,110,0.28) !important;
+  box-shadow: none;
+  transform: none;
+}
+
+.sidebar .nav-item.active svg {
+  stroke: #c8a96e;
+}
+
+.sidebar .sidebar-label {
+  color: inherit;
+}
+
+.sidebar-user-info,
+.sidebar-bottom {
+  color: #9a8f7a;
+}
+
+.sidebar-user-name {
+  color: #f0ece2;
+}
+
+/* ── Screen titles — Bebas Neue ── */
+.screen-title,
+.report-card h3 {
+  font-family: var(--font-vintage);
+  letter-spacing: 0.08em;
+}
+
+.screen-title {
+  font-size: 2.2rem;
+}
+
+/* ── Screen header accent line ── */
+.screen-header {
+  border-bottom: 2px solid var(--primary);
+}
+
+/* ── Status badges — stamp style ── */
+.status-badge,
+.tray-card-status {
+  font-family: var(--font-vintage);
+  letter-spacing: 0.06em;
+  border-radius: 2px;
+  border: 1.5px solid currentColor;
+  padding: 0.1em 0.5em;
+  font-size: 0.78rem;
+}
+
+/* ── Cards — paper texture effect ── */
+.report-card,
+.task-card,
+.tray-card,
+.stat-card {
+  border-radius: 3px;
+  border: 1.5px solid var(--border-color);
+  box-shadow: 2px 2px 0 rgba(26,26,24,0.06);
+}
+
+/* ── Buttons — square vintage ── */
+.btn-primary {
+  background: #1a1a18;
+  color: #c8a96e;
+  border: 1.5px solid #c8a96e;
+  border-radius: 2px;
+  font-family: var(--font-vintage);
+  letter-spacing: 0.08em;
+}
+
+.btn-primary:hover {
+  background: #c8a96e;
+  color: #1a1a18;
+  border-color: #1a1a18;
+}
+
+.btn-secondary {
+  border-radius: 2px;
+  font-family: var(--font-vintage);
+  letter-spacing: 0.05em;
+}
+
+/* ── Modal headers ── */
+.modal-title,
+.modal-header h2 {
+  font-family: var(--font-vintage);
+  letter-spacing: 0.1em;
+}
+
+/* ── Dashboard ticker ── */
+.dashboard-ticker {
+  background: #1a1a18;
+  color: #c8a96e;
+  font-family: var(--font-vintage);
+  font-size: 0.9rem;
+  letter-spacing: 0.12em;
+  padding: 0.5rem 0;
+  overflow: hidden;
+  border-bottom: 1px solid #c8a96e;
+  border-top: 1px solid #c8a96e;
+  margin-bottom: 0.5rem;
+}
+
+.ticker-inner {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: tickerScroll 28s linear infinite;
+  gap: 0;
+}
+
+.ticker-inner:hover {
+  animation-play-state: paused;
+}
+
+@keyframes tickerScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.ticker-sep {
+  margin: 0 1.5rem;
+  color: #c8a96e;
+  opacity: 0.5;
+}
+
+/* ── Journal PUNCH IN/OUT buttons ── */
+.journal-clock-in {
+  background: #1a1a18 !important;
+  color: #c8a96e !important;
+  border: 2px solid #c8a96e !important;
+  font-family: var(--font-vintage) !important;
+  letter-spacing: 0.1em;
+  border-radius: 2px !important;
+}
+
+.journal-clock-out {
+  background: #c8a96e !important;
+  color: #1a1a18 !important;
+  border: 2px solid #1a1a18 !important;
+  font-family: var(--font-vintage) !important;
+  letter-spacing: 0.1em;
+  border-radius: 2px !important;
+}
+
+/* ── Mobile nav — dark ── */
+.mobile-nav {
+  background-color: #1a1a18 !important;
+  border-top: 2px solid #c8a96e !important;
+}
+
+.mobile-nav-item {
+  color: #9a8f7a !important;
+}
+
+.mobile-nav-item.active {
+  color: #c8a96e !important;
+}
+
+.mobile-nav-item.active svg {
+  stroke: #c8a96e !important;
+}
+
+/* ── Form inputs — paper style ── */
+.form-control {
+  border-radius: 2px;
+  background-color: var(--bg-input);
+  border: 1.5px solid var(--border-color);
+}
+
+/* ── Project group header ── */
+.project-group-header {
+  font-family: var(--font-vintage);
+  letter-spacing: 0.08em;
+}
+
+/* ── Attendance card ── */
+.attendance-card .btn-clock {
+  border-radius: 2px !important;
+}
+
+/* ── Invoice amounts ── */
+.invoice-total,
+.stat-value,
+.log-value {
+  font-family: var(--font-vintage);
+  letter-spacing: 0.05em;
+}
+
+/* ── Section headings ── */
+h3 {
+  font-family: var(--font-vintage);
+  letter-spacing: 0.06em;
+}
+
+/* ── Mobile header ── */
+@media (max-width: 768px) {
+  .screen-header {
+    background: #1a1a18;
+    color: #c8a96e;
+    border-bottom: 2px solid #c8a96e;
+    padding: 0.75rem 1rem;
+    margin: 0 -1rem 0.75rem;
+  }
+
+  .screen-title {
+    color: #c8a96e;
+  }
+
+  .mobile-nav-label {
+    font-family: var(--font-vintage);
+    letter-spacing: 0.05em;
+  }
 }

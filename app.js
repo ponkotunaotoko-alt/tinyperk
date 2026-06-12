@@ -1514,6 +1514,46 @@ function renderDashboard() {
 
   // ── ダッシュボード上のジャーナルクイックカード ──
   renderDashboardJournalCard(todayStr);
+
+  // ── Vintage Ticker ──
+  updateDashboardTicker();
+}
+
+function updateDashboardTicker() {
+  const tickerA = document.getElementById('ticker-text-a');
+  const tickerB = document.getElementById('ticker-text-b');
+  if (!tickerA || !tickerB) return;
+
+  const todayStr = getLocalDateStr();
+  const todayCard = state.timecards.find(tc => tc.date === todayStr);
+  const tasks = state.tasks || [];
+  const pending  = tasks.filter(t => t.status === 'not-started').length;
+  const inProg   = tasks.filter(t => t.status === 'in-progress').length;
+  const done     = tasks.filter(t => t.status === 'completed').length;
+  const total    = tasks.length;
+  const clockIn  = todayCard?.clockIn  || '--:--';
+  const clockOut = todayCard?.clockOut || '--:--';
+  const hrs      = todayCard?.totalHours ? `${todayCard.totalHours.toFixed(1)}H` : '--';
+
+  const greetings = ['STAY FOCUSED', 'GET IT DONE', 'KEEP MOVING', 'MAKE IT HAPPEN'];
+  const greet = greetings[new Date().getHours() % greetings.length];
+
+  const sep = '<span class="ticker-sep">✦</span>';
+  const items = [
+    `${greet}`,
+    `IN: ${clockIn}`,
+    `OUT: ${clockOut}`,
+    `TODAY: ${hrs}`,
+    `TASKS: ${total}`,
+    `PENDING: ${pending}`,
+    `IN PROGRESS: ${inProg}`,
+    `DONE: ${done}`,
+    `${new Date().toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'})}`,
+  ];
+  const html = items.map((s, i) => i < items.length - 1 ? s + sep : s).join('') + sep;
+  // A+B で継ぎ目なしループ
+  tickerA.innerHTML = html;
+  tickerB.innerHTML = html;
 }
 
 function renderDashboardJournalCard(todayStr) {
@@ -2109,10 +2149,10 @@ function renderJournalTimeline() {
             </div>
             <div class="tl-slot-status-row">
               ${[
-                {s:'not-started', lbl:'未着手'},
-                {s:'in-progress',  lbl:'進行中'},
-                {s:'revision',     lbl:'修正中'},
-                {s:'completed',    lbl:'完了'}
+                {s:'not-started', lbl:'PENDING'},
+                {s:'in-progress',  lbl:'IN PROGRESS'},
+                {s:'revision',     lbl:'REVISION'},
+                {s:'completed',    lbl:'DONE'}
               ].map(({s,lbl}) =>
                 `<button class="tl-slot-status-btn tl-ss-${s}${task.status===s?' active':''}"
                   onclick="event.stopPropagation();updateTaskStatusFromTimeline('${date}','${h}','${s}')">${lbl}</button>`
@@ -2520,7 +2560,7 @@ function renderTaskList() {
   if (!body) return;
 
   const statusOrder = { 'not-started': 0, 'in-progress': 1, 'revision': 2, 'completed': 3 };
-  const statusLabel = { 'not-started': '未着手', 'in-progress': '進行中', 'revision': '修正中', 'completed': '完了' };
+  const statusLabel = { 'not-started': 'PENDING', 'in-progress': 'IN PROGRESS', 'revision': 'REVISION', 'completed': 'DONE' };
   const statusClass = { 'not-started': 'status-badge-not-started', 'in-progress': 'status-badge-in-progress', 'revision': 'status-badge-revision', 'completed': 'status-badge-completed' };
 
   // Filter
@@ -2736,6 +2776,79 @@ function assignTaskToProject(taskId, projId) {
 }
 
 // ============================================================
+// タッチ対応: タップで時間割にタスクを追加
+// ============================================================
+function showTimeslotPicker(taskId) {
+  const task = state.tasks.find(t => t.id === taskId);
+  if (!task) return;
+
+  // 既存ピッカーを削除
+  const existing = document.getElementById('timeslot-picker-overlay');
+  if (existing) existing.remove();
+
+  const hours = Array.from({ length: 10 }, (_, i) => String(i + 9).padStart(2, '0'));
+  const date = state.journalDate;
+  const timeline = state.journalEntries[date]?.timeline || {};
+
+  const overlay = document.createElement('div');
+  overlay.id = 'timeslot-picker-overlay';
+  overlay.className = 'timeslot-picker-overlay';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  const box = document.createElement('div');
+  box.className = 'timeslot-picker-box';
+  box.innerHTML = `
+    <div class="timeslot-picker-title">📌 ${escapeHtml(task.name)}<br><small>時間割に追加する時間を選択</small></div>
+    <div class="timeslot-picker-grid">
+      ${hours.map(h => {
+        const slot = timeline[h];
+        const occupied = slot && !slot._covered && slot.taskId;
+        const occupiedName = occupied ? (state.tasks.find(t => t.id === slot.taskId)?.name || '') : '';
+        return `<button class="timeslot-picker-btn${occupied ? ' occupied' : ''}"
+          onclick="assignTaskToTimeslot('${taskId}','${h}');document.getElementById('timeslot-picker-overlay').remove();">
+          <span class="timeslot-hour">${h}:00</span>
+          ${occupied ? `<span class="timeslot-occupied-label">${escapeHtml(occupiedName.slice(0,8))}…</span>` : ''}
+        </button>`;
+      }).join('')}
+    </div>
+    <button class="btn btn-secondary" style="width:100%;margin-top:0.75rem;" onclick="document.getElementById('timeslot-picker-overlay').remove()">キャンセル</button>
+  `;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
+function assignTaskToTimeslot(taskId, hour) {
+  const task = state.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  const date = state.journalDate;
+  if (!state.journalEntries[date]) state.journalEntries[date] = {};
+  if (!state.journalEntries[date].timeline) state.journalEntries[date].timeline = {};
+  const timeline = state.journalEntries[date].timeline;
+
+  // 既存の同タスクスロットを削除
+  Object.keys(timeline).forEach(h => {
+    if (timeline[h].taskId === taskId) {
+      const span = timeline[h].span || 1;
+      for (let i = 0; i < span; i++) {
+        const covered = String(parseInt(h) + i).padStart(2, '0');
+        delete timeline[covered];
+      }
+    }
+  });
+
+  const span = Math.max(1, Math.min(Math.round(task.estimatedHours || 1), 18 - parseInt(hour) + 1));
+  timeline[hour] = { taskId, actualHours: '', span };
+  for (let i = 1; i < span; i++) {
+    const coveredH = String(parseInt(hour) + i).padStart(2, '0');
+    timeline[coveredH] = { _covered: hour };
+  }
+
+  saveJournalToStorage();
+  renderJournalTimeline();
+  showMotivatorToast(`${hour}:00 に追加しました`, '📌');
+}
+
+// ============================================================
 // JOURNAL (Daily Journal)
 // ============================================================
 
@@ -2783,9 +2896,9 @@ function renderJournal() {
     let clockBtns = '';
     if (isToday) {
       if (!timecard?.clockIn) {
-        clockBtns = `<button class="journal-clock-btn journal-clock-in" onclick="clockInFromJournal()">出勤</button>`;
+        clockBtns = `<button class="journal-clock-btn journal-clock-in" onclick="clockInFromJournal()">PUNCH IN</button>`;
       } else if (!timecard?.clockOut) {
-        clockBtns = `<button class="journal-clock-btn journal-clock-out" onclick="clockOutFromJournal()">退勤</button>`;
+        clockBtns = `<button class="journal-clock-btn journal-clock-out" onclick="clockOutFromJournal()">PUNCH OUT</button>`;
       }
     }
     html += `
@@ -2840,7 +2953,7 @@ function renderJournal() {
     // タスク一覧は時間割の下に表示
     const taskListEl = document.getElementById('journal-task-list');
     if (taskListEl) {
-      const statusLabel = { 'not-started': '未着手', 'in-progress': '進行中', 'revision': '修正中', 'completed': '完了' };
+      const statusLabel = { 'not-started': 'PENDING', 'in-progress': 'IN PROGRESS', 'revision': 'REVISION', 'completed': 'DONE' };
       const statusColor = { 'not-started': 'var(--text-muted)', 'in-progress': 'var(--primary)', 'revision': '#f97316', 'completed': 'var(--success)' };
       let tlHtml = '<div class="journal-task-table-section"><h3 class="journal-task-table-title">📋 今日のタスク</h3>';
       if (dayTasks.length > 0) {
@@ -2854,6 +2967,7 @@ function renderJournal() {
               <span class="journal-task-client">${escapeHtml(t.client)}</span>
               <span class="journal-task-status" style="color:${statusColor[t.status]}">${statusLabel[t.status] || t.status}</span>
               ${spent ? `<span class="journal-task-time">⏱ ${spent}</span>` : '<span></span>'}
+              <button class="journal-task-pin-btn" onclick="event.stopPropagation();showTimeslotPicker('${t.id}')" title="時間割に追加">📌</button>
               <span class="journal-task-edit-btn" onclick="event.stopPropagation();openEditTaskModal('${t.id}')">✏️</span>
             </div>`;
         });
@@ -2956,7 +3070,7 @@ function setupJournalDropZone(textarea) {
     const task = state.tasks.find(t => t.id === taskId);
     if (!task) return;
 
-    const statusLabel = { 'not-started': '未着手', 'in-progress': '進行中', 'revision': '修正中', 'completed': '完了' };
+    const statusLabel = { 'not-started': 'PENDING', 'in-progress': 'IN PROGRESS', 'revision': 'REVISION', 'completed': 'DONE' };
     const spent = task.spentSeconds > 0 ? ` ⏱${fmtSeconds(task.spentSeconds)}` : '';
     const line = `\n- 【${statusLabel[task.status] || task.status}】${task.name}（${task.client}）${spent}`;
 
@@ -3270,7 +3384,7 @@ function renderTaskTray() {
     return;
   }
 
-  const statusLabel = { 'not-started': '未着手', 'in-progress': '進行中', 'revision': '修正中' };
+  const statusLabel = { 'not-started': 'PENDING', 'in-progress': 'IN PROGRESS', 'revision': 'REVISION' };
   const statusColor = { 'not-started': 'var(--text-muted)', 'in-progress': 'var(--primary)', 'revision': 'var(--warning)' };
 
   list.innerHTML = '';
@@ -5666,10 +5780,10 @@ function copyToClipboard(text, successMsg) {
 
 function statusToJapanese(status) {
   switch (status) {
-    case 'not-started': return '未着手';
-    case 'in-progress': return '進行中';
-    case 'revision': return '修正中';
-    case 'completed': return '完了';
+    case 'not-started': return 'PENDING';
+    case 'in-progress': return 'IN PROGRESS';
+    case 'revision': return 'REVISION';
+    case 'completed': return 'DONE';
     default: return status || '';
   }
 }
