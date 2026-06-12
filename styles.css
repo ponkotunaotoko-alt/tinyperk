@@ -5891,3 +5891,78 @@ body {
     opacity: 0.015;
   }
 }
+
+
+/* ============================================================
+   AI QUICK PARSE — v65
+   ============================================================ */
+
+.ai-parse-section {
+  border: 1.5px solid var(--primary);
+  border-radius: 3px;
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(200,169,110,0.06) 0%, transparent 100%);
+}
+
+.ai-parse-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--primary);
+  font-family: var(--font-vintage);
+  letter-spacing: 0.08em;
+  font-size: 0.92rem;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.ai-parse-toggle:hover {
+  background: rgba(200,169,110,0.08);
+}
+
+.ai-parse-icon {
+  font-size: 1rem;
+  animation: aiPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes aiPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+#ai-parse-area {
+  padding: 0 1rem 0.85rem;
+  border-top: 1px solid rgba(200,169,110,0.3);
+}
+
+.ai-paste-textarea {
+  width: 100%;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  resize: vertical;
+  margin-top: 0.75rem;
+  font-family: var(--font-hand);
+}
+
+.ai-parse-btn {
+  font-size: 0.82rem !important;
+  padding: 0.45rem 1rem !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 解析結果ハイライト（フィールドに入ったとき） */
+@keyframes fieldHighlight {
+  0%   { background-color: rgba(200,169,110,0.25); border-color: var(--primary); }
+  100% { background-color: var(--bg-input); border-color: var(--border-color); }
+}
+
+.field-filled {
+  animation: fieldHighlight 1.2s ease forwards;
+}

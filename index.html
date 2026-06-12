@@ -1155,6 +1155,25 @@
         <div class="modal-body">
           <input type="hidden" id="task-id">
 
+          <!-- AI Quick Parse Banner -->
+          <div id="ai-parse-section" class="ai-parse-section">
+            <button type="button" class="ai-parse-toggle" id="ai-parse-toggle" onclick="toggleAiParseArea()">
+              <span class="ai-parse-icon">✦</span>
+              <span>LINEやメールから自動入力</span>
+              <span id="ai-parse-chevron" style="margin-left:auto;transition:transform 0.2s;">▾</span>
+            </button>
+            <div id="ai-parse-area" style="display:none;">
+              <textarea id="ai-paste-text" class="form-control ai-paste-textarea"
+                placeholder="LINEやメールの文章をそのまま貼り付けてください。&#10;&#10;例）&#10;お世話になっております。タグリーベースの山田です。&#10;先日ご依頼した記事の件ですが、納期を6月30日でお願いできますでしょうか。&#10;金額は3万円でどうでしょうか。" rows="5"></textarea>
+              <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.5rem;">
+                <button type="button" class="btn btn-primary ai-parse-btn" id="ai-parse-btn" onclick="parseTaskFromText()">
+                  <span id="ai-parse-btn-label">✦ 解析して自動入力</span>
+                </button>
+                <span id="ai-parse-status" style="font-size:0.8rem;color:var(--text-muted);"></span>
+              </div>
+            </div>
+          </div>
+
           <!-- Task Status -->
           <div class="form-group">
             <span class="form-label">ステータス</span>
@@ -1477,7 +1496,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=64"></script>
+  <script src="./app.js?v=65"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

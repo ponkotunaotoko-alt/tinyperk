@@ -8089,3 +8089,152 @@ function renderWeeklyReport() {
       </div>`).join('');
   }
 }
+
+
+// ============================================================
+// AI QUICK PARSE — LINE/メールからタスク自動入力
+// ============================================================
+
+function toggleAiParseArea() {
+  const area = document.getElementById('ai-parse-area');
+  const chevron = document.getElementById('ai-parse-chevron');
+  if (!area) return;
+  const isOpen = area.style.display !== 'none';
+  area.style.display = isOpen ? 'none' : 'block';
+  if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
+  if (!isOpen) {
+    setTimeout(() => document.getElementById('ai-paste-text')?.focus(), 50);
+  }
+}
+
+async function parseTaskFromText() {
+  const textarea = document.getElementById('ai-paste-text');
+  const statusEl = document.getElementById('ai-parse-status');
+  const btn = document.getElementById('ai-parse-btn');
+  const btnLabel = document.getElementById('ai-parse-btn-label');
+  if (!textarea || !statusEl || !btn) return;
+
+  const text = textarea.value.trim();
+  if (!text) {
+    statusEl.textContent = '文章を貼り付けてください';
+    statusEl.style.color = 'var(--warning)';
+    return;
+  }
+
+  // API key チェック
+  const apiKey = localStorage.getItem(_CLAUDE_KEY_STORE);
+  if (!apiKey) {
+    statusEl.innerHTML = '⚠ <a href="#" onclick="switchTab(\'settings\');return false;" style="color:var(--primary);">設定画面</a>でClaude APIキーを登録してください';
+    statusEl.style.color = 'var(--warning)';
+    return;
+  }
+
+  // Loading状態
+  btn.disabled = true;
+  btnLabel.textContent = '解析中...';
+  statusEl.textContent = '';
+  statusEl.style.color = 'var(--text-muted)';
+
+  // 今日の日付をコンテキストとして渡す
+  const todayStr = getLocalDateStr();
+
+  const prompt = `あなたはタスク管理AIです。以下のLINEやメールの文章から、タスク登録に必要な情報を抽出してください。
+JSONのみを返してください（前後の説明や\`\`\`は不要）。
+
+今日の日付: ${todayStr}
+
+抽出フォーマット:
+{
+  "name": "タスク名（簡潔に20文字以内）",
+  "client": "クライアント名・会社名・人名（不明なら空文字）",
+  "dueDate": "YYYY-MM-DD形式（「今週中」「月末」等も今日の日付を基準に変換。不明なら空文字）",
+  "amount": 金額の数値（税別。「3万円」→30000。不明なら0）,
+  "estimatedHours": 作業時間の数値（不明なら0）,
+  "priority": "high"（急ぎ・重要）か"medium"（通常）か"low"（余裕あり）,
+  "workType": "業務内容カテゴリ（取材・執筆・撮影・デザイン・構成・編集・打ち合わせ等）",
+  "memo": "その他の重要情報（要件・注意事項など、1-2文で）"
+}
+
+文章:
+${text}`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `APIエラー (${resp.status})`);
+    }
+
+    const data = await resp.json();
+    const rawText = data.content?.[0]?.text || '';
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('解析結果を読み取れませんでした');
+
+    const info = JSON.parse(jsonMatch[0]);
+
+    // フォームに反映（アニメーション付き）
+    const fillField = (id, value) => {
+      const el = document.getElementById(id);
+      if (!el || !value) return false;
+      el.value = value;
+      el.classList.remove('field-filled');
+      void el.offsetWidth;
+      el.classList.add('field-filled');
+      return true;
+    };
+
+    let filled = 0;
+    if (fillField('task-name', info.name)) filled++;
+    if (fillField('task-client', info.client)) filled++;
+    if (fillField('task-due-date', info.dueDate)) filled++;
+    if (info.amount > 0 && fillField('task-amount', info.amount)) filled++;
+    if (info.estimatedHours > 0 && fillField('task-estimated-hours', info.estimatedHours)) filled++;
+    if (fillField('task-work-type', info.workType)) filled++;
+
+    // 優先度ラジオを設定
+    if (info.priority) {
+      const radioId = info.priority === 'high' ? 'priority-high' : info.priority === 'low' ? 'priority-low' : 'priority-medium';
+      const radio = document.getElementById(radioId);
+      if (radio) { radio.checked = true; filled++; }
+    }
+
+    // メモをタスク名の下の説明フィールドに追記（あれば）
+    if (info.memo) {
+      const nameEl = document.getElementById('task-name');
+      if (nameEl && !nameEl.placeholder.includes(info.memo)) {
+        // メモを一時的にstatusに表示（専用メモフィールドがなければ）
+      }
+    }
+
+    // 結果表示
+    statusEl.style.color = 'var(--success)';
+    statusEl.textContent = `✓ ${filled}項目を自動入力しました${info.memo ? ' — ' + info.memo : ''}`;
+
+    // 成功したらエリアを縮小（テキストエリアは残す）
+    setTimeout(() => {
+      textarea.style.height = '60px';
+      textarea.style.overflow = 'hidden';
+    }, 800);
+
+  } catch (err) {
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = '❌ ' + (err.message || '解析に失敗しました');
+  } finally {
+    btn.disabled = false;
+    btnLabel.textContent = '✦ 再解析';
+  }
+}
