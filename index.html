@@ -608,6 +608,10 @@
             <button class="btn btn-secondary" onclick="openSmartScheduleModal()" style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;">
               ✨ スマートスケジュール
             </button>
+            <button class="btn btn-secondary" onclick="openAddProjectModal()" style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;">
+              <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.5;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              📁 プロジェクト
+            </button>
             <button class="btn btn-primary" onclick="openAddTaskModal()" style="display:flex;align-items:center;gap:0.4rem;">
               <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.5;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               タスク追加
@@ -690,6 +694,11 @@
           <div id="journal-timeline" class="journal-timeline">
             <!-- JS で描画 -->
           </div>
+        </div>
+
+        <!-- 時間割の下に今日のタスク一覧 -->
+        <div id="journal-task-list">
+          <!-- JS で描画 -->
         </div>
 
         <!-- ジャーナル記入エリア -->
@@ -899,6 +908,22 @@
               <div id="template-client-list" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
             </div>
           </div>
+        </div>
+
+        <!-- Claude API キー設定（名刺OCR用） -->
+        <div class="settings-section">
+          <h3 class="settings-title">🤖 AI機能設定（名刺読み取りなど）</h3>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;">
+            名刺の自動読み取りに <strong>Anthropic Claude API</strong> を使用します。キーはこのデバイスのみに保存されサーバーには送信しません。
+            <a href="https://console.anthropic.com/" target="_blank" rel="noopener" style="color:var(--primary)">APIキーを取得 →</a>
+          </p>
+          <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+            <input type="password" id="claude-api-key-input" class="form-input" style="flex:1;min-width:220px;"
+              placeholder="sk-ant-api03-…" autocomplete="off" value="">
+            <button class="btn btn-primary" onclick="saveClaudeApiKey()">保存</button>
+            <button class="btn btn-secondary" onclick="clearClaudeApiKey()">削除</button>
+          </div>
+          <div id="claude-api-key-status" style="font-size:0.82rem;margin-top:0.4rem;color:var(--text-muted)"></div>
         </div>
 
         <div class="settings-section">
@@ -1216,6 +1241,14 @@
             </div>
           </div>
 
+          <!-- Project assignment -->
+          <div class="form-group">
+            <label class="form-label" for="task-project">📁 プロジェクト</label>
+            <select id="task-project" class="form-control" style="min-height: 48px;" onchange="assignTaskToProject(document.getElementById('task-id').value, this.value)">
+              <option value="">— 未分類 —</option>
+            </select>
+          </div>
+
           <!-- Predecessor & Deadline options -->
           <div class="form-row">
             <div class="form-group">
@@ -1415,7 +1448,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=54"></script>
+  <script src="./app.js?v=59"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

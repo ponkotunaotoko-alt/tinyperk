@@ -3473,6 +3473,44 @@ h1, h2, h3, h4 {
   animation: pulse-mic 1s ease-in-out infinite;
 }
 
+/* ── タイムラインカード ストップウォッチ行 ── */
+.tl-slot-sw-row {
+  display: flex;
+  padding: 0.3rem 0.5rem 0.4rem;
+}
+.tl-slot-sw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.tl-slot-sw-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-light, #eef2ff);
+}
+.tl-slot-sw-btn.running {
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #ef4444;
+  animation: pulse-mic 1.2s ease-in-out infinite;
+  font-weight: 600;
+}
+.tl-sw-disp {
+  font-family: 'Courier New', monospace;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Whisper マイクボタン共通 ── */
 .whisper-mic-btn {
   display: inline-flex;
@@ -4215,6 +4253,42 @@ body.modal-open {
   /* do NOT set height, it prevents modal inner scroll on iOS */
 }
 
+/* form inside modal must pass flex constraints to children */
+.modal-content > form,
+.modal-content > div.modal-form-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── スワイプ削除 ── */
+.task-row-wrap {
+  position: relative;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+.task-row-swipe {
+  transition: transform 0.2s ease;
+  will-change: transform;
+}
+.task-row-delete-bg {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  background: var(--danger, #ef4444);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.3rem;
+  pointer-events: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
 /* iPhone safe area fix for screens with home bar */
 .main-content {
   padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px) + 60px);
@@ -4456,6 +4530,58 @@ body.drawer-open { overflow: hidden; }
 .goal-gauge-fill { height: 100%; border-radius: 5px; transition: width 0.6s ease; }
 .goal-gauge-pct { font-size: 0.8rem; color: var(--text-muted); margin-left: 0.4rem; }
 .goal-note { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem; }
+
+/* ---- LEARNING GOAL CARD ---- */
+.learning-list { display: flex; flex-direction: column; gap: 0.6rem; margin: 0.75rem 0 0.5rem; }
+.learning-empty { font-size: 0.85rem; color: var(--text-muted); padding: 0.5rem 0; }
+.learning-task-link {
+  font-size: 0.82rem; color: var(--text-secondary);
+  background: var(--bg-hover); border-radius: 6px;
+  padding: 0.35rem 0.65rem; margin-bottom: 0.4rem;
+}
+.learning-task-note { color: var(--text-muted); }
+.learning-item {
+  background: var(--bg-hover); border-radius: 8px;
+  padding: 0.6rem 0.75rem; border: 1px solid var(--border-color);
+}
+.learning-item-header {
+  display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.35rem;
+}
+.learning-type-badge { font-size: 1rem; }
+.learning-item-title { flex: 1; font-size: 0.88rem; font-weight: 600; color: var(--text-primary); }
+.learning-del-btn {
+  background: none; border: none; cursor: pointer; color: var(--text-muted);
+  font-size: 1rem; padding: 0 0.2rem; line-height: 1;
+}
+.learning-del-btn:hover { color: #ef4444; }
+.learning-progress-row {
+  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;
+}
+.learning-progress-label { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; }
+.learning-bump-row {
+  display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;
+}
+.learning-bump-btn {
+  font-size: 0.72rem; padding: 0.15rem 0.5rem;
+  border-radius: 20px; border: 1px solid var(--border-color);
+  background: var(--bg-primary); color: var(--primary); cursor: pointer;
+  transition: all 0.15s;
+}
+.learning-bump-btn:hover { background: var(--primary); color: #fff; }
+.learning-manual-input {
+  width: 70px; font-size: 0.78rem; padding: 0.15rem 0.4rem;
+  border: 1px solid var(--border-color); border-radius: 6px;
+  background: var(--bg-primary); color: var(--text-primary);
+}
+.learning-notes { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
+.learning-add-form {
+  display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.75rem;
+  padding-top: 0.75rem; border-top: 1px solid var(--border-color);
+  align-items: center;
+}
+.learning-type-sel { flex: 0 0 auto; font-size: 0.82rem; padding: 0.35rem 0.5rem; max-width: 160px; }
+.learning-title-inp { flex: 1; min-width: 140px; font-size: 0.85rem; }
+.learning-target-inp { flex: 0 0 auto; width: 90px; font-size: 0.85rem; }
 
 /* ---- EXPENSES ---- */
 .expense-summary-row {
@@ -4996,3 +5122,125 @@ body.drawer-open { overflow: hidden; }
 }
 .modal-close:hover { background: var(--bg-hover); }
 .tl-client { font-size: 0.72rem; color: var(--text-muted); }
+
+/* ---- 名刺OCR バー ---- */
+.ocr-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1.25rem;
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border-light);
+  flex-wrap: wrap;
+}
+.btn-ocr {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 1rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+.btn-ocr:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.btn-ocr:disabled { opacity: 0.55; cursor: not-allowed; }
+.ocr-status-msg {
+  font-size: 0.83rem;
+  font-weight: 500;
+}
+
+/* Journal clock-in/out buttons */
+.journal-clock-btn {
+  margin-left: auto;
+  padding: 0.3rem 0.85rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+.journal-clock-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+.journal-clock-in  { background: var(--success, #22c55e); color: #fff; }
+.journal-clock-out { background: #f97316; color: #fff; }
+
+/* ==============================
+   プロジェクトグループ UI
+   ============================== */
+.project-group { margin-bottom: 1.5rem; }
+.project-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-hover, rgba(0,0,0,0.04));
+  border-radius: var(--radius-sm, 6px);
+  margin-bottom: 0.5rem;
+  cursor: default;
+}
+.project-group-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  flex: 1;
+  color: var(--text-primary);
+}
+.project-group-progress {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.project-group-bar {
+  width: 72px;
+  height: 6px;
+  background: var(--border-color, #e2e8f0);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.project-group-bar-fill {
+  height: 100%;
+  background: var(--primary, #6366f1);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.project-group-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.2rem 0.3rem;
+  border-radius: var(--radius-sm, 6px);
+  transition: color 0.15s, background 0.15s;
+}
+.project-group-delete:hover { color: var(--danger, #ef4444); background: var(--danger-light, #fee2e2); }
+.project-group-tasks { padding-left: 0; }
+
+/* 未分類グループ: ヘッダーをごく控えめに */
+.project-group-none .project-group-header {
+  background: transparent;
+  border: 1px dashed var(--border-color, #e2e8f0);
+}
+.project-group-none .project-group-name { color: var(--text-muted); font-weight: 500; }
+
+/* ==============================
+   日誌 タスク一覧セクション（時間割の下）
+   ============================== */
+.journal-task-table-section {
+  background: var(--bg-card);
+  border: var(--pop-border);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem;
+  box-shadow: var(--pop-shadow);
+}
+.journal-task-table-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 0.75rem;
+}

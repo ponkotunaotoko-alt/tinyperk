@@ -252,8 +252,14 @@ let state = {
   // NEW: Ideas
   ideas: [],
 
+  // NEW: Learning logs
+  learningLogs: [],
+
   // Contacts filter
-  contactsFilter: 'all'
+  contactsFilter: 'all',
+
+  // Projects (B案: タスクをグループ化するプロジェクト)
+  projects: []
 };
 
 let timerInterval = null;
@@ -677,6 +683,16 @@ function loadLocalStorage() {
     const d = localStorage.getItem('ideas');
     state.ideas = d ? JSON.parse(d) : [];
   } catch(e) { state.ideas = []; }
+  // NEW: 学習ログ
+  try {
+    const d = localStorage.getItem('learningLogs');
+    state.learningLogs = d ? JSON.parse(d) : [];
+  } catch(e) { state.learningLogs = []; }
+  // プロジェクト
+  try {
+    const d = localStorage.getItem('projects');
+    state.projects = d ? JSON.parse(d) : [];
+  } catch(e) { state.projects = []; }
 }
 
 function saveClientTemplatesToStorage() {
@@ -694,6 +710,11 @@ function saveTasksToStorage() {
   try { localStorage.setItem('tasks', JSON.stringify(state.tasks)); }
   catch(e) { console.error('[TINYPERK] saveTasksToStorage error:', e); }
   scheduleSyncToSupabase();
+}
+
+function saveProjectsToStorage() {
+  try { localStorage.setItem('projects', JSON.stringify(state.projects)); }
+  catch(e) { console.error('[TINYPERK] saveProjectsToStorage error:', e); }
 }
 
 function saveTimecardsToStorage() {
@@ -1328,6 +1349,7 @@ function switchTab(tab) {
     renderClientTemplateList();
     populateBusinessInfoForm();
     populateWorkSettingsForm();
+    loadClaudeApiKeyStatus();
   } else if (tab === 'tasks') {
     renderTaskList();
   } else if (tab === 'journal') {
@@ -1673,6 +1695,16 @@ function clockOut() {
   showMotivatorToast(randomMsg, '🎉');
 }
 
+function clockInFromJournal() {
+  clockIn();
+  renderJournal();
+}
+
+function clockOutFromJournal() {
+  clockOut();
+  renderJournal();
+}
+
 function calculateHours(startStr, endStr) {
   const [startH, startM] = startStr.split(':').map(Number);
   const [endH, endM] = endStr.split(':').map(Number);
@@ -1992,6 +2024,7 @@ function renderJournalTimeline() {
     }
 
     const task = slot.taskId ? state.tasks.find(t => t.id === slot.taskId) : null;
+    const isActiveTimer = task && state.activeTimerTaskId === task.id && !!state.timerStartEpoch;
     const span = slot.span || 1;
     const spanHeight = span > 1 ? `min-height:${span * TL_UNIT + (span - 1) * 6}px;` : '';
 
@@ -2094,6 +2127,15 @@ function renderJournalTimeline() {
               <button class="tl-slot-memo-voice-btn" id="tl-voice-${h}"
                 onclick="event.stopPropagation();startWhisperRecord('tl-memo-${h}','tl-voice-${h}')"
                 title="音声入力">🎤</button>
+            </div>
+            <div class="tl-slot-sw-row">
+              <button class="tl-slot-sw-btn${isActiveTimer ? ' running' : ''}"
+                id="tl-sw-btn-${h}"
+                onclick="event.stopPropagation();toggleTimelineTimer('${date}','${h}')"
+                title="${isActiveTimer ? '停止 → 実績時間に反映' : '計測開始'}">
+                ${isActiveTimer ? '⏸' : '▶'}
+                <span class="tl-sw-disp">${isActiveTimer ? formatSecondsToHHMMSS(task.spentSeconds||0) : '計測'}</span>
+              </button>
             </div>
             <div class="tl-resize-handle" onpointerdown="startSlotResize(event,'${date}','${h}')">
               <div class="tl-resize-handle-icon"></div>
@@ -2431,13 +2473,35 @@ function saveTimelineMemo(date, hour, value) {
   saveJournalToStorage();
 }
 
+function toggleTimelineTimer(date, hour) {
+  const slot = state.journalEntries[date]?.timeline?.[hour];
+  if (!slot?.taskId) return;
+  const task = state.tasks.find(t => t.id === slot.taskId);
+  if (!task) return;
+
+  if (state.activeTimerTaskId === task.id && state.timerStartEpoch) {
+    // 停止 → 実績時間を自動反映（pauseTaskTimer が syncTimerToJournalTimeline を呼ぶ）
+    pauseTaskTimer();
+  } else {
+    // 開始（別タスクのタイマーが動いていれば自動停止）
+    startTaskTimer(task.id);
+    // タイムラインカードのボタンを即時 running 状態に
+    const btn = document.getElementById(`tl-sw-btn-${hour}`);
+    if (btn) {
+      btn.classList.add('running');
+      btn.title = '停止 → 実績時間に反映';
+      btn.innerHTML = '⏸ <span class="tl-sw-disp">00:00:00</span>';
+    }
+  }
+}
+
 function updateTaskStatusFromTimeline(date, hour, newStatus) {
   const slot = state.journalEntries[date]?.timeline?.[hour];
   if (!slot?.taskId) return;
   const task = state.tasks.find(t => t.id === slot.taskId);
   if (!task) return;
   task.status = newStatus;
-  saveData();
+  saveTasksToStorage();
   renderJournalTimeline();
 }
 
@@ -2520,36 +2584,155 @@ function renderTaskList() {
 
   const today = getLocalDateStr();
 
-  body.innerHTML = tasks.map(task => {
+  function taskRowHTML(task) {
     const isOverdue = task.status !== 'completed' && task.dueDate && task.dueDate < today;
     const steps = task.steps || [];
     const doneSteps = steps.filter(s => s.completed).length;
     const stepText = steps.length > 0 ? `<span class="tl-steps">${doneSteps}/${steps.length} ステップ</span>` : '';
     const dueCls = isOverdue ? 'tl-due overdue' : 'tl-due';
-
     return `
-      <div class="tl-task-row" onclick="openEditTaskModal('${task.id}')" role="button" tabindex="0"
-        draggable="true" data-task-id="${task.id}"
-        ondragstart="handleTaskDragStart(event, '${task.id}')"
-        title="ドラッグして日誌に追加できます">
-        <div class="tl-status-strip ${task.status}"></div>
-        <div class="tl-body">
-          <div class="tl-top">
-            <span class="tl-name">${escapeHtml(task.name)}</span>
-            <span class="status-badge ${statusClass[task.status] || ''}">${statusLabel[task.status] || task.status}</span>
-          </div>
-          <div class="tl-meta">
-            <span class="tl-client">👤 ${escapeHtml(task.client || '—')}</span>
-            ${task.isUnscheduled
-              ? `<span class="tag-unscheduled">📋 日程未定</span>`
-              : `<span class="${dueCls}">📅 ${task.dueDate || '—'}${isOverdue ? ' ⚠️' : ''}</span>`}
-            ${stepText}
-            ${task.estimatedHours ? `<span class="tl-estimated">⏳ ${task.estimatedHours}h</span>` : ''}
-            ${task.amount ? `<span class="tl-amount">¥${Number(task.amount).toLocaleString()}</span>` : ''}
+      <div class="task-row-wrap" data-task-id="${task.id}">
+        <div class="task-row-delete-bg">🗑️</div>
+        <div class="task-row-swipe tl-task-row" onclick="openEditTaskModal('${task.id}')" role="button" tabindex="0"
+          draggable="true"
+          ondragstart="handleTaskDragStart(event, '${task.id}')"
+          title="ドラッグして日誌に追加 / 左スワイプで削除">
+          <div class="tl-status-strip ${task.status}"></div>
+          <div class="tl-body">
+            <div class="tl-top">
+              <span class="tl-name">${escapeHtml(task.name)}</span>
+              <span class="status-badge ${statusClass[task.status] || ''}">${statusLabel[task.status] || task.status}</span>
+            </div>
+            <div class="tl-meta">
+              <span class="tl-client">👤 ${escapeHtml(task.client || '—')}</span>
+              ${task.isUnscheduled
+                ? `<span class="tag-unscheduled">📋 日程未定</span>`
+                : `<span class="${dueCls}">📅 ${task.dueDate || '—'}${isOverdue ? ' ⚠️' : ''}</span>`}
+              ${stepText}
+              ${task.estimatedHours ? `<span class="tl-estimated">⏳ ${task.estimatedHours}h</span>` : ''}
+              ${task.amount ? `<span class="tl-amount">¥${Number(task.amount).toLocaleString()}</span>` : ''}
+            </div>
           </div>
         </div>
       </div>`;
-  }).join('');
+  }
+
+  // プロジェクトグループ表示
+  if (state.projects.length > 0) {
+    const grouped = {};
+    tasks.forEach(t => {
+      const key = t.projectId || '__none__';
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(t);
+    });
+
+    let html = '';
+    // プロジェクトありのグループを先に
+    state.projects.forEach(proj => {
+      const pts = grouped[proj.id] || [];
+      if (pts.length === 0) return;
+      const doneCount = pts.filter(t => t.status === 'completed').length;
+      const pct = Math.round(doneCount / pts.length * 100);
+      html += `
+        <div class="project-group">
+          <div class="project-group-header">
+            <span class="project-group-icon">📁</span>
+            <span class="project-group-name">${escapeHtml(proj.name)}</span>
+            <span class="project-group-progress">${doneCount}/${pts.length}</span>
+            <div class="project-group-bar"><div class="project-group-bar-fill" style="width:${pct}%"></div></div>
+            <button class="project-group-delete" onclick="deleteProject('${proj.id}')" title="プロジェクト削除">✕</button>
+          </div>
+          ${pts.map(taskRowHTML).join('')}
+        </div>`;
+    });
+    // プロジェクト未割り当て
+    const none = grouped['__none__'] || [];
+    if (none.length > 0) {
+      html += `<div class="project-group project-group-none">
+        <div class="project-group-header"><span class="project-group-icon">📋</span><span class="project-group-name">未分類</span></div>
+        ${none.map(taskRowHTML).join('')}
+      </div>`;
+    }
+    body.innerHTML = html;
+  } else {
+    body.innerHTML = tasks.map(taskRowHTML).join('');
+  }
+
+  initSwipeToDelete();
+}
+
+// ============================================================
+// SWIPE TO DELETE
+// ============================================================
+function initSwipeToDelete() {
+  document.querySelectorAll('.task-row-wrap').forEach(wrap => {
+    const inner = wrap.querySelector('.task-row-swipe');
+    if (!inner || wrap._swipeInit) return;
+    wrap._swipeInit = true;
+
+    let startX = 0, startY = 0, dx = 0;
+    const THRESHOLD = 80;
+
+    wrap.addEventListener('touchstart', e => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      dx = 0;
+    }, { passive: true });
+
+    wrap.addEventListener('touchmove', e => {
+      dx = e.touches[0].clientX - startX;
+      const dy = Math.abs(e.touches[0].clientY - startY);
+      if (dy > Math.abs(dx)) { dx = 0; return; } // vertical scroll
+      if (dx < 0) {
+        inner.style.transform = `translateX(${Math.max(dx, -THRESHOLD - 20)}px)`;
+      }
+    }, { passive: true });
+
+    wrap.addEventListener('touchend', () => {
+      if (dx < -THRESHOLD) {
+        // 削除確定アニメーション
+        inner.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+        inner.style.transform = 'translateX(-100%)';
+        inner.style.opacity = '0';
+        setTimeout(() => {
+          const taskId = wrap.dataset.taskId;
+          state.tasks = state.tasks.filter(t => t.id !== taskId);
+          saveTasksToStorage();
+          renderTaskList();
+        }, 220);
+      } else {
+        inner.style.transition = 'transform 0.2s ease';
+        inner.style.transform = 'translateX(0)';
+        setTimeout(() => { inner.style.transition = ''; }, 200);
+      }
+    });
+  });
+}
+
+// ============================================================
+// PROJECTS (B案: タスクをグループ化)
+// ============================================================
+function openAddProjectModal() {
+  const name = prompt('プロジェクト名を入力してください\n例: 取材→記事制作（〇〇誌）');
+  if (!name || !name.trim()) return;
+  const proj = { id: 'proj_' + Date.now(), name: name.trim() };
+  state.projects.push(proj);
+  saveProjectsToStorage();
+  renderTaskList();
+}
+
+function deleteProject(projId) {
+  if (!confirm('プロジェクトを削除しますか？（タスクは未分類に移動します）')) return;
+  state.projects = state.projects.filter(p => p.id !== projId);
+  state.tasks.forEach(t => { if (t.projectId === projId) t.projectId = null; });
+  saveProjectsToStorage();
+  saveTasksToStorage();
+  renderTaskList();
+}
+
+function assignTaskToProject(taskId, projId) {
+  const task = state.tasks.find(t => t.id === taskId);
+  if (task) { task.projectId = projId || null; saveTasksToStorage(); }
 }
 
 // ============================================================
@@ -2596,6 +2779,15 @@ function renderJournal() {
     const hoursLabel = timecard
       ? `${timecard.clockIn || '--'} → ${timecard.clockOut || '--'}（${timecard.totalHours != null ? timecard.totalHours + 'h' : '--'}）`
       : '記録なし';
+    const isToday = date === todayStr;
+    let clockBtns = '';
+    if (isToday) {
+      if (!timecard?.clockIn) {
+        clockBtns = `<button class="journal-clock-btn journal-clock-in" onclick="clockInFromJournal()">出勤</button>`;
+      } else if (!timecard?.clockOut) {
+        clockBtns = `<button class="journal-clock-btn journal-clock-out" onclick="clockOutFromJournal()">退勤</button>`;
+      }
+    }
     html += `
       <div class="journal-stat-card">
         <span class="journal-stat-icon">🕐</span>
@@ -2603,6 +2795,7 @@ function renderJournal() {
           <span class="journal-stat-label">稼働時間</span>
           <span class="journal-stat-value">${hoursLabel}</span>
         </div>
+        ${clockBtns}
       </div>`;
 
     // タスク件数カード
@@ -2642,29 +2835,35 @@ function renderJournal() {
 
     html += '</div>';
 
-    // タスク一覧テーブル
-    if (dayTasks.length > 0) {
+    summaryEl.innerHTML = html;
+
+    // タスク一覧は時間割の下に表示
+    const taskListEl = document.getElementById('journal-task-list');
+    if (taskListEl) {
       const statusLabel = { 'not-started': '未着手', 'in-progress': '進行中', 'revision': '修正中', 'completed': '完了' };
       const statusColor = { 'not-started': 'var(--text-muted)', 'in-progress': 'var(--primary)', 'revision': '#f97316', 'completed': 'var(--success)' };
-      html += `<div class="journal-task-table">`;
-      dayTasks.forEach(t => {
-        const spent = fmtSeconds(t.spentSeconds);
-        html += `
-          <div class="journal-task-row" onclick="openEditTaskModal('${t.id}')" title="クリックで編集">
-            <span class="journal-task-dot" style="background:${statusColor[t.status] || 'var(--text-muted)'}"></span>
-            <span class="journal-task-name">${escapeHtml(t.name)}</span>
-            <span class="journal-task-client">${escapeHtml(t.client)}</span>
-            <span class="journal-task-status" style="color:${statusColor[t.status]}">${statusLabel[t.status] || t.status}</span>
-            ${spent ? `<span class="journal-task-time">⏱ ${spent}</span>` : '<span></span>'}
-            <span class="journal-task-edit-btn" onclick="event.stopPropagation();openEditTaskModal('${t.id}')">✏️</span>
-          </div>`;
-      });
-      html += '</div>';
-    } else {
-      html += `<p class="journal-no-tasks">この日に紐づくタスクはありません</p>`;
+      let tlHtml = '<div class="journal-task-table-section"><h3 class="journal-task-table-title">📋 今日のタスク</h3>';
+      if (dayTasks.length > 0) {
+        tlHtml += `<div class="journal-task-table">`;
+        dayTasks.forEach(t => {
+          const spent = fmtSeconds(t.spentSeconds);
+          tlHtml += `
+            <div class="journal-task-row" onclick="openEditTaskModal('${t.id}')" title="クリックで編集">
+              <span class="journal-task-dot" style="background:${statusColor[t.status] || 'var(--text-muted)'}"></span>
+              <span class="journal-task-name">${escapeHtml(t.name)}</span>
+              <span class="journal-task-client">${escapeHtml(t.client)}</span>
+              <span class="journal-task-status" style="color:${statusColor[t.status]}">${statusLabel[t.status] || t.status}</span>
+              ${spent ? `<span class="journal-task-time">⏱ ${spent}</span>` : '<span></span>'}
+              <span class="journal-task-edit-btn" onclick="event.stopPropagation();openEditTaskModal('${t.id}')">✏️</span>
+            </div>`;
+        });
+        tlHtml += '</div>';
+      } else {
+        tlHtml += `<p class="journal-no-tasks">この日に紐づくタスクはありません</p>`;
+      }
+      tlHtml += '</div>';
+      taskListEl.innerHTML = tlHtml;
     }
-
-    summaryEl.innerHTML = html;
   }
 
   // ── テキストエリアに既存エントリを反映 ──
@@ -2678,7 +2877,7 @@ function renderJournal() {
     if (charCountEl) charCountEl.textContent = `${textEl.value.length}文字`;
   }
   if (savedAtEl) {
-    savedAtEl.textContent = entry
+    savedAtEl.textContent = (entry && entry.updatedAt)
       ? `最終更新: ${entry.updatedAt.replace('T', ' ').slice(0, 16)}`
       : '';
   }
@@ -3593,13 +3792,17 @@ function startTaskTimer(taskId) {
   }));
   saveTimerState();
 
-  // Render buttons immediately
-  document.getElementById('btn-timer-start').style.display = 'none';
-  document.getElementById('btn-timer-pause').style.display = 'inline-flex';
+  // Render buttons immediately (modal may not be open)
+  const _startBtn = document.getElementById('btn-timer-start');
+  const _pauseBtn = document.getElementById('btn-timer-pause');
+  if (_startBtn) _startBtn.style.display = 'none';
+  if (_pauseBtn) _pauseBtn.style.display = 'inline-flex';
 
   // Floating banner trigger
-  document.getElementById('floating-timer-banner-title').textContent = task.name;
-  document.getElementById('floating-timer-banner').classList.add('active');
+  const _bannerTitle = document.getElementById('floating-timer-banner-title');
+  const _banner = document.getElementById('floating-timer-banner');
+  if (_bannerTitle) _bannerTitle.textContent = task.name;
+  if (_banner) _banner.classList.add('active');
 
   // Clear previous intervals if any
   if (timerInterval) clearInterval(timerInterval);
@@ -3607,21 +3810,24 @@ function startTaskTimer(taskId) {
   timerInterval = setInterval(() => {
     const elapsed = Math.floor((Date.now() - state.timerStartEpoch) / 1000);
     const totalSecs = state.timerAccumulatedSeconds + elapsed;
-    
+
     // Save live ticks in task state so we don't lose if closed directly
     task.spentSeconds = totalSecs;
 
     const formatted = formatSecondsToHHMMSS(totalSecs);
-    
-    // Update digital displays
+
+    // Update task modal display
     const displayEl = document.getElementById('task-stopwatch-val');
     if (displayEl && state.editingTaskId === taskId) {
       displayEl.textContent = formatted;
     }
     const bannerClock = document.getElementById('floating-timer-banner-clock');
-    if (bannerClock) {
-      bannerClock.textContent = formatted;
-    }
+    if (bannerClock) bannerClock.textContent = formatted;
+
+    // Update timeline card SW displays (all cards showing this task)
+    document.querySelectorAll('.tl-slot-sw-btn.running .tl-sw-disp').forEach(el => {
+      el.textContent = formatted;
+    });
   }, 1000);
 }
 
@@ -4063,6 +4269,19 @@ function openEditTaskModal(taskId) {
   updateClientSuggestions();
   updateWorkTypeSuggestions();
 
+  // プロジェクトセレクターを更新
+  const projSel = document.getElementById('task-project');
+  if (projSel) {
+    projSel.innerHTML = '<option value="">\u2014 未分類 \u2014</option>';
+    state.projects.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      if (task.projectId === p.id) opt.selected = true;
+      projSel.appendChild(opt);
+    });
+  }
+
   // スクロール位置を保存してから背景を固定
   state._scrollY = window.scrollY;
   document.body.style.top = `-${state._scrollY}px`;
@@ -4102,6 +4321,8 @@ function autoSaveTask() {
   task.status = newStatus;
   task.priority = document.getElementById('task-priority')?.value || task.priority;
   task.workType = document.getElementById('task-work-type')?.value.trim() || task.workType || '';
+  const _projSelAuto = document.getElementById('task-project');
+  if (_projSelAuto) task.projectId = _projSelAuto.value || null;
 
   if (newStatus === 'completed' && oldStatus !== 'completed') {
     task.completedAt = getLocalDateStr();
@@ -4166,6 +4387,8 @@ function handleTaskFormSubmit(e) {
       task.isDeadlineFixed = isDeadlineFixed;
       task.priority = priority;
       task.workType = workType;
+      const _projSelSub = document.getElementById('task-project');
+      if (_projSelSub) task.projectId = _projSelSub.value || null;
       // If changed from unscheduled → scheduled, remove any pending proposal
       if (!isUnscheduled) {
         state.schedulingProposals = state.schedulingProposals.filter(p => p.taskId !== id);
@@ -4216,6 +4439,7 @@ function handleTaskFormSubmit(e) {
       isDeadlineFixed,
       priority,
       workType,
+      projectId: (document.getElementById('task-project')?.value) || null,
       spentSeconds: 0,
       steps: JSON.parse(JSON.stringify(state.editingSteps))
     };
@@ -5581,6 +5805,7 @@ function bulkSyncTasksToGoogle() {
 function saveDeals()    { try { localStorage.setItem('deals',    JSON.stringify(state.deals));    } catch(e){} }
 function saveContacts() { try { localStorage.setItem('contacts', JSON.stringify(state.contacts)); } catch(e){} }
 function saveGoals()    { try { localStorage.setItem('goals',    JSON.stringify(state.goals));    } catch(e){} }
+function saveLearningLogs() { try { localStorage.setItem('learningLogs', JSON.stringify(state.learningLogs)); } catch(e){} }
 function saveExpenses() { try { localStorage.setItem('expenses', JSON.stringify(state.expenses)); } catch(e){} }
 function saveIdeas()    { try { localStorage.setItem('ideas',    JSON.stringify(state.ideas));    } catch(e){} }
 
@@ -5910,6 +6135,11 @@ function openContactModal(id = null) {
         <h2 class="modal-title">${c ? 'コンタクトを編集' : '新しいコンタクト'}</h2>
         <button class="close-btn" onclick="closeContactModal()">✕</button>
       </div>
+      <div class="ocr-bar">
+        <button class="btn-ocr" id="btn-ocr" onclick="scanBusinessCard()">📷 名刺を読み取る</button>
+        <input type="file" id="business-card-input" accept="image/*" capture="environment" style="display:none" onchange="processBizCardImage(event)">
+        <span id="ocr-status" class="ocr-status-msg" style="display:none"></span>
+      </div>
       <div class="modal-body">
         <input type="hidden" id="contact-edit-id" value="${c?.id||''}">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
@@ -6020,6 +6250,149 @@ function deleteContact(id) {
 // ============================================================
 // 🎯 GOALS — 目標管理
 // ============================================================
+// ── 学習タイプ定義 ──
+const LEARNING_TYPES = [
+  { key:'book',    emoji:'📖', label:'書籍',       unit:'ページ', unitShort:'p' },
+  { key:'video',   emoji:'🎥', label:'動画/コース', unit:'時間',   unitShort:'h' },
+  { key:'article', emoji:'📄', label:'記事/ドキュメント', unit:'%', unitShort:'%' },
+  { key:'course',  emoji:'🎓', label:'オンラインコース', unit:'%', unitShort:'%' },
+  { key:'podcast', emoji:'🎧', label:'ポッドキャスト', unit:'時間', unitShort:'h' },
+];
+
+function getLearningType(key) {
+  return LEARNING_TYPES.find(t => t.key === key) || LEARNING_TYPES[0];
+}
+
+function renderLearningGoalCard(gLearn, thisMonth) {
+  // タスクの 学習・書籍 workType からの稼働時間
+  const taskLearnSecs = state.tasks
+    .filter(t => t.workType === '学習・書籍' && t.spentSeconds > 0)
+    .reduce((s, t) => s + (t.spentSeconds || 0), 0);
+  const taskLearnH = Math.round(taskLearnSecs / 3600 * 10) / 10;
+
+  // 学習ログの合計時間換算（動画・ポッドキャストは h、書籍はページ/300→h換算）
+  const logH = state.learningLogs.reduce((s, l) => {
+    const t = getLearningType(l.type);
+    if (t.unitShort === 'h') return s + (l.progress || 0);
+    if (t.unitShort === 'p') return s + (l.progress || 0) / 300; // 300p/h 概算
+    return s + ((l.progress || 0) / 100) * (l.target || 1) / 10; // % → 概算h
+  }, 0);
+  const totalH = Math.round((taskLearnH + logH) * 10) / 10;
+
+  const pct = gLearn > 0 ? Math.min(100, Math.round(totalH / gLearn * 100)) : 0;
+  const barColor = pct >= 100 ? 'var(--success)' : pct >= 60 ? 'var(--primary)' : 'var(--warning)';
+
+  const logsHtml = state.learningLogs.length === 0
+    ? `<div class="learning-empty">📌 学習中のものを追加してみましょう</div>`
+    : state.learningLogs.map(l => {
+        const lt = getLearningType(l.type);
+        const p = Math.min(100, l.target > 0 ? Math.round((l.progress||0)/l.target*100) : 0);
+        const bc = p >= 100 ? 'var(--success)' : p >= 50 ? 'var(--primary)' : 'var(--warning)';
+        return `
+          <div class="learning-item" id="ll-${l.id}">
+            <div class="learning-item-header">
+              <span class="learning-type-badge">${lt.emoji}</span>
+              <span class="learning-item-title">${escapeHtml(l.title)}</span>
+              <button class="learning-del-btn" onclick="deleteLearningLog('${l.id}')" title="削除">×</button>
+            </div>
+            <div class="learning-progress-row">
+              <div class="goal-gauge-track" style="flex:1">
+                <div class="goal-gauge-fill" style="width:${p}%;background:${bc}"></div>
+              </div>
+              <span class="learning-progress-label">${l.progress||0}/${l.target} ${lt.unitShort} (${p}%)</span>
+            </div>
+            <div class="learning-bump-row">
+              ${[1,5,10].map(n =>
+                `<button class="learning-bump-btn" onclick="bumpLearningProgress('${l.id}',${n})">+${n}${lt.unitShort}</button>`
+              ).join('')}
+              <input type="number" class="learning-manual-input" min="0" max="${l.target||9999}"
+                value="${l.progress||0}" onchange="setLearningProgress('${l.id}',this.value)"
+                onclick="event.stopPropagation()" title="直接入力">
+            </div>
+            ${l.notes ? `<div class="learning-notes">${escapeHtml(l.notes)}</div>` : ''}
+          </div>`;
+      }).join('');
+
+  // タスク由来の学習時間
+  const taskItemsHtml = taskLearnH > 0 ? `
+    <div class="learning-task-link">
+      ⏱ タスク計測（学習・書籍）: <strong>${taskLearnH}h</strong>
+      <span class="learning-task-note">— タスク画面の稼働時間から自動集計</span>
+    </div>` : '';
+
+  return `
+    <div class="goal-card goal-card-wide">
+      <div class="goal-card-header">
+        <span class="goal-icon">📚</span>
+        <span class="goal-title">学習・インプット目標</span>
+        <button class="goal-edit-btn" onclick="openGoalSettingModal()">⚙️ 設定</button>
+      </div>
+      <div class="goal-target">目標: 月 ${gLearn} 時間 <span style="color:var(--text-muted);font-size:0.85rem;font-weight:400;">実績: ${totalH}h</span></div>
+      <div class="goal-gauge-track" style="margin:0.5rem 0 0.3rem;">
+        <div class="goal-gauge-fill" style="width:${pct}%;background:${barColor}"></div>
+      </div>
+      <span class="goal-gauge-pct">${pct}%</span>
+
+      ${taskItemsHtml}
+
+      <div class="learning-list">${logsHtml}</div>
+
+      <!-- クイック追加フォーム -->
+      <div class="learning-add-form">
+        <select id="ll-type" class="form-input learning-type-sel">
+          ${LEARNING_TYPES.map(t => `<option value="${t.key}">${t.emoji} ${t.label}</option>`).join('')}
+        </select>
+        <input type="text" id="ll-title" class="form-input learning-title-inp" placeholder="タイトルを入力…"
+          onkeydown="if(event.key==='Enter')addLearningLog()">
+        <input type="number" id="ll-target" class="form-input learning-target-inp" placeholder="目標(ページ/時間/%)" min="1">
+        <button class="btn btn-primary" onclick="addLearningLog()">追加</button>
+      </div>
+    </div>`;
+}
+
+function addLearningLog() {
+  const title = document.getElementById('ll-title')?.value?.trim();
+  if (!title) { document.getElementById('ll-title')?.focus(); return; }
+  const type = document.getElementById('ll-type')?.value || 'book';
+  const target = parseInt(document.getElementById('ll-target')?.value) || 100;
+  state.learningLogs.push({
+    id: genId(),
+    title, type, target,
+    progress: 0,
+    notes: '',
+    createdAt: getLocalDateStr(),
+    updatedAt: getLocalDateStr()
+  });
+  saveLearningLogs();
+  document.getElementById('ll-title').value = '';
+  document.getElementById('ll-target').value = '';
+  renderGoals();
+}
+
+function bumpLearningProgress(id, amount) {
+  const log = state.learningLogs.find(l => l.id === id);
+  if (!log) return;
+  log.progress = Math.min(log.target, (log.progress || 0) + amount);
+  log.updatedAt = getLocalDateStr();
+  saveLearningLogs();
+  renderGoals();
+}
+
+function setLearningProgress(id, value) {
+  const log = state.learningLogs.find(l => l.id === id);
+  if (!log) return;
+  log.progress = Math.min(log.target, Math.max(0, parseInt(value) || 0));
+  log.updatedAt = getLocalDateStr();
+  saveLearningLogs();
+  renderGoals();
+}
+
+function deleteLearningLog(id) {
+  state.learningLogs = state.learningLogs.filter(l => l.id !== id);
+  saveLearningLogs();
+  renderGoals();
+}
+
 function renderGoals() {
   const el = document.getElementById('goals-content');
   if (!el) return;
@@ -6073,19 +6446,7 @@ function renderGoals() {
         ${gauge(wonDeals, gClients, 'var(--secondary)')}
       </div>
 
-      <div class="goal-card goal-card-wide">
-        <div class="goal-card-header">
-          <span class="goal-icon">📚</span>
-          <span class="goal-title">学習・インプット目標</span>
-        </div>
-        <div class="goal-target">目標: 月 ${gLearn} 時間</div>
-        <div class="goal-note" style="margin-top:0.5rem;color:var(--text-muted)">
-          💡 ひらめきメモタブから学習ログを記録できます
-        </div>
-        <div class="goal-progress-row" style="margin-top:0.75rem;">
-          <button class="btn btn-secondary" onclick="switchTab('ideas')">ひらめきメモへ →</button>
-        </div>
-      </div>
+      ${renderLearningGoalCard(gLearn, thisMonth)}
     </div>
 
     <!-- Goal Setting Form (inline) -->
@@ -6335,19 +6696,35 @@ let _audioChunks      = [];
  * @xenova/transformers の pipeline を動的ロード（初回のみモデルDL）
  * モデルは whisper-small (日本語精度良好, ~244MB, ブラウザにキャッシュされる)
  */
-async function _loadWhisperModel() {
+async function _loadWhisperModel(progressBtn) {
   if (_whisperPipeline) return _whisperPipeline;
-  if (_whisperLoading)  return null; // 二重呼び出し防止
+  if (_whisperLoading) {
+    // 既にロード中の場合は完了を待つ
+    return new Promise((resolve) => {
+      const t = setInterval(() => {
+        if (!_whisperLoading) { clearInterval(t); resolve(_whisperPipeline); }
+      }, 300);
+    });
+  }
   _whisperLoading = true;
   try {
+    if (progressBtn) { progressBtn.title = 'ライブラリ読み込み中…'; }
     const { pipeline, env } = await import(
       'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2'
     );
     env.allowLocalModels = false;
+    if (progressBtn) { progressBtn.title = 'モデル初回DL中 (~244MB)。キャッシュ後は高速です'; }
     _whisperPipeline = await pipeline(
       'automatic-speech-recognition',
       'Xenova/whisper-small',
-      { language: 'japanese' }
+      {
+        language: 'japanese',
+        progress_callback: (p) => {
+          if (progressBtn && p.progress != null) {
+            progressBtn.title = `モデルDL中… ${Math.round(p.progress)}%`;
+          }
+        }
+      }
     );
     return _whisperPipeline;
   } finally {
@@ -6356,7 +6733,7 @@ async function _loadWhisperModel() {
 }
 
 /** 録音した Blob を Float32Array (16kHz) → Whisper で文字起こし */
-async function _transcribeBlob(blob, mimeType) {
+async function _transcribeBlob(blob, mimeType, progressBtn) {
   const arrayBuffer = await blob.arrayBuffer();
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
   let decoded;
@@ -6366,7 +6743,9 @@ async function _transcribeBlob(blob, mimeType) {
     audioCtx.close();
   }
   const float32 = decoded.getChannelData(0);
-  const pipe = await _loadWhisperModel();
+  const pipe = await _loadWhisperModel(progressBtn);
+  if (!pipe) throw new Error('Whisperモデルのロードに失敗しました');
+  if (progressBtn) progressBtn.title = '文字起こし中…';
   const result = await pipe(float32, { language: 'japanese', task: 'transcribe' });
   return (result.text || '').trim().replace(/^[。、\s]+/, '');
 }
@@ -6386,7 +6765,41 @@ async function startWhisperRecord(textareaId, btnId, onResult) {
     return;
   }
 
-  // マイク取得
+  // COOP/COEP非対応環境（GitHub Pages / iPhone Safari）はWeb Speech APIにフォールバック
+  if (!window.crossOriginIsolated) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR) {
+      const rec = new SR();
+      rec.lang = 'ja-JP';
+      rec.continuous = false;
+      rec.interimResults = false;
+      if (btn) { btn.textContent = '🔴'; btn.title = '録音中 — タップで停止'; btn.classList.add('recording'); }
+      rec.onresult = (e) => {
+        const text = Array.from(e.results).map(r => r[0].transcript).join('');
+        if (onResult) {
+          onResult(text);
+        } else if (textareaId) {
+          const ta = document.getElementById(textareaId);
+          if (ta) {
+            const sep = ta.value && !ta.value.endsWith('\n') ? '\n' : '';
+            ta.value += sep + text;
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            ta.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+      };
+      rec.onerror = (e) => alert('音声認識エラー: ' + e.error);
+      rec.onend = () => {
+        if (btn) { btn.textContent = '🎤'; btn.classList.remove('recording'); btn.title = '音声入力'; }
+      };
+      rec.start();
+      return;
+    }
+    alert('このブラウザは音声入力に対応していません。');
+    return;
+  }
+
+  // マイク取得（Whisper用）
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -6411,10 +6824,7 @@ async function startWhisperRecord(textareaId, btnId, onResult) {
 
     const blob = new Blob(_audioChunks, { type: mimeType || 'audio/webm' });
     try {
-      if (!_whisperPipeline && btn) {
-        btn.title = 'モデルを初回ダウンロード中 (~244MB)…';
-      }
-      const text = await _transcribeBlob(blob, mimeType);
+      const text = await _transcribeBlob(blob, mimeType, btn);
       if (!text) return;
       if (onResult) {
         onResult(text);
@@ -6626,17 +7036,20 @@ function toggleVoiceInput() {
 }
 
 function startVoiceInput() {
+  const isRecording = _mediaRecorder && _mediaRecorder.state !== 'inactive';
+  const status = document.getElementById('voice-status');
   startWhisperRecord('idea-text-input', 'idea-voice-btn', (text) => {
     const input = document.getElementById('idea-text-input');
     if (input) { input.value = text; }
-    const status = document.getElementById('voice-status');
-    if (status) status.style.display = 'none';
+    const st = document.getElementById('voice-status');
+    if (st) st.style.display = 'none';
     addIdeaFromInput();
   });
-  // 録音開始時に voice-status を表示
-  const status = document.getElementById('voice-status');
-  if (status) status.textContent = '🔴 録音中 — もう一度 🎤 を押すと停止';
-  if (status) status.style.display = 'block';
+  if (!isRecording) {
+    if (status) { status.textContent = '🔴 録音中 — もう一度 🎤 を押すと停止'; status.style.display = 'block'; }
+  } else {
+    if (status) { status.textContent = '⏳ 文字起こし中…'; }
+  }
 }
 
 function stopVoiceInput() {
@@ -7174,3 +7587,158 @@ pauseTaskTimer = function() {
   _origPauseTaskTimer();
   if (_focusState.active) closeFocusMode();
 };
+
+// ─── Claude APIキー管理 ────────────────────────────────────────────
+const _CLAUDE_KEY_STORE = 'tinyperk_claude_api_key';
+
+function saveClaudeApiKey() {
+  const input = document.getElementById('claude-api-key-input');
+  const statusEl = document.getElementById('claude-api-key-status');
+  if (!input) return;
+  const key = input.value.trim();
+  if (!key) {
+    if (statusEl) { statusEl.textContent = 'キーを入力してください。'; statusEl.style.color = 'var(--danger)'; }
+    return;
+  }
+  if (!key.startsWith('sk-ant-')) {
+    if (statusEl) { statusEl.textContent = 'キーの形式が正しくありません（sk-ant-… で始まります）。'; statusEl.style.color = 'var(--danger)'; }
+    return;
+  }
+  localStorage.setItem(_CLAUDE_KEY_STORE, key);
+  input.value = '';
+  if (statusEl) {
+    statusEl.textContent = `✅ 保存済み — ${_maskKey(key)}`;
+    statusEl.style.color = 'var(--success)';
+  }
+}
+
+function clearClaudeApiKey() {
+  localStorage.removeItem(_CLAUDE_KEY_STORE);
+  const input = document.getElementById('claude-api-key-input');
+  const statusEl = document.getElementById('claude-api-key-status');
+  if (input) input.value = '';
+  if (statusEl) { statusEl.textContent = '削除しました。'; statusEl.style.color = 'var(--text-muted)'; }
+}
+
+function loadClaudeApiKeyStatus() {
+  const statusEl = document.getElementById('claude-api-key-status');
+  if (!statusEl) return;
+  const key = localStorage.getItem(_CLAUDE_KEY_STORE);
+  if (key) {
+    statusEl.textContent = `✅ 登録済み — ${_maskKey(key)}`;
+    statusEl.style.color = 'var(--success)';
+  } else {
+    statusEl.textContent = 'APIキー未登録。名刺読み取りには登録が必要です。';
+    statusEl.style.color = 'var(--text-muted)';
+  }
+}
+
+function _maskKey(key) {
+  if (key.length <= 12) return '****';
+  return key.slice(0, 10) + '…' + key.slice(-4);
+}
+
+// ─── 名刺OCR ─────────────────────────────────────────────────────────
+function scanBusinessCard() {
+  const key = localStorage.getItem(_CLAUDE_KEY_STORE);
+  if (!key) {
+    const go = confirm('Claude APIキーが未登録です。設定画面に移動しますか？');
+    if (go) { closeContactModal(); switchTab('settings'); }
+    return;
+  }
+  document.getElementById('business-card-input')?.click();
+}
+
+async function processBizCardImage(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  const btn = document.getElementById('btn-ocr');
+  const statusEl = document.getElementById('ocr-status');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 読み取り中…'; }
+  if (statusEl) { statusEl.style.display = 'none'; statusEl.textContent = ''; }
+
+  try {
+    // 画像をbase64に変換（メモリ内処理のみ・保存なし）
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const mediaType = (file.type && file.type.startsWith('image/')) ? file.type : 'image/jpeg';
+    const key = localStorage.getItem(_CLAUDE_KEY_STORE);
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 512,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+            { type: 'text', text: `この名刺から情報を抽出し、JSONのみを返してください（前後の説明不要）。
+フォーマット: {"name":"","company":"","role":"","email":"","phone":"","address":"","url":""}
+不明な項目は空文字列にしてください。` }
+          ]
+        }]
+      })
+    });
+
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      throw new Error(errBody?.error?.message || `APIエラー (${resp.status})`);
+    }
+
+    const data = await resp.json();
+    const text = data.content?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('JSONの解析に失敗しました。もう一度試してください。');
+
+    const info = JSON.parse(jsonMatch[0]);
+
+    // フォームへ反映（既存値は上書きしない）
+    const fill = (id, val) => {
+      const el = document.getElementById(id);
+      if (el && !el.value && val) el.value = val;
+    };
+    fill('contact-name', info.name);
+    fill('contact-company', info.company);
+    fill('contact-email', info.email);
+    fill('contact-phone', info.phone);
+
+    // 役職・住所・URLはメモに追記
+    const notesEl = document.getElementById('contact-notes');
+    if (notesEl && !notesEl.value) {
+      const extras = [];
+      if (info.role) extras.push(`役職: ${info.role}`);
+      if (info.address) extras.push(`住所: ${info.address}`);
+      if (info.url) extras.push(`Web: ${info.url}`);
+      if (extras.length) notesEl.value = extras.join('\n');
+    }
+
+    if (statusEl) {
+      statusEl.textContent = '✅ 読み取り完了！内容を確認して保存してください。';
+      statusEl.style.color = 'var(--success, #22c55e)';
+      statusEl.style.display = 'block';
+    }
+  } catch (err) {
+    console.error('[OCR]', err);
+    if (statusEl) {
+      statusEl.textContent = `❌ ${err.message}`;
+      statusEl.style.color = 'var(--danger, #ef4444)';
+      statusEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📷 名刺を読み取る'; }
+    event.target.value = ''; // ファイル選択をリセット
+  }
+}
