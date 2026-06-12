@@ -374,17 +374,8 @@
           <!-- Column 2: Progress ring & Stats -->
           <div style="display: flex; flex-direction: column; gap: 2rem;">
             
-            <div class="report-card" id="pomodoro-card" style="background:linear-gradient(135deg,var(--bg-card),var(--primary-glow));border:1px solid var(--border-color);">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
-                <span class="form-label" style="margin:0;">🍅 ポモドーロ</span>
-                <span id="pomo-session-count" style="font-size:0.8rem;color:var(--text-muted);">本日 0 セッション</span>
-              </div>
-              <div id="pomo-display" style="font-size:2.5rem;font-weight:700;text-align:center;letter-spacing:0.05em;color:var(--primary);font-variant-numeric:tabular-nums;line-height:1;">25:00</div>
-              <div id="pomo-label" style="text-align:center;font-size:0.8rem;color:var(--text-muted);margin:0.25rem 0 0.75rem;">集中タイム</div>
-              <div style="display:flex;gap:0.5rem;">
-                <button id="btn-pomo-start" class="btn btn-primary" onclick="togglePomodoro()" style="flex:1;font-size:0.9rem;">▶ 開始</button>
-                <button class="btn btn-secondary" onclick="resetPomodoro()" style="font-size:0.85rem;padding:0.5rem 0.75rem;">↺</button>
-              </div>
+            <div class="report-card" id="dash-week-quick">
+              <!-- renderDashboardWeekQuick() で描画 -->
             </div>
 
             <div class="report-card" style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 1.5rem;">
@@ -660,6 +651,33 @@
 
         <!-- タスクリスト本体 -->
         <div id="tasks-list-body" class="tasks-list-body"></div>
+      </section>
+
+
+      <!-- WEEKLY REPORT SCREEN -->
+      <section id="weekly-screen" class="screen">
+        <div class="screen-header">
+          <h1 class="screen-title">週次レポート</h1>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <button class="btn btn-secondary" onclick="changeWeeklyOffset(-1)" style="font-size:1rem;padding:0.4rem 0.8rem;">‹ 前週</button>
+            <span id="weekly-range-label" style="font-size:0.9rem;color:var(--text-muted);white-space:nowrap;"></span>
+            <button class="btn btn-secondary" id="btn-weekly-next" onclick="changeWeeklyOffset(1)" style="font-size:1rem;padding:0.4rem 0.8rem;">次週 ›</button>
+          </div>
+        </div>
+        <div id="weekly-stat-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;"></div>
+        <div class="report-card" style="padding:1.5rem;">
+          <h3 style="margin-bottom:1rem;">日別稼働時間</h3>
+          <div id="weekly-day-chart" style="display:grid;grid-template-columns:repeat(7,1fr);gap:0.5rem;align-items:end;height:100px;"></div>
+          <div id="weekly-day-labels" style="display:grid;grid-template-columns:repeat(7,1fr);gap:0.5rem;margin-top:0.4rem;"></div>
+        </div>
+        <div class="report-card" style="padding:1.5rem;overflow-x:auto;">
+          <h3 style="margin-bottom:1rem;">日別サマリー</h3>
+          <table id="weekly-day-table" style="width:100%;border-collapse:collapse;font-size:0.9rem;"></table>
+        </div>
+        <div class="report-card" style="padding:1.5rem;">
+          <h3 style="margin-bottom:1rem;">タスク一覧</h3>
+          <div id="weekly-task-list"></div>
+        </div>
       </section>
 
       <!-- JOURNAL SCREEN -->
@@ -1031,6 +1049,10 @@
         <a class="more-drawer-item" data-tab="calendar" onclick="switchTab('calendar');closeMoreDrawer()">
           <span class="more-drawer-icon">📅</span>
           <span>カレンダー</span>
+        </a>
+        <a class="more-drawer-item" data-tab="weekly" onclick="switchTab('weekly');closeMoreDrawer()">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="16" y1="2" x2="16" y2="6"></line></svg>
+          <span>週次レポート</span>
         </a>
         <a class="more-drawer-item" data-tab="reports" onclick="switchTab('reports');closeMoreDrawer()">
           <span class="more-drawer-icon">📊</span>
@@ -1455,7 +1477,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=61"></script>
+  <script src="./app.js?v=62"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

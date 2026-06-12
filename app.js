@@ -172,7 +172,8 @@ let state = {
   timecards: [], // Attendance logs
   selectedDate: getLocalDateStr(),
   currentMonth: new Date(),
-  activeTab: 'dashboard', // default to dashboard
+  activeTab: 'dashboard',
+  weeklyOffset: 0,  // 0=今週, -1=先週 ... // default to dashboard
   theme: 'light',
   googleClientId: '',
   googleAccessToken: '',
@@ -1364,6 +1365,8 @@ function switchTab(tab) {
     renderExpenses();
   } else if (tab === 'ideas') {
     renderIdeas();
+  } else if (tab === 'weekly') {
+    renderWeeklyReport();
   }
   // Sync more-drawer active state
   document.querySelectorAll('.more-drawer-item').forEach(item => {
@@ -1517,6 +1520,70 @@ function renderDashboard() {
 
   // ── Vintage Ticker ──
   updateDashboardTicker();
+
+  // ── 週クイックカード ──
+  renderDashboardWeekQuick();
+}
+
+function renderDashboardWeekQuick() {
+  const card = document.getElementById('dash-week-quick');
+  if (!card) return;
+  const today = new Date();
+  const dow = today.getDay();
+  const weekDays = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - dow + i);
+    weekDays.push(toLocalDateStr(d));
+  }
+  const tasks = state.tasks || [];
+  const pending  = tasks.filter(t => t.status === 'not-started').length;
+  const inProg   = tasks.filter(t => t.status === 'in-progress').length;
+  const revision = tasks.filter(t => t.status === 'revision').length;
+  const done     = tasks.filter(t => t.status === 'completed' && weekDays.includes(t.completedAt)).length;
+  const totalHrs = weekDays.reduce((s, ds) => {
+    const tc = state.timecards.find(t => t.date === ds);
+    return s + (tc?.totalHours || 0);
+  }, 0);
+  const weekRevenue = tasks
+    .filter(t => t.status === 'completed' && weekDays.includes(t.completedAt))
+    .reduce((s, t) => s + (t.amount || 0) * 1.1, 0);
+
+  // クライアント別タスク数
+  const clientMap = {};
+  tasks.filter(t => weekDays.includes(t.dueDate || '') || weekDays.includes(t.completedAt || ''))
+    .forEach(t => { if (t.client) clientMap[t.client] = (clientMap[t.client] || 0) + 1; });
+  const topClients = Object.entries(clientMap).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+  const fmt = v => new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY'}).format(Math.round(v));
+  card.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;border-bottom:2px solid var(--primary);padding-bottom:0.5rem;">
+      <h3 style="font-size:1.4rem;letter-spacing:0.08em;">THIS WEEK</h3>
+      <button class="btn btn-secondary" onclick="switchTab('weekly')" style="font-size:0.78rem;padding:0.3rem 0.7rem;border-radius:2px;">詳細 →</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
+      <div style="text-align:center;">
+        <div style="font-size:1.5rem;font-family:var(--font-vintage);color:var(--primary);">${totalHrs.toFixed(1)}h</div>
+        <div style="font-size:0.72rem;color:var(--text-muted);">稼働時間</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:1.5rem;font-family:var(--font-vintage);color:var(--success);">${done}</div>
+        <div style="font-size:0.72rem;color:var(--text-muted);">完了タスク</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:1.1rem;font-family:var(--font-vintage);color:var(--text-primary);">${fmt(weekRevenue)}</div>
+        <div style="font-size:0.72rem;color:var(--text-muted);">今週売上</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:1.1rem;font-family:var(--font-vintage);color:var(--warning);">${inProg + revision}</div>
+        <div style="font-size:0.72rem;color:var(--text-muted);">進行中</div>
+      </div>
+    </div>
+    ${topClients.length ? `<div style="font-size:0.78rem;color:var(--text-muted);border-top:1px solid var(--border-color);padding-top:0.6rem;">
+      <div style="font-weight:600;margin-bottom:0.3rem;font-family:var(--font-vintage);letter-spacing:0.05em;">TODAY'S CLIENTS</div>
+      ${topClients.map(([c,n])=>`<div style="display:flex;justify-content:space-between;"><span>${c}</span><span style="color:var(--primary);font-family:var(--font-vintage);">${n}</span></div>`).join('')}
+    </div>` : ''}
+  `;
 }
 
 function updateDashboardTicker() {
@@ -7854,5 +7921,160 @@ async function processBizCardImage(event) {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '📷 名刺を読み取る'; }
     event.target.value = ''; // ファイル選択をリセット
+  }
+}
+
+
+// ============================================================
+// 週次レポート
+// ============================================================
+function getWeekDays(offset) {
+  const today = new Date();
+  const dow = today.getDay();
+  const result = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - dow + i + offset * 7);
+    result.push(toLocalDateStr(d));
+  }
+  return result;
+}
+
+function changeWeeklyOffset(delta) {
+  const next = (state.weeklyOffset || 0) + delta;
+  if (next > 0) return;   // 未来は不可
+  state.weeklyOffset = next;
+  renderWeeklyReport();
+}
+
+function renderWeeklyReport() {
+  const offset = state.weeklyOffset || 0;
+  const weekDays = getWeekDays(offset);
+  const tasks = state.tasks || [];
+
+  // ── 範囲ラベル ──
+  const rangeLabel = document.getElementById('weekly-range-label');
+  if (rangeLabel) {
+    const s = weekDays[0].slice(5).replace('-','/');
+    const e = weekDays[6].slice(5).replace('-','/');
+    rangeLabel.textContent = `${weekDays[0].slice(0,4)}年  ${s} 〜 ${e}`;
+  }
+  const nextBtn = document.getElementById('btn-weekly-next');
+  if (nextBtn) nextBtn.disabled = (offset >= 0);
+
+  // ── 集計 ──
+  const dayData = weekDays.map(ds => {
+    const tc = state.timecards.find(t => t.date === ds);
+    const dayTasks = tasks.filter(t => t.dueDate === ds || t.completedAt === ds);
+    const done = dayTasks.filter(t => t.status === 'completed').length;
+    const hrs = tc?.totalHours || 0;
+    const rev = tasks
+      .filter(t => t.status === 'completed' && t.completedAt === ds)
+      .reduce((s,t) => s + (t.amount||0)*1.1, 0);
+    return { ds, hrs, done, rev, tasks: dayTasks, clockIn: tc?.clockIn||'', clockOut: tc?.clockOut||'' };
+  });
+
+  const totalHrs  = dayData.reduce((s,d) => s + d.hrs, 0);
+  const totalDone = dayData.reduce((s,d) => s + d.done, 0);
+  const totalRev  = dayData.reduce((s,d) => s + d.rev, 0);
+  const workDays  = dayData.filter(d => d.hrs > 0).length;
+  const fmt = v => new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY'}).format(Math.round(v));
+
+  // ── サマリー数値 ──
+  const statRow = document.getElementById('weekly-stat-row');
+  if (statRow) {
+    const stats = [
+      { label: '稼働時間',   val: `${totalHrs.toFixed(1)}h`,  color: 'var(--primary)' },
+      { label: '稼働日数',   val: `${workDays}日`,             color: 'var(--secondary)' },
+      { label: '完了タスク', val: `${totalDone}件`,            color: 'var(--success)' },
+      { label: '週売上',     val: fmt(totalRev),               color: 'var(--warning)' },
+    ];
+    statRow.innerHTML = stats.map(s => `
+      <div class="report-card" style="text-align:center;padding:1rem;">
+        <div style="font-size:1.6rem;font-family:var(--font-vintage);color:${s.color};letter-spacing:0.05em;">${s.val}</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.2rem;">${s.label}</div>
+      </div>`).join('');
+  }
+
+  // ── 日別バーチャート ──
+  const maxHrs = Math.max(...dayData.map(d => d.hrs), 1);
+  const dayNames = ['日','月','火','水','木','金','土'];
+  const todayStr = getLocalDateStr();
+
+  const chartEl = document.getElementById('weekly-day-chart');
+  const labelEl = document.getElementById('weekly-day-labels');
+  if (chartEl) {
+    chartEl.innerHTML = dayData.map((d, i) => {
+      const pct = Math.max((d.hrs / maxHrs) * 100, d.hrs > 0 ? 6 : 2);
+      const isToday = d.ds === todayStr;
+      const color = isToday ? 'var(--primary)' : (i===0||i===6 ? 'var(--danger)' : 'var(--text-muted)');
+      return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:2px;">
+        <div style="font-size:0.65rem;color:${isToday?'var(--primary)':'var(--text-muted)'};">${d.hrs>0?d.hrs.toFixed(1):''}</div>
+        <div style="width:100%;background:${color};border-radius:2px 2px 0 0;height:${pct}%;opacity:${isToday?1:0.65};transition:height 0.4s;"></div>
+      </div>`;
+    }).join('');
+  }
+  if (labelEl) {
+    labelEl.innerHTML = dayData.map((d, i) => {
+      const isToday = d.ds === todayStr;
+      return `<div style="text-align:center;font-size:0.7rem;font-family:var(--font-vintage);color:${isToday?'var(--primary)':i===0||i===6?'var(--danger)':'var(--text-muted)'};">${dayNames[i]}</div>`;
+    }).join('');
+  }
+
+  // ── 日別テーブル ──
+  const table = document.getElementById('weekly-day-table');
+  if (table) {
+    const headers = ['日付','曜日','IN','OUT','稼働','完了','売上'];
+    table.innerHTML = `
+      <thead><tr>${headers.map(h=>`<th style="text-align:left;padding:0.5rem 0.75rem;border-bottom:2px solid var(--primary);font-family:var(--font-vintage);letter-spacing:0.05em;color:var(--text-secondary);font-size:0.82rem;">${h}</th>`).join('')}</tr></thead>
+      <tbody>${dayData.map((d,i) => {
+        const isToday = d.ds === todayStr;
+        const bg = isToday ? 'background:rgba(200,169,110,0.08);' : '';
+        return `<tr style="${bg}">
+          <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);font-size:0.85rem;font-weight:${isToday?'700':'400'};">${d.ds.slice(5).replace('-','/')}</td>
+          <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);color:${i===0||i===6?'var(--danger)':'var(--text-secondary)'};font-family:var(--font-vintage);">${dayNames[i]}</td>
+          <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);font-family:var(--font-vintage);color:var(--text-muted);">${d.clockIn||'—'}</td>
+          <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);font-family:var(--font-vintage);color:var(--text-muted);">${d.clockOut||'—'}</td>
+          <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);font-family:var(--font-vintage);color:${d.hrs>0?'var(--primary)':'var(--text-muted)'};">${d.hrs>0?d.hrs.toFixed(1)+'h':'—'}</td>
+          <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);font-family:var(--font-vintage);color:${d.done>0?'var(--success)':'var(--text-muted)'};">${d.done>0?d.done+'件':'—'}</td>
+          <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);font-family:var(--font-vintage);color:${d.rev>0?'var(--warning)':'var(--text-muted)'};">${d.rev>0?fmt(d.rev):'—'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+      <tfoot><tr style="background:rgba(200,169,110,0.05);">
+        <td colspan="4" style="padding:0.5rem 0.75rem;font-family:var(--font-vintage);letter-spacing:0.05em;">TOTAL</td>
+        <td style="padding:0.5rem 0.75rem;font-family:var(--font-vintage);color:var(--primary);font-weight:700;">${totalHrs.toFixed(1)}h</td>
+        <td style="padding:0.5rem 0.75rem;font-family:var(--font-vintage);color:var(--success);font-weight:700;">${totalDone}件</td>
+        <td style="padding:0.5rem 0.75rem;font-family:var(--font-vintage);color:var(--warning);font-weight:700;">${fmt(totalRev)}</td>
+      </tr></tfoot>`;
+  }
+
+  // ── タスクリスト（日別グループ） ──
+  const listEl = document.getElementById('weekly-task-list');
+  if (listEl) {
+    const statusLabel = { 'not-started':'PENDING', 'in-progress':'IN PROGRESS', 'revision':'REVISION', 'completed':'DONE' };
+    const statusColor = { 'not-started':'var(--text-muted)', 'in-progress':'var(--secondary)', 'revision':'var(--warning)', 'completed':'var(--success)' };
+
+    const groups = dayData.filter(d => d.tasks.length > 0);
+    if (groups.length === 0) {
+      listEl.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:2rem;">この週のタスクはありません</p>';
+      return;
+    }
+    listEl.innerHTML = groups.map(d => `
+      <div style="margin-bottom:1.5rem;">
+        <div style="font-family:var(--font-vintage);letter-spacing:0.08em;font-size:1rem;color:var(--primary);border-bottom:1px solid var(--border-color);padding-bottom:0.3rem;margin-bottom:0.5rem;">
+          ${d.ds.slice(5).replace('-','/')} ${dayNames[weekDays.indexOf(d.ds)]}曜日
+        </div>
+        ${d.tasks.map(t => {
+          const spentH = t.spentSeconds ? (t.spentSeconds/3600).toFixed(1)+'h' : '—';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0.5rem;border-radius:2px;margin-bottom:0.25rem;background:var(--bg-secondary);">
+            <span style="font-size:0.88rem;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(t.name)}</span>
+            <div style="display:flex;gap:0.5rem;align-items:center;flex-shrink:0;margin-left:0.5rem;">
+              <span style="font-size:0.7rem;color:var(--text-muted);">${escapeHtml(t.client||'')}</span>
+              <span style="font-size:0.68rem;font-family:var(--font-vintage);letter-spacing:0.04em;border:1px solid;border-radius:2px;padding:0.05em 0.4em;color:${statusColor[t.status]||'var(--text-muted)'};">${statusLabel[t.status]||t.status}</span>
+              <span style="font-size:0.72rem;font-family:var(--font-vintage);color:var(--text-muted);">${spentH}</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`).join('');
   }
 }
