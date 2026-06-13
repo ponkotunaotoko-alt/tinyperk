@@ -1,4 +1,4 @@
-const CACHE_NAME = 'task-invoice-v84';
+const CACHE_NAME = 'task-invoice-v89';
 const ASSETS = [
   './',
   './index.html',
@@ -26,6 +26,9 @@ self.addEventListener('fetch', (e) => {
   if (e.request.url.includes('googleapis.com') ||
       e.request.url.includes('google.com') ||
       e.request.url.includes('supabase.co') ||
+      e.request.url.includes('anthropic.com') ||
+      e.request.url.includes('jsdelivr.net') ||
+      e.request.url.includes('cdn.') ||
       e.request.url.includes('reset.html')) return;
   e.respondWith(
     caches.match(e.request).then((cached) => {

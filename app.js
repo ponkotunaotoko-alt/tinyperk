@@ -65,14 +65,26 @@ async function authSignup() {
   const { error } = await getSupabase().auth.signUp({ email, password });
   btn.textContent = '新規登録'; btn.disabled = false;
   if (error) { setAuthError(error.message); }
-  else { setAuthError(''); alert('確認メールを送りました。メール内のリンクをクリックして認証を完了してください。\n※メールが届かない場合はSpamフォルダを確認してください。'); }
+  else { setAuthError(''); showToastSuccess('確認メールを送りました。メール内のリンクをクリックして認証を完了してください。\n※メールが届かない場合はSpamフォルダを確認してください。'); }
 }
 
+let _authLogoutInProgress = false;
 async function authLogout() {
-  await getSupabase().auth.signOut();
-  // Clear local state
-  localStorage.clear();
-  location.reload();
+  if (_authLogoutInProgress) return;
+  _authLogoutInProgress = true;
+  const btn = document.querySelector('[onclick*="authLogout"]');
+  if (btn) btn.disabled = true;
+  try {
+    const sb = getSupabase();
+    if (sb) await sb.auth.signOut();
+    localStorage.clear();
+    location.reload();
+  } catch(e) {
+    console.error('[TINYPERK] authLogout error:', e);
+    showToastError('ログアウトに失敗しました。再度お試しください。');
+    _authLogoutInProgress = false;
+    if (btn) btn.disabled = false;
+  }
 }
 
 function updateSidebarUser(user) {
@@ -89,10 +101,24 @@ function updateSidebarUser(user) {
   if (syncEmail && user) syncEmail.textContent = user.email;
 }
 
+let _forceSyncInProgress = false;
 async function forceSyncNow() {
+  if (_forceSyncInProgress) return;
+  _forceSyncInProgress = true;
+  const btn = document.getElementById('btn-force-sync');
+  if (btn) btn.disabled = true;
   showSyncStatus('同期中...', 10000);
-  await syncToSupabase();
-  showSyncStatus('✅ 同期完了');
+  try {
+    await syncToSupabase();
+    showSyncStatus('✅ 同期完了');
+  } catch(e) {
+    console.error('[TINYPERK] forceSyncNow error:', e);
+    showSyncStatus('❌ 同期失敗');
+    showToastError('同期に失敗しました: ' + (e.message || '不明なエラー'));
+  } finally {
+    _forceSyncInProgress = false;
+    if (btn) btn.disabled = false;
+  }
 }
 
 function showSyncStatus(msg, durationMs = 2000) {
@@ -107,46 +133,69 @@ function showSyncStatus(msg, durationMs = 2000) {
 // Pull data from Supabase into state + localStorage
 async function syncFromSupabase(userId) {
   const sb = getSupabase();
-  const { data, error } = await sb.from('user_data').select('*').eq('user_id', userId).single();
-  if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found (first time)
-    console.warn('[SYNC] load error:', error.message);
-    return;
-  }
-  if (!data) return; // First time user, no data yet
+  if (!sb) { console.warn('[SYNC] Supabase not initialized'); return; }
+  try {
+    const { data, error } = await sb.from('user_data').select('*').eq('user_id', userId).single();
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found (first time)
+      console.warn('[SYNC] load error:', error.message);
+      return;
+    }
+    if (!data) return; // First time user, no data yet
 
-  if (data.tasks) { state.tasks = data.tasks; saveTasksToStorage(); }
-  if (data.timecards) { state.timecards = data.timecards; saveTimecardsToStorage(); }
-  if (data.journal_entries) { state.journalEntries = data.journal_entries; saveJournalToStorage(); }
-  if (data.business_info && Object.keys(data.business_info).length) {
-    state.businessInfo = { ...state.businessInfo, ...data.business_info };
-    localStorage.setItem('businessInfo', JSON.stringify(state.businessInfo));
+    if (Array.isArray(data.tasks))     { state.tasks = data.tasks; saveTasksToStorage(); }
+    if (Array.isArray(data.timecards)) { state.timecards = data.timecards; saveTimecardsToStorage(); }
+    if (data.journal_entries && typeof data.journal_entries === 'object') {
+      state.journalEntries = data.journal_entries; saveJournalToStorage();
+    }
+    if (data.business_info && typeof data.business_info === 'object' && Object.keys(data.business_info).length) {
+      state.businessInfo = { ...state.businessInfo, ...data.business_info };
+      localStorage.setItem('businessInfo', JSON.stringify(state.businessInfo));
+    }
+    if (data.client_templates && typeof data.client_templates === 'object' && Object.keys(data.client_templates).length) {
+      state.clientTemplates = data.client_templates;
+      saveClientTemplatesToStorage();
+    }
+    showSyncStatus('☁️ データを同期しました');
+  } catch(e) {
+    console.error('[SYNC] syncFromSupabase error:', e);
+    showSyncStatus('❌ 読込み失敗');
   }
-  if (data.client_templates && Object.keys(data.client_templates).length) {
-    state.clientTemplates = data.client_templates;
-    saveClientTemplatesToStorage();
-  }
-  showSyncStatus('☁️ データを同期しました');
 }
 
 // Push state to Supabase
+let _syncToSupabaseInProgress = false;
 async function syncToSupabase() {
   const sb = getSupabase();
   if (!sb) return;
-  const { data: { user } } = await sb.auth.getUser();
-  if (!user) return;
+  if (_syncToSupabaseInProgress) return;
+  _syncToSupabaseInProgress = true;
+  try {
+    const { data: authData, error: authError } = await sb.auth.getUser();
+    if (authError || !authData?.user) { _syncToSupabaseInProgress = false; return; }
+    const user = authData.user;
 
-  const payload = {
-    user_id: user.id,
-    tasks: state.tasks,
-    timecards: state.timecards,
-    journal_entries: state.journalEntries,
-    business_info: state.businessInfo,
-    client_templates: state.clientTemplates
-  };
+    const payload = {
+      user_id: user.id,
+      tasks: state.tasks,
+      timecards: state.timecards,
+      journal_entries: state.journalEntries,
+      business_info: state.businessInfo,
+      client_templates: state.clientTemplates
+    };
 
-  const { error } = await sb.from('user_data').upsert(payload, { onConflict: 'user_id' });
-  if (error) console.warn('[SYNC] save error:', error.message);
-  else showSyncStatus('☁️ 保存済み');
+    const { error } = await sb.from('user_data').upsert(payload, { onConflict: 'user_id' });
+    if (error) {
+      console.warn('[SYNC] save error:', error.message);
+      showSyncStatus('❌ 保存失敗');
+    } else {
+      showSyncStatus('☁️ 保存済み');
+    }
+  } catch(e) {
+    console.error('[SYNC] syncToSupabase exception:', e);
+    showSyncStatus('❌ 保存失敗');
+  } finally {
+    _syncToSupabaseInProgress = false;
+  }
 }
 
 // Debounced sync (wait 2s after last change)
@@ -487,6 +536,61 @@ function emptyStateHTML(icon, title, body, actionHTML = '') {
 }
 
 // Initialize Application
+// ─── メモ画面タブ切替（ひらめき / 目標） ────────────────────────────
+function switchMemoTab(which) {
+  const ideasSec = document.getElementById('memo-ideas-section');
+  const goalsSec = document.getElementById('memo-goals-section');
+  const tabIdeas = document.getElementById('memo-tab-ideas');
+  const tabGoals = document.getElementById('memo-tab-goals');
+  if (!ideasSec || !goalsSec) return;
+
+  if (which === 'goals') {
+    ideasSec.style.display = 'none';
+    goalsSec.style.display = '';
+    tabIdeas?.classList.remove('active');
+    tabGoals?.classList.add('active');
+    renderGoals();
+  } else {
+    goalsSec.style.display = 'none';
+    ideasSec.style.display = '';
+    tabGoals?.classList.remove('active');
+    tabIdeas?.classList.add('active');
+    renderIdeas();
+  }
+}
+
+// ─── showToast — alert() 代替（全アプリ共通） ──────────────────────────────
+function showToast(msg, type = 'info', duration = 3200) {
+  let el = document.getElementById('app-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'app-toast';
+    document.body.appendChild(el);
+  }
+  clearTimeout(el._timer);
+  el.className = 'app-toast app-toast--' + type;
+  el.textContent = msg;
+  el.classList.add('visible');
+  el._timer = setTimeout(() => el.classList.remove('visible'), duration);
+}
+
+function showToastError(msg)   { showToast(msg, 'error', 4000); }
+function showToastSuccess(msg) { showToast(msg, 'success', 2800); }
+function showToastInfo(msg)    { showToast(msg, 'info', 3200); }
+
+
+// ─── キーボード自動閉じ（iOS PWA対応） ──────────────────────────────────
+document.addEventListener('touchend', (e) => {
+  if (!e.target.closest('input, textarea, select, [contenteditable]')) {
+    if (document.activeElement && 
+        (document.activeElement.tagName === 'INPUT' ||
+         document.activeElement.tagName === 'TEXTAREA' ||
+         document.activeElement.tagName === 'SELECT')) {
+      document.activeElement.blur();
+    }
+  }
+}, { passive: true });
+
 document.addEventListener('DOMContentLoaded', () => {
   loadLocalStorage();
   initTheme();
@@ -523,14 +627,21 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Load data from localStorage
-function loadLocalStorage() {
+// Safe helper: parse localStorage value as array (returns null if missing/invalid)
+function _safeParseArray(key) {
   try {
-    const savedTasks = localStorage.getItem('tasks');
-    state.tasks = savedTasks ? JSON.parse(savedTasks) : null;
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
   } catch(e) {
-    console.error('[TINYPERK] tasks parse error:', e);
-    state.tasks = null;
+    console.warn('[TINYPERK] localStorage parse error for key "' + key + '":', e);
+    return null;
   }
+}
+
+function loadLocalStorage() {
+  state.tasks = _safeParseArray('tasks');
 
   if (!state.tasks) {
     // Inject seed data with dependency fields and spentSeconds
@@ -582,13 +693,7 @@ function loadLocalStorage() {
   }
 
   // Attendance data
-  try {
-    const savedTimecards = localStorage.getItem('timecards');
-    state.timecards = savedTimecards ? JSON.parse(savedTimecards) : null;
-  } catch(e) {
-    console.error('[TINYPERK] timecards parse error:', e);
-    state.timecards = null;
-  }
+  state.timecards = _safeParseArray('timecards');
 
   if (!state.timecards) {
     // Inject seed attendance
@@ -657,44 +762,33 @@ function loadLocalStorage() {
   } catch(e) {}
 
   // NEW: 案件データ
-  try {
-    const d = localStorage.getItem('deals');
-    state.deals = d ? JSON.parse(d) : [];
-  } catch(e) { state.deals = []; }
+  state.deals = _safeParseArray('deals') || [];
 
   // NEW: コンタクトデータ
-  try {
-    const d = localStorage.getItem('contacts');
-    state.contacts = d ? JSON.parse(d) : [];
-  } catch(e) { state.contacts = []; }
+  state.contacts = _safeParseArray('contacts') || [];
 
   // NEW: 目標データ
   try {
     const d = localStorage.getItem('goals');
-    if (d) state.goals = { ...state.goals, ...JSON.parse(d) };
-  } catch(e) {}
+    if (d) {
+      const parsed = JSON.parse(d);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        state.goals = { ...state.goals, ...parsed };
+      }
+    }
+  } catch(e) { console.warn('[TINYPERK] goals parse error:', e); }
 
   // NEW: 経費データ
-  try {
-    const d = localStorage.getItem('expenses');
-    state.expenses = d ? JSON.parse(d) : [];
-  } catch(e) { state.expenses = []; }
+  state.expenses = _safeParseArray('expenses') || [];
 
   // NEW: ひらめきメモ
-  try {
-    const d = localStorage.getItem('ideas');
-    state.ideas = d ? JSON.parse(d) : [];
-  } catch(e) { state.ideas = []; }
+  state.ideas = _safeParseArray('ideas') || [];
+
   // NEW: 学習ログ
-  try {
-    const d = localStorage.getItem('learningLogs');
-    state.learningLogs = d ? JSON.parse(d) : [];
-  } catch(e) { state.learningLogs = []; }
+  state.learningLogs = _safeParseArray('learningLogs') || [];
+
   // プロジェクト
-  try {
-    const d = localStorage.getItem('projects');
-    state.projects = d ? JSON.parse(d) : [];
-  } catch(e) { state.projects = []; }
+  state.projects = _safeParseArray('projects') || [];
 }
 
 function saveClientTemplatesToStorage() {
@@ -764,7 +858,7 @@ function openSmartScheduleModal() {
   const unscheduledTasks = state.tasks.filter(t => t.isUnscheduled && t.status !== 'completed');
   
   if (unscheduledTasks.length === 0) {
-    alert('日程未定のタスクがありません。\nタスクを作成・編集するとき「日程未定」にチェックを入れてください。');
+    showToastInfo('日程未定のタスクがありません。\nタスクを作成・編集するとき「日程未定」にチェックを入れてください。');
     return;
   }
 
@@ -788,7 +882,7 @@ function openSmartScheduleModal() {
 function runAIScheduler() {
   const unscheduledTasks = state.tasks.filter(t => t.isUnscheduled && t.status !== 'completed');
   if (unscheduledTasks.length === 0) {
-    alert('日程未定のタスクはありません。\nタスク作成時に「日程未定」にチェックを入れてください。');
+    showToastInfo('日程未定のタスクはありません。\nタスク作成時に「日程未定」にチェックを入れてください。');
     return;
   }
 
@@ -1114,8 +1208,8 @@ function setupEventListeners() {
   document.getElementById('template-save-btn').addEventListener('click', () => {
     const client = document.getElementById('template-client-input').value.trim();
     const body = document.getElementById('template-body-input').value.trim();
-    if (!client) { alert('クライアント名を入力してください。'); return; }
-    if (!body) { alert('テンプレート本文を入力してください。'); return; }
+    if (!client) { showToastError('クライアント名を入力してください。'); return; }
+    if (!body) { showToastError('テンプレート本文を入力してください。'); return; }
     state.clientTemplates[client] = body;
     saveClientTemplatesToStorage();
     renderClientTemplateList();
@@ -1354,13 +1448,23 @@ function onTaskMonthChange(val) {
 function switchTab(tab) {
   state.activeTab = tab;
 
+  // タブタイトル更新（App Store / PWA品質）
+  const _tabTitles = {
+    dashboard:'TINYPERK — ホーム', tasks:'TINYPERK — タスク',
+    journal:'TINYPERK — 日誌',   deals:'TINYPERK — 案件',
+    reports:'TINYPERK — レポート', expenses:'TINYPERK — 経費',
+    memo:'TINYPERK — メモ',       calendar:'TINYPERK — カレンダー',
+    settings:'TINYPERK — 設定',   weekly:'TINYPERK — 週次',
+  };
+  document.title = _tabTitles[tab] || 'TINYPERK';
+
   // ページ切替時に最上部へスクロール
   const _mc = document.querySelector('.main-content');
   if (_mc) _mc.scrollTop = 0;
   window.scrollTo(0, 0);
 
   // その他セクション: 対象タブなら自動展開
-  const _moreTabs = ['contacts','goals','expenses','ideas','deals'];
+  const _moreTabs = ['memo','expenses','deals','calendar','reports','settings'];
   const _moreSection = document.getElementById('sidebar-more-section');
   const _moreBtn = document.getElementById('sidebar-more-btn');
   if (_moreSection && _moreBtn) {
@@ -1378,9 +1482,18 @@ function switchTab(tab) {
     }
   });
 
+  // goals/ideas/contacts は memo にリダイレクト
+  if (tab === 'goals' || tab === 'ideas') {
+    tab = 'memo';
+    state.activeTab = 'memo';
+    if (tab === 'goals') setTimeout(() => switchMemoTab('goals'), 0);
+  }
+  if (tab === 'contacts') { tab = 'memo'; state.activeTab = 'memo'; }
+
   document.querySelectorAll('.screen').forEach(screen => {
-    if (screen.id === `${tab}-screen`) {
+    if (screen.id === tab + '-screen') {
       screen.classList.add('active');
+      screen.style.display = '';
     } else {
       screen.classList.remove('active');
     }
@@ -1411,6 +1524,9 @@ function switchTab(tab) {
     renderContacts();
   } else if (tab === 'goals') {
     renderGoals();
+  } else if (tab === 'memo') {
+    renderIdeas();
+    renderGoals();
   } else if (tab === 'expenses') {
     renderExpenses();
   } else if (tab === 'ideas') {
@@ -1431,6 +1547,16 @@ function isModalOpen() {
 
 // Render overall application UI
 function renderApp() {
+  // 型ガード: 壊れたlocalStorageからロードした場合の保険
+  if (!Array.isArray(state.tasks))       state.tasks = [];
+  if (!Array.isArray(state.timecards))   state.timecards = [];
+  if (!Array.isArray(state.deals))       state.deals = [];
+  if (!Array.isArray(state.contacts))    state.contacts = [];
+  if (!Array.isArray(state.expenses))    state.expenses = [];
+  if (!Array.isArray(state.ideas))       state.ideas = [];
+  if (!Array.isArray(state.learningLogs)) state.learningLogs = [];
+  if (!Array.isArray(state.projects))    state.projects = [];
+
   if (state.activeTab === 'dashboard') {
     renderDashboard();
   } else if (state.activeTab === 'tasks') {
@@ -1526,10 +1652,53 @@ function renderWeeklySummary() {
   }
 }
 
+// ─── 収入予測（見込み3ヶ月） ───────────────────────────────────────────
+function renderIncomeForecast() {
+  const el = document.getElementById('income-forecast-months');
+  if (!el) return;
+
+  const now = new Date();
+  const months = [0, 1, 2].map(offset => {
+    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    return {
+      key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
+      label: offset === 0 ? '今月' : offset === 1 ? '来月' : '再来月',
+      month: d.getMonth() + 1,
+      total: 0,
+      count: 0,
+    };
+  });
+
+  (state.tasks || []).forEach(task => {
+    if (!task.dueDate || !task.amount) return;
+    const done = task.status === 'done' || task.status === 'billed';
+    if (done) return;   // 完了済みは除外
+    const key = task.dueDate.substring(0, 7);
+    const m = months.find(m => m.key === key);
+    if (m) {
+      m.total += parseFloat(task.amount) || 0;
+      m.count++;
+    }
+  });
+
+  el.innerHTML = months.map(m => `
+    <div class="income-forecast-month">
+      <div class="income-forecast-month-label">${m.label}</div>
+      <div class="income-forecast-amount">
+        ${m.total > 0
+          ? '¥' + Math.round(m.total).toLocaleString('ja-JP')
+          : '<span class="income-forecast-empty">—</span>'}
+      </div>
+      ${m.count > 0 ? `<div class="income-forecast-count">${m.count}件</div>` : ''}
+    </div>
+  `).join('');
+}
+
 function renderDashboard() {
   renderBTLog();
   renderTaskProgressChart();
   renderWeeklySummary();
+  renderIncomeForecast();
 
   const todayStr = getLocalDateStr();
   const todayCard = state.timecards.find(tc => tc.date === todayStr);
@@ -1635,11 +1804,11 @@ function renderDashboardWeekQuick() {
         <div style="font-size:0.72rem;color:var(--text-muted);">完了タスク</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-size:1.1rem;font-family:var(--font-vintage);color:var(--text-primary);">${fmt(weekRevenue)}</div>
+        <div style="font-size:1.1rem;font-family:var(--font-vintage);color:var(--text-main);">${fmt(weekRevenue)}</div>
         <div style="font-size:0.72rem;color:var(--text-muted);">今週売上</div>
       </div>
       <div style="text-align:center;">
-        <div style="font-size:1.1rem;font-family:var(--font-vintage);color:var(--warning);">${inProg + revision}</div>
+        <div style="font-size:1.1rem;font-family:var(--font-vintage);color:var(--primary);">${inProg + revision}</div>
         <div style="font-size:0.72rem;color:var(--text-muted);">進行中</div>
       </div>
     </div>
@@ -1821,7 +1990,7 @@ function clockIn() {
   let todayCard = state.timecards.find(tc => tc.date === todayStr);
 
   if (todayCard && todayCard.clockIn) {
-    alert('本日はすでに出勤打刻しています！');
+    showToastInfo('本日はすでに出勤打刻しています！');
     return;
   }
 
@@ -1853,12 +2022,12 @@ function clockOut() {
   let todayCard = state.timecards.find(tc => tc.date === todayStr);
 
   if (!todayCard || !todayCard.clockIn) {
-    alert('出勤打刻が行われていません！');
+    showToastError('出勤打刻が行われていません！');
     return;
   }
 
   if (todayCard.clockOut) {
-    alert('本日はすでに退勤打刻しています！');
+    showToastError('本日はすでに退勤打刻しています！');
     return;
   }
 
@@ -1966,7 +2135,7 @@ function handleManualTimecardSubmit(e) {
   const memo = document.getElementById('manual-log-memo').value.trim();
 
   if (!date) {
-    alert('日付を指定してください。');
+    showToastInfo('日付を指定してください。');
     return;
   }
 
@@ -2267,7 +2436,7 @@ function renderJournalTimeline() {
     let progressBar = '';
     if (estH > 0 && actualH !== '') {
       const pct = Math.min(Math.round((Number(actualH) / estH) * 100), 100);
-      const barColor = pct >= 100 ? 'var(--success)' : pct >= 60 ? 'var(--primary)' : 'var(--warning)';
+      const barColor = pct >= 100 ? 'var(--success)' : pct >= 60 ? 'var(--primary)' : 'var(--primary)';
       progressBar = `
         <div class="tl-slot-progress-wrap">
           <div class="tl-slot-progress-bar" style="width:${pct}%; background:${barColor};"></div>
@@ -3355,7 +3524,7 @@ function toggleVoiceRecognition(targetInputId, micButtonId) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   if (!SpeechRecognition) {
-    alert('このブラウザは音声入力に対応していません。\nChrome または Safari をお試しください。');
+    showToastError('このブラウザは音声入力に対応していません。\nChrome または Safari をお試しください。');
     return;
   }
 
@@ -3569,7 +3738,7 @@ function renderTaskTray() {
   }
 
   const statusLabel = { 'not-started': 'PENDING', 'in-progress': 'IN PROGRESS', 'revision': 'REVISION' };
-  const statusColor = { 'not-started': 'var(--text-muted)', 'in-progress': 'var(--primary)', 'revision': 'var(--warning)', 'completed': 'var(--success)' };
+  const statusColor = { 'not-started': 'var(--text-muted)', 'in-progress': 'var(--primary)', 'revision': 'var(--primary)', 'completed': 'var(--success)' };
 
   list.innerHTML = '';
   filtered.forEach(task => {
@@ -3583,15 +3752,16 @@ function renderTaskTray() {
     const stepsHtml = stepsTotal > 0
       ? `<span style="color:var(--text-muted);">✓ ${stepsDone}/${stepsTotal}</span>` : '';
 
+    const _h = escapeHtml;
     card.innerHTML = `
-      <button type="button" class="tray-card-edit" onclick="openEditTaskModal('${task.id}')">✏️</button>
-      <div class="tray-card-name">${task.name}</div>
+      <button type="button" class="tray-card-edit" onclick="openEditTaskModal('${_h(String(task.id))}')">✏️</button>
+      <div class="tray-card-name">${_h(task.name || '')}</div>
       <div class="tray-card-meta">
-        <span class="tray-card-status" style="color:${statusColor[task.status]||'var(--text-muted)'};">${statusLabel[task.status]||task.status}</span>
-        <span style="color:var(--text-muted);">${task.client}</span>
+        <span class="tray-card-status" style="color:${statusColor[task.status]||'var(--text-muted)'};">${statusLabel[task.status]||_h(task.status||'')}</span>
+        <span style="color:var(--text-muted);">${_h(task.client || '')}</span>
         ${stepsHtml}
       </div>
-      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.25rem;">📅 ${task.dueDate||'日付未設定'}</div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.25rem;">📅 ${_h(task.dueDate||'日付未設定')}</div>
     `;
 
     card.addEventListener('dragstart', (e) => {
@@ -3600,6 +3770,77 @@ function renderTaskTray() {
       setTimeout(() => card.classList.add('dragging'), 0);
     });
     card.addEventListener('dragend', () => card.classList.remove('dragging'));
+
+    // ── スワイプジェスチャー（右→完了 / 左→翌日送り） ──
+    (function attachSwipe(el, taskId) {
+      let startX = 0, startY = 0, moved = false;
+      el.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        moved = false;
+      }, { passive: true });
+      el.addEventListener('touchmove', (e) => {
+        const dx = e.touches[0].clientX - startX;
+        const dy = e.touches[0].clientY - startY;
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
+          moved = true;
+          const clamp = Math.max(-120, Math.min(120, dx));
+          el.style.transform = `translateX(${clamp}px)`;
+          el.style.transition = 'none';
+          el.style.opacity = 1 - Math.abs(clamp) / 180;
+          // 色のヒント
+          if (clamp > 30)       el.style.boxShadow = '0 0 0 2px #5a8a5e';
+          else if (clamp < -30) el.style.boxShadow = '0 0 0 2px #c8a96e';
+          else                  el.style.boxShadow = '';
+        }
+      }, { passive: true });
+      el.addEventListener('touchend', (e) => {
+        if (!moved) return;
+        const dx = e.changedTouches[0].clientX - startX;
+        el.style.transition = 'transform 0.25s ease, opacity 0.25s ease';
+        el.style.transform = '';
+        el.style.opacity   = '';
+        el.style.boxShadow = '';
+        if (dx > 72) {
+          // 右スワイプ → 完了
+          el.style.transform = 'translateX(110%)';
+          el.style.opacity   = '0';
+          setTimeout(() => {
+            const t = (state.tasks || []).find(t => t.id == taskId);
+            if (t) {
+              t.status = 'completed';
+              t.completedAt = t.completedAt || getLocalDateStr();
+              saveTasksToStorage();
+              renderTaskTray();
+              showUndoBanner('タスクを完了しました', () => {
+                t.status = 'in-progress';
+                t.completedAt = null;
+                saveTasksToStorage(); renderTaskTray();
+              });
+            }
+          }, 240);
+        } else if (dx < -72) {
+          // 左スワイプ → 翌日送り
+          el.style.transform = 'translateX(-110%)';
+          el.style.opacity   = '0';
+          setTimeout(() => {
+            const t = (state.tasks || []).find(t => t.id == taskId);
+            if (t) {
+              const d = t.dueDate ? parseLocalDate(t.dueDate) : new Date();
+              d.setDate(d.getDate() + 1);
+              const prev = t.dueDate;
+              t.dueDate = toLocalDateStr(d);
+              saveTasksToStorage();
+              renderTaskTray();
+              showUndoBanner('翌日に送りました', () => {
+                t.dueDate = prev;
+                saveTasksToStorage(); renderTaskTray();
+              });
+            }
+          }, 240);
+        }
+      }, { passive: true });
+    })(card, task.id);
 
     list.appendChild(wrapWithSwipeDelete(card, task.id));
   });
@@ -4571,7 +4812,11 @@ function openEditTaskModal(taskId) {
   if (wtEl) wtEl.value = task.workType || '';
   document.getElementById('task-predecessor').value = task.dependsOnTaskId || '';
   document.getElementById('task-deadline-fixed').checked = task.isDeadlineFixed || false;
-  document.querySelector(`input[name="task-status"][value="${task.status}"]`).checked = true;
+  // 'done'/'billed'など旧ステータス値も安全に処理
+  const _validStatuses = ['not-started', 'in-progress', 'revision', 'completed'];
+  const _safeStatus = _validStatuses.includes(task.status) ? task.status : 'not-started';
+  const _radioEl = document.querySelector(`input[name="task-status"][value="${_safeStatus}"]`);
+  if (_radioEl) _radioEl.checked = true;
 
   initStepsEditor(task);
   updateClientSuggestions();
@@ -4673,14 +4918,15 @@ function handleTaskFormSubmit(e) {
   const client = document.getElementById('task-client').value.trim();
   const amount = parseFloat(document.getElementById('task-amount').value) || 0;
   const estimatedHours = parseFloat(document.getElementById('task-estimated-hours').value) || 0;
-  const status = document.querySelector('input[name="task-status"]:checked').value;
+  const _statusRadio = document.querySelector('input[name="task-status"]:checked');
+  const status = _statusRadio ? _statusRadio.value : 'not-started';
   const dependsOnTaskId = document.getElementById('task-predecessor').value || null;
   const isDeadlineFixed = document.getElementById('task-deadline-fixed').checked;
   const priority = document.getElementById('task-priority')?.value || 'medium';
   const workType = document.getElementById('task-work-type')?.value.trim() || '';
 
   if (!name || !client || (!isUnscheduled && !dueDate)) {
-    alert('タスク名、クライアント名は必須です。期日がある場合は入力してください。');
+    showToastError('タスク名、クライアント名は必須です。期日がある場合は入力してください。');
     return;
   }
 
@@ -4903,33 +5149,40 @@ function showPomodoroNotification(msg) {
 
 function checkDeadlineReminders() {
   if (!Notification || Notification.permission !== 'granted') return;
-  const today = getLocalDateStr();
-  // Parse dates in local timezone to avoid UTC midnight offset issues
-  const parseLocalDate = s => { const [y,m,d] = s.split('-'); return new Date(y, m-1, d).getTime(); };
-  const todayMs = parseLocalDate(today);
-  const shown = JSON.parse(localStorage.getItem('reminderShown') || '{}');
-  const newShown = { ...shown };
+  try {
+    const today = getLocalDateStr();
+    const _parseDateMs = s => { const [y,m,d] = s.split('-'); return new Date(+y, +m-1, +d).getTime(); };
+    const todayMs = _parseDateMs(today);
+    let shown = {};
+    try { shown = JSON.parse(localStorage.getItem('reminderShown') || '{}') || {}; } catch(_) {}
+    const newShown = { ...shown };
 
-  state.tasks
-    .filter(t => t.status !== 'completed' && t.dueDate)
-    .forEach(t => {
-      const dueMs = parseLocalDate(t.dueDate);
-      const diffDays = Math.round((dueMs - todayMs) / 86400000);
-      const key = `${t.id}-${t.dueDate}`;
+    (state.tasks || [])
+      .filter(t => t.status !== 'completed' && t.dueDate)
+      .forEach(t => {
+        try {
+          const dueMs = _parseDateMs(t.dueDate);
+          const diffDays = Math.round((dueMs - todayMs) / 86400000);
+          const key = `${t.id}-${t.dueDate}`;
+          const name = t.name ? `「${t.name}」` : 'タスク';
 
-      if (diffDays === 0 && !shown[key + '-0']) {
-        new Notification('🚨 本日締め切り！', { body: `「${t.name}」の納期は今日です`, icon: './app-icon.png' });
-        newShown[key + '-0'] = true;
-      } else if (diffDays === 1 && !shown[key + '-1']) {
-        new Notification('⚠️ 明日締め切り', { body: `「${t.name}」の納期は明日です`, icon: './app-icon.png' });
-        newShown[key + '-1'] = true;
-      } else if (diffDays === 3 && !shown[key + '-3']) {
-        new Notification('📌 締め切り3日前', { body: `「${t.name}」の納期まであと3日です`, icon: './app-icon.png' });
-        newShown[key + '-3'] = true;
-      }
-    });
+          if (diffDays === 0 && !shown[key + '-0']) {
+            new Notification('🚨 本日締め切り！', { body: `${name}の納期は今日です`, icon: './app-icon.png' });
+            newShown[key + '-0'] = true;
+          } else if (diffDays === 1 && !shown[key + '-1']) {
+            new Notification('⚠️ 明日締め切り', { body: `${name}の納期は明日です`, icon: './app-icon.png' });
+            newShown[key + '-1'] = true;
+          } else if (diffDays === 3 && !shown[key + '-3']) {
+            new Notification('📌 締め切り3日前', { body: `${name}の納期まであと3日です`, icon: './app-icon.png' });
+            newShown[key + '-3'] = true;
+          }
+        } catch(_) {}
+      });
 
-  localStorage.setItem('reminderShown', JSON.stringify(newShown));
+    try { localStorage.setItem('reminderShown', JSON.stringify(newShown)); } catch(_) {}
+  } catch(e) {
+    console.warn('[TINYPERK] checkDeadlineReminders error:', e);
+  }
 }
 
 function saveBusinessInfo() {
@@ -4967,7 +5220,7 @@ function populateBusinessInfoForm() {
 function openInvoiceModal() {
   const selectedMonth = document.getElementById('report-month-filter').value;
   const selectedClient = document.getElementById('report-client-filter').value;
-  if (!selectedMonth) { alert('対象月を選択してください'); return; }
+  if (!selectedMonth) { showToastError('対象月を選択してください'); return; }
   document.getElementById('invoice-modal-overlay').style.display = 'flex';
   renderInvoicePreview(selectedMonth, selectedClient);
 }
@@ -5288,7 +5541,7 @@ function renderWorkTypeRevenue(tasks) {
                 <span style="font-size:0.8rem;color:var(--text-muted);">${g.count}件</span>
                 ${avgH !== null ? `<span style="font-size:0.8rem;color:var(--primary);">⏱ 平均 ${avgH}h</span>` : ''}
                 ${hourlyRate ? `<span style="font-size:0.8rem;color:var(--secondary);">時給 ${fmt(hourlyRate)}</span>` : ''}
-                <span style="font-size:0.95rem;font-weight:700;color:var(--text-primary);">${fmt(g.revenue * 1.1)}</span>
+                <span style="font-size:0.95rem;font-weight:700;color:var(--text-main);">${fmt(g.revenue * 1.1)}</span>
                 <span style="font-size:0.78rem;background:var(--primary-glow);color:var(--primary);padding:2px 8px;border-radius:10px;">${sharePct}%</span>
               </div>
             </div>
@@ -5363,7 +5616,7 @@ function renderEstimationGuide() {
         <div style="margin-bottom:0.35rem;">
           <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:var(--text-muted);margin-bottom:4px;">
             <span>実績時間の目安</span>
-            <span><strong style="color:var(--text-primary);">${avgA}h</strong> 平均（${minA}h〜${maxA}h）</span>
+            <span><strong style="color:var(--text-main);">${avgA}h</strong> 平均（${minA}h〜${maxA}h）</span>
           </div>
           <div style="position:relative;height:10px;background:var(--border-color);border-radius:6px;overflow:hidden;">
             <div style="position:absolute;left:${minPct}%;width:${maxPct - minPct}%;height:100%;background:var(--primary);opacity:0.35;border-radius:6px;"></div>
@@ -5795,7 +6048,7 @@ function detectShareLink() {
       enterSharedViewMode(payload);
     } catch (e) {
       console.error('Failed to parse share link:', e);
-      alert('無効な共有リンクです。');
+      showToastError('無効な共有リンクです。');
     }
   }
 }
@@ -5852,7 +6105,7 @@ function renderSharedSingleTask(task, container) {
         <span>完了</span>
       </div>
 
-      <div style="display:flex; flex-direction:column; gap:1rem; background-color:var(--bg-dark); padding:1.25rem; border-radius:var(--radius-md); border:1px solid var(--glass-border);">
+      <div style="display:flex; flex-direction:column; gap:1rem; background-color:var(--bg-dark); padding:1.25rem; border-radius:var(--radius-md); border:1px solid var(--border-color);">
         <div>
           <span style="font-size:0.75rem; color:var(--text-muted); font-weight:700; display:block; text-transform:uppercase;">クライアント名</span>
           <span style="font-weight:600;">${escapeHTML(task.client)}</span>
@@ -5886,7 +6139,7 @@ function renderSharedClientTasks(clientName, tasks, container) {
   } else {
     tasks.forEach(task => {
       tasksHtml += `
-        <div style="padding:1rem; background-color:var(--bg-dark); border-radius:var(--radius-md); border:1px solid var(--glass-border); display:flex; justify-content:space-between; align-items:center;">
+        <div style="padding:1rem; background-color:var(--bg-dark); border-radius:var(--radius-md); border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
           <div>
             <h4 style="font-size:1.05rem; margin-bottom:0.25rem;">${escapeHTML(task.name)}</h4>
             <span style="font-size:0.8rem; color:var(--text-muted);">期日: ${task.dueDate}</span>
@@ -5976,7 +6229,7 @@ function buildShareUrl(payload) {
 
 function copyToClipboard(text, successMsg) {
   navigator.clipboard.writeText(text).then(() => {
-    alert(successMsg);
+    showToastInfo(successMsg);
   }).catch(err => {
     window.prompt('コピーするには下のリンクを選択してください:', text);
   });
@@ -6007,10 +6260,10 @@ function saveGoogleClientId() {
   if (clientId) {
     state.googleClientId = clientId;
     localStorage.setItem('googleClientId', clientId);
-    alert('Google Client IDを保存しました！');
+    showToastSuccess('Google Client IDを保存しました！');
     renderGoogleStatusUI();
   } else {
-    alert('有効なClient IDを入力してください。');
+    showToastError('有効なClient IDを入力してください。');
   }
 }
 
@@ -6032,12 +6285,12 @@ function renderGoogleStatusUI() {
 
 function connectGoogleCalendar() {
   if (!state.googleClientId) {
-    alert('まずSettingsでGoogle Client IDを入力し保存してください。');
+    showToastError('まずSettingsでGoogle Client IDを入力し保存してください。');
     return;
   }
 
   if (typeof google === 'undefined') {
-    alert('Google APIクライアントの読み込みに失敗しました。インターネット接続と、広告ブロッカーの設定を確認してください。');
+    showToastError('Google APIクライアントの読み込みに失敗しました。インターネット接続と、広告ブロッカーの設定を確認してください。');
     return;
   }
 
@@ -6048,7 +6301,7 @@ function connectGoogleCalendar() {
       callback: (tokenResponse) => {
         if (tokenResponse && tokenResponse.access_token) {
           state.googleAccessToken = tokenResponse.access_token;
-          alert('Googleカレンダーに正常に接続されました！');
+          showToastSuccess('Googleカレンダーに正常に接続されました！');
           renderGoogleStatusUI();
           bulkSyncTasksToGoogle();
         }
@@ -6057,7 +6310,7 @@ function connectGoogleCalendar() {
     client.requestAccessToken();
   } catch (err) {
     console.error('Google auth error:', err);
-    alert('認証開始中にエラーが発生しました: ' + err.message);
+    showToastError('認証開始中にエラーが発生しました: ' + err.message);
   }
 }
 
@@ -6357,7 +6610,7 @@ function convertDealToTask(dealId) {
   state.tasks.push(task);
   saveTasksToStorage();
   closeDealModal();
-  alert(`タスク「${deal.title}」を追加しました。`);
+  showToastSuccess(`タスク「${deal.title}」を追加しました。`);
 }
 
 // ============================================================
@@ -6599,14 +6852,14 @@ function renderLearningGoalCard(gLearn, thisMonth) {
   const totalH = Math.round((taskLearnH + logH) * 10) / 10;
 
   const pct = gLearn > 0 ? Math.min(100, Math.round(totalH / gLearn * 100)) : 0;
-  const barColor = pct >= 100 ? 'var(--success)' : pct >= 60 ? 'var(--primary)' : 'var(--warning)';
+  const barColor = pct >= 100 ? 'var(--success)' : pct >= 60 ? 'var(--primary)' : 'var(--primary)';
 
   const logsHtml = state.learningLogs.length === 0
     ? `<div class="learning-empty">📌 学習中のものを追加してみましょう</div>`
     : state.learningLogs.map(l => {
         const lt = getLearningType(l.type);
         const p = Math.min(100, l.target > 0 ? Math.round((l.progress||0)/l.target*100) : 0);
-        const bc = p >= 100 ? 'var(--success)' : p >= 50 ? 'var(--primary)' : 'var(--warning)';
+        const bc = p >= 100 ? 'var(--success)' : p >= 50 ? 'var(--primary)' : 'var(--primary)';
         return `
           <div class="learning-item" id="ll-${l.id}">
             <div class="learning-item-header">
@@ -7107,14 +7360,14 @@ async function startWhisperRecord(textareaId, btnId, onResult) {
           }
         }
       };
-      rec.onerror = (e) => alert('音声認識エラー: ' + e.error);
+      rec.onerror = (e) => showToastError('音声認識エラー: ' + e.error);
       rec.onend = () => {
         if (btn) { btn.textContent = '🎤'; btn.classList.remove('recording'); btn.title = '音声入力'; }
       };
       rec.start();
       return;
     }
-    alert('このブラウザは音声入力に対応していません。');
+    showToastError('このブラウザは音声入力に対応していません。');
     return;
   }
 
@@ -7123,7 +7376,7 @@ async function startWhisperRecord(textareaId, btnId, onResult) {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   } catch (e) {
-    alert('マイクへのアクセスが拒否されました。\nブラウザのアドレスバー横のマイクアイコンから許可してください。');
+    showToastError('マイクへのアクセスが拒否されました。\nブラウザのアドレスバー横のマイクアイコンから許可してください。');
     return;
   }
 
@@ -7160,7 +7413,7 @@ async function startWhisperRecord(textareaId, btnId, onResult) {
       }
     } catch (err) {
       console.error('Whisper error:', err);
-      alert('文字起こしに失敗しました。\n' + (err.message || err));
+      showToastError('文字起こしに失敗しました: ' + (err.message || err));
     } finally {
       if (btn) { btn.textContent = '🎤'; btn.disabled = false; btn.title = '音声入力'; }
       _mediaRecorder = null;
@@ -7396,9 +7649,9 @@ function renderDashboardPipelineWidget() {
         <div style="font-size:0.7rem;color:var(--text-muted)">${active.length}件の案件</div>
       </div>
       ${followUps.length > 0 ? `
-      <div class="dash-mini-card" onclick="switchTab('contacts')" style="border-color:var(--warning)">
+      <div class="dash-mini-card" onclick="switchTab('contacts')" style="border-color:var(--primary)">
         <div style="font-size:0.75rem;color:var(--text-muted)">フォロー期限</div>
-        <div style="font-size:1.2rem;font-weight:700;color:var(--warning)">${followUps.length}件</div>
+        <div style="font-size:1.2rem;font-weight:700;color:var(--primary)">${followUps.length}件</div>
         <div style="font-size:0.7rem;color:var(--text-muted)">要フォローアップ</div>
       </div>` : ''}
     </div>`;
@@ -8135,7 +8388,7 @@ function renderWeeklyReport() {
       { label: '稼働時間',   val: `${totalHrs.toFixed(1)}h`,  color: 'var(--primary)' },
       { label: '稼働日数',   val: `${workDays}日`,             color: 'var(--secondary)' },
       { label: '完了タスク', val: `${totalDone}件`,            color: 'var(--success)' },
-      { label: '週売上',     val: fmt(totalRev),               color: 'var(--warning)' },
+      { label: '週売上',     val: fmt(totalRev),               color: 'var(--primary)' },
     ];
     statRow.innerHTML = stats.map(s => `
       <div class="report-card" style="text-align:center;padding:1rem;">
@@ -8185,14 +8438,14 @@ function renderWeeklyReport() {
           <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);font-family:var(--font-vintage);color:var(--text-muted);">${d.clockOut||'—'}</td>
           <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);font-family:var(--font-vintage);color:${d.hrs>0?'var(--primary)':'var(--text-muted)'};">${d.hrs>0?d.hrs.toFixed(1)+'h':'—'}</td>
           <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);font-family:var(--font-vintage);color:${d.done>0?'var(--success)':'var(--text-muted)'};">${d.done>0?d.done+'件':'—'}</td>
-          <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);font-family:var(--font-vintage);color:${d.rev>0?'var(--warning)':'var(--text-muted)'};">${d.rev>0?fmt(d.rev):'—'}</td>
+          <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);font-family:var(--font-vintage);color:${d.rev>0?'var(--primary)':'var(--text-muted)'};">${d.rev>0?fmt(d.rev):'—'}</td>
         </tr>`;
       }).join('')}</tbody>
       <tfoot><tr style="background:rgba(200,169,110,0.05);">
         <td colspan="4" style="padding:0.5rem 0.75rem;font-family:var(--font-vintage);letter-spacing:0.05em;">TOTAL</td>
         <td style="padding:0.5rem 0.75rem;font-family:var(--font-vintage);color:var(--primary);font-weight:700;">${totalHrs.toFixed(1)}h</td>
         <td style="padding:0.5rem 0.75rem;font-family:var(--font-vintage);color:var(--success);font-weight:700;">${totalDone}件</td>
-        <td style="padding:0.5rem 0.75rem;font-family:var(--font-vintage);color:var(--warning);font-weight:700;">${fmt(totalRev)}</td>
+        <td style="padding:0.5rem 0.75rem;font-family:var(--font-vintage);color:var(--primary);font-weight:700;">${fmt(totalRev)}</td>
       </tr></tfoot>`;
   }
 
@@ -8200,7 +8453,7 @@ function renderWeeklyReport() {
   const listEl = document.getElementById('weekly-task-list');
   if (listEl) {
     const statusLabel = { 'not-started':'PENDING', 'in-progress':'IN PROGRESS', 'revision':'REVISION', 'completed':'DONE' };
-    const statusColor = { 'not-started':'var(--text-muted)', 'in-progress':'var(--secondary)', 'revision':'var(--warning)', 'completed':'var(--success)' };
+    const statusColor = { 'not-started':'var(--text-muted)', 'in-progress':'var(--secondary)', 'revision':'var(--primary)', 'completed':'var(--success)' };
 
     const groups = dayData.filter(d => d.tasks.length > 0);
     if (groups.length === 0) {
@@ -8254,7 +8507,7 @@ async function parseTaskFromText() {
   const text = textarea.value.trim();
   if (!text) {
     statusEl.textContent = '文章を貼り付けてください';
-    statusEl.style.color = 'var(--warning)';
+    statusEl.style.color = 'var(--primary)';
     return;
   }
 
@@ -8262,7 +8515,7 @@ async function parseTaskFromText() {
   const apiKey = localStorage.getItem(_CLAUDE_KEY_STORE);
   if (!apiKey) {
     statusEl.innerHTML = '⚠ <a href="#" onclick="switchTab(\'settings\');return false;" style="color:var(--primary);">設定画面</a>でClaude APIキーを登録してください';
-    statusEl.style.color = 'var(--warning)';
+    statusEl.style.color = 'var(--primary)';
     return;
   }
 
@@ -8721,55 +8974,249 @@ function initOpeningAnimation() {
   const overlay = document.getElementById('opening-overlay');
   if (!overlay) return;
 
-  // ── 星を描く ──
-  const canvas = document.getElementById('opening-stars');
-  if (canvas) {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
-    const ctx = canvas.getContext('2d');
-    for (let i = 0; i < 220; i++) {
-      const x = Math.random() * canvas.width;
-      const y = Math.random() * canvas.height;
-      const r = Math.random() * 1.8 + 0.3;
-      const a = Math.random() * 0.75 + 0.15;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = i % 9 === 0
+  // ── 星背景 ──
+  const starCanvas = document.getElementById('opening-stars');
+  if (starCanvas) {
+    starCanvas.width  = window.innerWidth;
+    starCanvas.height = window.innerHeight;
+    const sc = starCanvas.getContext('2d');
+    for (let i = 0; i < 260; i++) {
+      const x = Math.random() * starCanvas.width;
+      const y = Math.random() * starCanvas.height;
+      const r = Math.random() * 1.6 + 0.2;
+      const a = Math.random() * 0.7 + 0.15;
+      sc.beginPath(); sc.arc(x, y, r, 0, Math.PI * 2);
+      sc.fillStyle = i % 7 === 0
         ? `rgba(74,158,255,${a})`
-        : `rgba(200,169,110,${a * 0.85})`;
-      ctx.fill();
+        : `rgba(200,169,110,${a * 0.8})`;
+      sc.fill();
     }
-    // 時計周りにホワイトグロー効果
-    const grd = ctx.createRadialGradient(
-      canvas.width/2, canvas.height*0.38,  10,
-      canvas.width/2, canvas.height*0.38, 200
-    );
-    grd.addColorStop(0,   'rgba(200,169,110,0.06)');
-    grd.addColorStop(0.5, 'rgba(74,158,255,0.02)');
-    grd.addColorStop(1,   'transparent');
-    ctx.fillStyle = grd;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  // ── 時計針を現在時刻に合わせる（負のdelay） ──
-  const now  = new Date();
-  const h    = now.getHours() % 12;
-  const m    = now.getMinutes();
-  const s    = now.getSeconds();
-  const ms   = now.getMilliseconds();
-  // 秒 + ミリ秒で滑らかに
-  const totalSec = h * 3600 + m * 60 + s + ms / 1000;
+  // ── 時計キャンバス描画（requestAnimationFrame） ──
+  const clkCanvas = document.getElementById('opening-clock-canvas');
+  if (!clkCanvas) { setTimeout(() => overlay.classList.add('hidden'), 10600); return; }
 
-  const hourHand   = document.getElementById('clock-hour-hand');
-  const minuteHand = document.getElementById('clock-minute-hand');
-  const secondHand = document.getElementById('clock-second-hand');
+  const SIZE = Math.min(window.innerWidth * 0.88, 360);
+  clkCanvas.width  = SIZE;
+  clkCanvas.height = SIZE;
+  const cx = SIZE / 2;
+  const cy = SIZE / 2;
+  const R  = SIZE * 0.44;   // 外径
 
-  if (hourHand)   hourHand.style.animationDelay   = `-${totalSec}s`;
-  if (minuteHand) minuteHand.style.animationDelay = `-${m * 60 + s + ms/1000}s`;
-  if (secondHand) secondHand.style.animationDelay = `-${s + ms/1000}s`;
+  let swayAngle = 0;
+  let startTime = null;
+  let rafId;
 
-  // ── CSSアニメ完了後（10.5s）にdisplay:none (余韻込み) ──
-  setTimeout(() => overlay.classList.add('hidden'), 10600);
+  function drawClock(ts) {
+    if (!startTime) startTime = ts;
+    const elapsed = (ts - startTime) / 1000; // 秒
+
+    // 画面フェード(overlay CSSが担当)が始まる8.5s以降はrAF停止
+    if (elapsed > 9.5) { cancelAnimationFrame(rafId); return; }
+
+    const ctx = clkCanvas.getContext('2d');
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.save();
+
+    // ── 振り子スウェイ（ゆったり ±9度） ──
+    const SWAY_AMP = 9 * Math.PI / 180;
+    const SWAY_T   = 3.0;  // 周期(秒) — ゆっくり
+    swayAngle = Math.sin((elapsed / SWAY_T) * Math.PI) * SWAY_AMP
+              * Math.exp(-elapsed * 0.018); // 減衰
+    ctx.translate(cx, cy);
+    ctx.rotate(swayAngle);
+    ctx.translate(-cx, -cy);
+
+    // ── 外縁グロー ──
+    const glow = ctx.createRadialGradient(cx, cy, R * 0.7, cx, cy, R * 1.4);
+    glow.addColorStop(0,   'rgba(200,169,110,0.13)');
+    glow.addColorStop(0.5, 'rgba(80,50,20,0.06)');
+    glow.addColorStop(1,   'transparent');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 1.4, 0, Math.PI * 2); ctx.fill();
+
+    // ── 外リング（3重） ──
+    [0, 0.012, 0.028].forEach((off, i) => {
+      const alpha = [0.55, 0.35, 0.18][i];
+      ctx.beginPath();
+      ctx.arc(cx, cy, R + off * SIZE, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(200,169,110,${alpha})`;
+      ctx.lineWidth = [3.5, 2, 1][i];
+      ctx.stroke();
+    });
+
+    // ── 文字盤背景（油絵風グラデ） ──
+    const face = ctx.createRadialGradient(cx - R*0.12, cy - R*0.18, 0, cx, cy, R);
+    face.addColorStop(0,   '#2e1e06');
+    face.addColorStop(0.45,'#170f02');
+    face.addColorStop(0.78,'#0d0903');
+    face.addColorStop(1,   '#070508');
+    ctx.beginPath(); ctx.arc(cx, cy, R - 3, 0, Math.PI * 2);
+    ctx.fillStyle = face; ctx.fill();
+
+    // ── 光沢ハイライト（右上） ──
+    const sheen = ctx.createRadialGradient(cx + R*0.2, cy - R*0.35, 0, cx, cy, R);
+    sheen.addColorStop(0,   'rgba(230,210,155,0.11)');
+    sheen.addColorStop(0.4, 'rgba(200,169,110,0.04)');
+    sheen.addColorStop(1,   'transparent');
+    ctx.beginPath(); ctx.arc(cx, cy, R - 3, 0, Math.PI * 2);
+    ctx.fillStyle = sheen; ctx.fill();
+
+    // ── ギョーシェ模様（細い同心円） ──
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, R - 3, 0, Math.PI * 2);
+    ctx.clip();
+    for (let rr = R * 0.18; rr < R - 4; rr += R * 0.065) {
+      ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(200,169,110,0.055)';
+      ctx.lineWidth = 0.6; ctx.stroke();
+    }
+    // 放射線
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 18) {
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(a) * (R - 4), cy + Math.sin(a) * (R - 4));
+      ctx.strokeStyle = 'rgba(200,169,110,0.03)';
+      ctx.lineWidth = 0.5; ctx.stroke();
+    }
+    ctx.restore();
+
+    // ── 時字（ローマ数字 + 4/8/12に大きめ目盛） ──
+    const NUMS = ['XII','I','II','III','IV','V','VI','VII','VIII','IX','X','XI'];
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (let i = 0; i < 12; i++) {
+      const ang = (i / 12) * Math.PI * 2 - Math.PI / 2;
+      const nr  = R * 0.74;
+      const tx  = cx + Math.cos(ang) * nr;
+      const ty  = cy + Math.sin(ang) * nr;
+      const isMain = i % 3 === 0;
+      ctx.font = isMain
+        ? `bold ${SIZE * 0.052}px Georgia,serif`
+        : `${SIZE * 0.036}px Georgia,serif`;
+      ctx.fillStyle = isMain
+        ? 'rgba(220,190,120,0.90)'
+        : 'rgba(200,169,110,0.62)';
+      ctx.fillText(NUMS[i], tx, ty);
+    }
+    ctx.restore();
+
+    // ── 目盛り（60個 + 12個大） ──
+    for (let i = 0; i < 60; i++) {
+      const ang = (i / 60) * Math.PI * 2 - Math.PI / 2;
+      const isMaj = i % 5 === 0;
+      const r1 = R * (isMaj ? 0.84 : 0.88);
+      const r2 = R * 0.93;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(ang) * r1, cy + Math.sin(ang) * r1);
+      ctx.lineTo(cx + Math.cos(ang) * r2, cy + Math.sin(ang) * r2);
+      ctx.strokeStyle = isMaj ? 'rgba(220,190,120,0.75)' : 'rgba(200,169,110,0.3)';
+      ctx.lineWidth = isMaj ? 2 : 0.8;
+      ctx.stroke();
+    }
+
+    // ── 小秒針サブダイアル（6時位置） ──
+    const subR = R * 0.16;
+    const subCx = cx;
+    const subCy = cy + R * 0.46;
+    ctx.beginPath(); ctx.arc(subCx, subCy, subR, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(200,169,110,0.3)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.beginPath(); ctx.arc(subCx, subCy, subR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(10,6,2,0.7)'; ctx.fill();
+    // 小秒針の目盛
+    for (let i = 0; i < 12; i++) {
+      const a = (i/12)*Math.PI*2 - Math.PI/2;
+      ctx.beginPath();
+      ctx.moveTo(subCx + Math.cos(a)*subR*0.72, subCy + Math.sin(a)*subR*0.72);
+      ctx.lineTo(subCx + Math.cos(a)*subR*0.92, subCy + Math.sin(a)*subR*0.92);
+      ctx.strokeStyle = 'rgba(200,169,110,0.4)'; ctx.lineWidth = 0.7; ctx.stroke();
+    }
+
+    // ── 時計針（現在時刻） ──
+    const now = new Date();
+    const h = now.getHours() % 12;
+    const m = now.getMinutes();
+    const s = now.getSeconds();
+    const ms = now.getMilliseconds();
+    const secFrac = s + ms / 1000;
+
+    const hourAng   = ((h + m/60 + s/3600) / 12) * Math.PI * 2 - Math.PI / 2;
+    const minAng    = ((m + s/60)           / 60) * Math.PI * 2 - Math.PI / 2;
+    const secAng    = (secFrac              / 60) * Math.PI * 2 - Math.PI / 2;
+    const smallSecAng = secAng; // 小秒針は通常の秒針と同じ
+
+    // 影付き針を描く関数
+    function drawHand(angle, length, width, color, shadow) {
+      ctx.save();
+      if (shadow) {
+        ctx.shadowColor = 'rgba(0,0,0,0.6)';
+        ctx.shadowBlur  = 8;
+        ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
+      }
+      ctx.beginPath();
+      ctx.moveTo(
+        cx - Math.cos(angle) * length * 0.18,
+        cy - Math.sin(angle) * length * 0.18
+      );
+      ctx.lineTo(
+        cx + Math.cos(angle) * length,
+        cy + Math.sin(angle) * length
+      );
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 時針 (グローエフェクト付き)
+    ctx.save();
+    ctx.shadowColor = 'rgba(220,190,120,0.35)'; ctx.shadowBlur = 10;
+    drawHand(hourAng, R * 0.50, SIZE * 0.028, '#e0c878', true);
+    ctx.restore();
+    drawHand(minAng,  R * 0.70, SIZE * 0.018, '#d4b86a', true);
+    // 秒針（細い・赤みがかった金）
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,80,30,0.3)'; ctx.shadowBlur = 6;
+    drawHand(secAng,  R * 0.80, SIZE * 0.008, '#c87840', false);
+    ctx.restore();
+
+    // 小秒針
+    ctx.save();
+    ctx.translate(subCx, subCy);
+    ctx.beginPath();
+    ctx.moveTo(-Math.cos(smallSecAng)*subR*0.3, -Math.sin(smallSecAng)*subR*0.3);
+    ctx.lineTo(Math.cos(smallSecAng)*subR*0.75, Math.sin(smallSecAng)*subR*0.75);
+    ctx.strokeStyle = 'rgba(200,130,60,0.8)';
+    ctx.lineWidth = SIZE * 0.006; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.restore();
+
+    // 中心ピン
+    const pinG = ctx.createRadialGradient(cx, cy, 0, cx, cy, SIZE*0.025);
+    pinG.addColorStop(0,   '#ffe09a');
+    pinG.addColorStop(0.4, '#c8a96e');
+    pinG.addColorStop(1,   '#7a5c28');
+    ctx.beginPath(); ctx.arc(cx, cy, SIZE * 0.022, 0, Math.PI * 2);
+    ctx.fillStyle = pinG; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, SIZE * 0.006, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffe0a0'; ctx.fill();
+
+    // 小秒針中心
+    ctx.beginPath(); ctx.arc(subCx, subCy, SIZE*0.012, 0, Math.PI*2);
+    ctx.fillStyle = '#c8a96e'; ctx.fill();
+
+    ctx.restore();
+    rafId = requestAnimationFrame(drawClock);
+  }
+
+  rafId = requestAnimationFrame(drawClock);
+
+  // フェードアウト完了後にdisplay:none
+  setTimeout(() => {
+    overlay.classList.add('hidden');
+    cancelAnimationFrame(rafId);
+  }, 10600);
 }
 
 // ─── 2. 時間帯テーマ（ダッシュボード背景グラデ） ─────────────────────────
@@ -8938,6 +9385,7 @@ const _origClockOut = window.clockOut;
 if (typeof clockIn === 'function') {
   const _ci = clockIn;
   window.clockIn = function() {
+    navigator.vibrate?.([12]);                          // 触覚フィードバック IN
     triggerPunchRipple(document.getElementById('btn-clock-in'));
     updateTimeBasedTheme();
     _ci();
@@ -8947,6 +9395,7 @@ if (typeof clockIn === 'function') {
 if (typeof clockOut === 'function') {
   const _co = clockOut;
   window.clockOut = function() {
+    navigator.vibrate?.([10, 40, 20]);                  // 触覚フィードバック OUT（2段階）
     triggerPunchRipple(document.getElementById('btn-clock-out'));
     updateTimeBasedTheme();
     _co();
@@ -8975,8 +9424,25 @@ if (typeof saveTaskEdit === 'function') {
 document.addEventListener('DOMContentLoaded', () => {
   initOpeningAnimation();
   updateTimeBasedTheme();
-  // 1分ごとに時間帯テーマを更新
-  setInterval(updateTimeBasedTheme, 60000);
+  // 1分ごとに時間帯テーマを更新（IDを保持してdouble-init防止）
+  if (!window._timeThemeInterval) {
+    window._timeThemeInterval = setInterval(updateTimeBasedTheme, 60000);
+  }
   // ダッシュボード初期表示の星
   setTimeout(renderStarfield, 400);
-});
+});// Undo バナー（3秒で消える）
+function showUndoBanner(message, onUndo) {
+  let banner = document.getElementById('undo-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'undo-banner';
+    document.body.appendChild(banner);
+  }
+  clearTimeout(banner._timer);
+  banner.innerHTML = `<span>${message}</span><button onclick="this.closest('#undo-banner')._undo?.()">元に戻す</button>`;
+  banner._undo = onUndo;
+  banner.classList.add('visible');
+  banner._timer = setTimeout(() => banner.classList.remove('visible'), 3200);
+}
+
+

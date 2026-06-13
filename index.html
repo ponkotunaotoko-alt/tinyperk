@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=3.0, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <title>TINYPERK</title>
   
   <!-- SEO Tags -->
@@ -44,437 +44,7 @@
     <canvas id="opening-stars"></canvas>
 
     <!-- 大型古時計+振り子 統合 -->
-    <div id="opening-clock-wrap">
-      <svg id="opening-clock-svg" viewBox="0 0 300 340" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <radialGradient id="face-bg" cx="48%" cy="38%" r="60%">
-      <stop offset="0%"  stop-color="#2a1e08"/>
-      <stop offset="60%" stop-color="#120e04"/>
-      <stop offset="100%" stop-color="#070508"/>
-    </radialGradient>
-    <radialGradient id="case-sheen" cx="35%" cy="28%" r="65%">
-      <stop offset="0%"  stop-color="rgba(230,210,150,0.22)"/>
-      <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
-    </radialGradient>
-    <radialGradient id="glow-bg" cx="50%" cy="66%" r="40%">
-      <stop offset="0%"  stop-color="rgba(200,169,110,0.14)"/>
-      <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
-    </radialGradient>
-    <filter id="f-soft" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="4" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="f-hand" x="-80%" y="-20%" width="260%" height="140%">
-      <feGaussianBlur stdDeviation="2" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="f-chain" x="-20%" y="-5%" width="140%" height="110%">
-      <feGaussianBlur stdDeviation="1.5" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
-
-  <!-- ── チェーン+懐中時計: 振り子として揺れる ── -->
-  <g id="og-pendulum-wrap" style="transform-origin:150px 0px">
-
-    <!-- グロー光源 -->
-    <circle cx="150" cy="225" r="130" fill="url(#glow-bg)" opacity="0.7"/>
-
-    <!-- チェーン -->
-    <g filter="url(#f-chain)">
-      <ellipse cx="150" cy="10.0" rx="3.8" ry="2" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="15.8" rx="2" ry="3.8" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="21.6" rx="3.8" ry="2" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="27.4" rx="2" ry="3.8" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="33.2" rx="3.8" ry="2" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="39.0" rx="2" ry="3.8" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="44.8" rx="3.8" ry="2" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="50.6" rx="2" ry="3.8" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="56.4" rx="3.8" ry="2" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="62.2" rx="2" ry="3.8" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="68.0" rx="3.8" ry="2" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="73.8" rx="2" ry="3.8" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="79.6" rx="3.8" ry="2" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="85.4" rx="2" ry="3.8" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="91.2" rx="3.8" ry="2" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="97.0" rx="2" ry="3.8" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="102.8" rx="3.8" ry="2" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="108.6" rx="2" ry="3.8" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="114.4" rx="3.8" ry="2" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    <ellipse cx="150" cy="120.2" rx="2" ry="3.8" fill="none" stroke="#c8a96e" stroke-width="1.3" opacity="0.75"/>
-    </g>
-
-    <!-- ペンダントボウ（リング） -->
-    <g id="og-case-top" class="og-reveal" style="--og-delay:1.2s">
-      <ellipse cx="150" cy="124" rx="11" ry="7"
-               fill="none" stroke="#c8a96e" stroke-width="2.5" opacity="0.85"/>
-      <!-- ステム（竜頭） -->
-      <rect x="145" y="129" width="10" height="14" rx="5"
-            fill="none" stroke="#c8a96e" stroke-width="2" opacity="0.75"/>
-      <!-- 竜頭リューズ -->
-      <rect x="146" y="141" width="8" height="6" rx="2"
-            fill="#1a1406" stroke="#c8a96e" stroke-width="1.5" opacity="0.8"/>
-    </g>
-
-    <!-- ケース外装 (1.2s後) -->
-    <g id="og-case-outer" class="og-reveal" style="--og-delay:1.2s">
-      <!-- 外側グロー -->
-      <circle cx="150" cy="225" r="116" fill="none"
-              stroke="#c8a96e" stroke-width="0.5" opacity="0.15" filter="url(#f-soft)"/>
-      <!-- ケース外装リング群 -->
-      <circle cx="150" cy="225" r="112" fill="#0d0a04"
-              stroke="#c8a96e" stroke-width="3.5" opacity="0.8" filter="url(#f-soft)"/>
-      <!-- 外装エングレービング線 -->
-      <circle cx="150" cy="225" r="108" fill="none"
-              stroke="#c8a96e" stroke-width="0.6" opacity="0.35"/>
-      <circle cx="150" cy="225" r="105" fill="none"
-              stroke="#c8a96e" stroke-width="0.4" opacity="0.25"/>
-      <!-- ベゼルリング -->
-      <circle cx="150" cy="225" r="101" fill="#100c04"
-              stroke="#c8a96e" stroke-width="2.5" opacity="0.9"/>
-      <!-- ベゼル光沢 -->
-      <circle cx="150" cy="225" r="101" fill="url(#case-sheen)"/>
-    </g>
-
-    <!-- 文字盤 (1.4s後) -->
-    <g id="og-face-group" class="og-reveal" style="--og-delay:1.4s">
-      <!-- 文字盤背景 -->
-      <circle cx="150" cy="225" r="98" fill="url(#face-bg)"/>
-      <!-- ギョーシェ柄 -->
-      <circle cx="164.0" cy="225.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="162.8" cy="230.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="159.4" cy="235.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="154.3" cy="238.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="148.5" cy="238.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="143.0" cy="237.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="138.7" cy="233.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="136.3" cy="227.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="136.3" cy="222.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="138.7" cy="216.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="143.0" cy="212.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="148.5" cy="211.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="154.3" cy="211.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="159.4" cy="214.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="162.8" cy="219.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="175.0" cy="225.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="174.4" cy="230.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="172.5" cy="235.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="169.5" cy="240.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="165.6" cy="244.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="160.8" cy="247.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="155.6" cy="249.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="150.0" cy="250.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="144.4" cy="249.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="139.2" cy="247.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="134.4" cy="244.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="130.5" cy="240.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="127.5" cy="235.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="125.6" cy="230.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="125.0" cy="225.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="125.6" cy="219.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="127.5" cy="214.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="130.5" cy="209.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="134.4" cy="205.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="139.2" cy="202.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="144.4" cy="200.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="150.0" cy="200.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="155.6" cy="200.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="160.8" cy="202.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="165.6" cy="205.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="169.5" cy="209.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="172.5" cy="214.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="174.4" cy="219.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="186.0" cy="225.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="185.6" cy="230.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="184.3" cy="235.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="182.3" cy="241.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="179.4" cy="245.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="175.9" cy="250.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="171.8" cy="253.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="167.2" cy="256.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="162.2" cy="258.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="156.9" cy="260.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="151.4" cy="261.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="145.9" cy="260.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="140.5" cy="259.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="135.3" cy="257.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="130.4" cy="255.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="126.0" cy="251.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="122.2" cy="247.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="119.1" cy="243.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="116.6" cy="238.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="114.9" cy="233.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="114.1" cy="227.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="114.1" cy="222.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="114.9" cy="216.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="116.6" cy="211.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="119.1" cy="206.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="122.2" cy="202.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="126.0" cy="198.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="130.4" cy="194.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="135.3" cy="192.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="140.5" cy="190.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="145.9" cy="189.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="151.4" cy="189.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="156.9" cy="189.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="162.2" cy="191.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="167.2" cy="193.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="171.8" cy="196.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="175.9" cy="200.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="179.4" cy="204.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="182.3" cy="209.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="184.3" cy="214.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="185.6" cy="219.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="197.0" cy="225.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="196.7" cy="230.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="195.7" cy="236.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="194.1" cy="241.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="191.8" cy="246.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="189.0" cy="251.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="185.6" cy="255.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="181.7" cy="259.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="177.4" cy="263.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="172.7" cy="266.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="167.7" cy="268.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="162.4" cy="270.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="156.9" cy="271.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="151.4" cy="272.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="145.8" cy="271.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="140.3" cy="271.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="134.9" cy="269.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="129.8" cy="267.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="124.9" cy="264.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="120.4" cy="261.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="116.3" cy="257.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="112.6" cy="253.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="109.5" cy="248.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="107.0" cy="243.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="105.0" cy="238.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="103.7" cy="233.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="103.1" cy="227.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="103.1" cy="222.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="103.7" cy="216.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="105.0" cy="211.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="107.0" cy="206.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="109.5" cy="201.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="112.6" cy="196.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="116.3" cy="192.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="120.4" cy="188.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="124.9" cy="185.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="129.8" cy="182.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="134.9" cy="180.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="140.3" cy="179.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="145.8" cy="178.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="151.4" cy="178.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="156.9" cy="178.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="162.4" cy="179.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="167.7" cy="181.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="172.7" cy="183.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="177.4" cy="186.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="181.7" cy="190.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="185.6" cy="194.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="189.0" cy="198.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="191.8" cy="203.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="194.1" cy="208.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="195.7" cy="214.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="196.7" cy="219.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="208.0" cy="225.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="207.7" cy="230.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="207.0" cy="236.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="205.7" cy="241.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="203.8" cy="246.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="201.6" cy="251.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="198.8" cy="256.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="195.6" cy="260.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="192.0" cy="265.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="188.0" cy="268.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="183.6" cy="272.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="179.0" cy="275.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="174.1" cy="277.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="169.0" cy="279.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="163.7" cy="281.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="158.3" cy="282.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="152.8" cy="282.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="147.2" cy="282.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="141.7" cy="282.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="136.3" cy="281.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="131.0" cy="279.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="125.9" cy="277.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="121.0" cy="275.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="116.4" cy="272.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="112.0" cy="268.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="108.0" cy="265.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="104.4" cy="260.9" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="101.2" cy="256.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="98.4" cy="251.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="96.2" cy="246.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="94.3" cy="241.3" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="93.0" cy="236.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="92.3" cy="230.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="92.0" cy="225.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="92.3" cy="219.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="93.0" cy="214.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="94.3" cy="208.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="96.2" cy="203.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="98.4" cy="198.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="101.2" cy="193.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="104.4" cy="189.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="108.0" cy="185.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="112.0" cy="181.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="116.4" cy="177.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="121.0" cy="174.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="125.9" cy="172.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="131.0" cy="170.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="136.3" cy="168.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="141.7" cy="167.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="147.2" cy="167.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="152.8" cy="167.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="158.3" cy="167.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="163.7" cy="168.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="169.0" cy="170.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="174.1" cy="172.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="179.0" cy="174.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="183.6" cy="177.8" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="188.0" cy="181.2" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="192.0" cy="185.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="195.6" cy="189.1" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="198.8" cy="193.6" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="201.6" cy="198.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="203.8" cy="203.4" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="205.7" cy="208.7" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="207.0" cy="214.0" r="0.7" fill="#c8a96e" opacity="0.11"/>
-    <circle cx="207.7" cy="219.5" r="0.7" fill="#c8a96e" opacity="0.11"/>
-      <!-- 内縁リング -->
-      <circle cx="150" cy="225" r="94" fill="none"
-              stroke="#c8a96e" stroke-width="0.8" opacity="0.3"/>
-      <!-- 目盛り -->
-      <line x1="150.0" y1="129.0" x2="150.0" y2="143.0" stroke="#c8a96e" stroke-width="2.8" opacity="1"/>
-    <line x1="160.0" y1="129.5" x2="159.5" y2="134.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="170.0" y1="131.1" x2="168.9" y2="136.0" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="179.7" y1="133.7" x2="178.1" y2="138.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="189.0" y1="137.3" x2="187.0" y2="141.9" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="198.0" y1="141.9" x2="191.0" y2="154.0" stroke="#c8a96e" stroke-width="2.8" opacity="1"/>
-    <line x1="206.4" y1="147.3" x2="203.5" y2="151.4" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="214.2" y1="153.7" x2="210.9" y2="157.4" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="221.3" y1="160.8" x2="217.6" y2="164.1" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="227.7" y1="168.6" x2="223.6" y2="171.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="233.1" y1="177.0" x2="221.0" y2="184.0" stroke="#c8a96e" stroke-width="2.8" opacity="1"/>
-    <line x1="237.7" y1="186.0" x2="233.1" y2="188.0" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="241.3" y1="195.3" x2="236.5" y2="196.9" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="243.9" y1="205.0" x2="239.0" y2="206.1" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="245.5" y1="215.0" x2="240.5" y2="215.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="246.0" y1="225.0" x2="232.0" y2="225.0" stroke="#c8a96e" stroke-width="2.8" opacity="1"/>
-    <line x1="245.5" y1="235.0" x2="240.5" y2="234.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="243.9" y1="245.0" x2="239.0" y2="243.9" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="241.3" y1="254.7" x2="236.5" y2="253.1" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="237.7" y1="264.0" x2="233.1" y2="262.0" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="233.1" y1="273.0" x2="221.0" y2="266.0" stroke="#c8a96e" stroke-width="2.8" opacity="1"/>
-    <line x1="227.7" y1="281.4" x2="223.6" y2="278.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="221.3" y1="289.2" x2="217.6" y2="285.9" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="214.2" y1="296.3" x2="210.9" y2="292.6" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="206.4" y1="302.7" x2="203.5" y2="298.6" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="198.0" y1="308.1" x2="191.0" y2="296.0" stroke="#c8a96e" stroke-width="2.8" opacity="1"/>
-    <line x1="189.0" y1="312.7" x2="187.0" y2="308.1" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="179.7" y1="316.3" x2="178.1" y2="311.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="170.0" y1="318.9" x2="168.9" y2="314.0" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="160.0" y1="320.5" x2="159.5" y2="315.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="150.0" y1="321.0" x2="150.0" y2="307.0" stroke="#c8a96e" stroke-width="2.8" opacity="1"/>
-    <line x1="140.0" y1="320.5" x2="140.5" y2="315.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="130.0" y1="318.9" x2="131.1" y2="314.0" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="120.3" y1="316.3" x2="121.9" y2="311.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="111.0" y1="312.7" x2="113.0" y2="308.1" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="102.0" y1="308.1" x2="109.0" y2="296.0" stroke="#c8a96e" stroke-width="2.8" opacity="1"/>
-    <line x1="93.6" y1="302.7" x2="96.5" y2="298.6" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="85.8" y1="296.3" x2="89.1" y2="292.6" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="78.7" y1="289.2" x2="82.4" y2="285.9" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="72.3" y1="281.4" x2="76.4" y2="278.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="66.9" y1="273.0" x2="79.0" y2="266.0" stroke="#c8a96e" stroke-width="2.8" opacity="1"/>
-    <line x1="62.3" y1="264.0" x2="66.9" y2="262.0" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="58.7" y1="254.7" x2="63.5" y2="253.1" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="56.1" y1="245.0" x2="61.0" y2="243.9" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="54.5" y1="235.0" x2="59.5" y2="234.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="54.0" y1="225.0" x2="68.0" y2="225.0" stroke="#c8a96e" stroke-width="2.8" opacity="1"/>
-    <line x1="54.5" y1="215.0" x2="59.5" y2="215.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="56.1" y1="205.0" x2="61.0" y2="206.1" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="58.7" y1="195.3" x2="63.5" y2="196.9" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="62.3" y1="186.0" x2="66.9" y2="188.0" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="66.9" y1="177.0" x2="79.0" y2="184.0" stroke="#c8a96e" stroke-width="2.8" opacity="1"/>
-    <line x1="72.3" y1="168.6" x2="76.4" y2="171.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="78.7" y1="160.8" x2="82.4" y2="164.1" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="85.8" y1="153.7" x2="89.1" y2="157.4" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="93.6" y1="147.3" x2="96.5" y2="151.4" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="102.0" y1="141.9" x2="109.0" y2="154.0" stroke="#c8a96e" stroke-width="2.8" opacity="1"/>
-    <line x1="111.0" y1="137.3" x2="113.0" y2="141.9" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="120.3" y1="133.7" x2="121.9" y2="138.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="130.0" y1="131.1" x2="131.1" y2="136.0" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-    <line x1="140.0" y1="129.5" x2="140.5" y2="134.5" stroke="#c8a96e" stroke-width="1" opacity="0.4"/>
-      <!-- ローマ数字 -->
-      <text x="150.0" y="154.0" text-anchor="middle" dominant-baseline="middle" fill="#e8d8a8" font-family="Georgia,serif" font-size="10.5" letter-spacing="0.3" opacity="0.92">XII</text>
-    <text x="185.5" y="163.5" text-anchor="middle" dominant-baseline="middle" fill="#e8d8a8" font-family="Georgia,serif" font-size="10.5" letter-spacing="0.3" opacity="0.92">I</text>
-    <text x="211.5" y="189.5" text-anchor="middle" dominant-baseline="middle" fill="#e8d8a8" font-family="Georgia,serif" font-size="10.5" letter-spacing="0.3" opacity="0.92">II</text>
-    <text x="221.0" y="225.0" text-anchor="middle" dominant-baseline="middle" fill="#e8d8a8" font-family="Georgia,serif" font-size="10.5" letter-spacing="0.3" opacity="0.92">III</text>
-    <text x="211.5" y="260.5" text-anchor="middle" dominant-baseline="middle" fill="#e8d8a8" font-family="Georgia,serif" font-size="10.5" letter-spacing="0.3" opacity="0.92">IIII</text>
-    <text x="185.5" y="286.5" text-anchor="middle" dominant-baseline="middle" fill="#e8d8a8" font-family="Georgia,serif" font-size="10.5" letter-spacing="0.3" opacity="0.92">V</text>
-    <text x="150.0" y="296.0" text-anchor="middle" dominant-baseline="middle" fill="#e8d8a8" font-family="Georgia,serif" font-size="10.5" letter-spacing="0.3" opacity="0.92">VI</text>
-    <text x="114.5" y="286.5" text-anchor="middle" dominant-baseline="middle" fill="#e8d8a8" font-family="Georgia,serif" font-size="10.5" letter-spacing="0.3" opacity="0.92">VII</text>
-    <text x="88.5" y="260.5" text-anchor="middle" dominant-baseline="middle" fill="#e8d8a8" font-family="Georgia,serif" font-size="10.5" letter-spacing="0.3" opacity="0.92">VIII</text>
-    <text x="79.0" y="225.0" text-anchor="middle" dominant-baseline="middle" fill="#e8d8a8" font-family="Georgia,serif" font-size="10.5" letter-spacing="0.3" opacity="0.92">IX</text>
-    <text x="88.5" y="189.5" text-anchor="middle" dominant-baseline="middle" fill="#e8d8a8" font-family="Georgia,serif" font-size="10.5" letter-spacing="0.3" opacity="0.92">X</text>
-    <text x="114.5" y="163.5" text-anchor="middle" dominant-baseline="middle" fill="#e8d8a8" font-family="Georgia,serif" font-size="10.5" letter-spacing="0.3" opacity="0.92">XI</text>
-      <!-- 小秒針ダイアル -->
-      <circle cx="150" cy="277" r="15" fill="none"
-              stroke="#c8a96e" stroke-width="0.8" opacity="0.35"/>
-      <line x1="150.0" y1="263.0" x2="150.0" y2="267.0" stroke="#c8a96e" stroke-width="0.8" opacity="0.5"/>
-    <line x1="157.0" y1="264.9" x2="155.0" y2="268.3" stroke="#c8a96e" stroke-width="0.8" opacity="0.5"/>
-    <line x1="162.1" y1="270.0" x2="158.7" y2="272.0" stroke="#c8a96e" stroke-width="0.8" opacity="0.5"/>
-    <line x1="164.0" y1="277.0" x2="160.0" y2="277.0" stroke="#c8a96e" stroke-width="0.8" opacity="0.5"/>
-    <line x1="162.1" y1="284.0" x2="158.7" y2="282.0" stroke="#c8a96e" stroke-width="0.8" opacity="0.5"/>
-    <line x1="157.0" y1="289.1" x2="155.0" y2="285.7" stroke="#c8a96e" stroke-width="0.8" opacity="0.5"/>
-    <line x1="150.0" y1="291.0" x2="150.0" y2="287.0" stroke="#c8a96e" stroke-width="0.8" opacity="0.5"/>
-    <line x1="143.0" y1="289.1" x2="145.0" y2="285.7" stroke="#c8a96e" stroke-width="0.8" opacity="0.5"/>
-    <line x1="137.9" y1="284.0" x2="141.3" y2="282.0" stroke="#c8a96e" stroke-width="0.8" opacity="0.5"/>
-    <line x1="136.0" y1="277.0" x2="140.0" y2="277.0" stroke="#c8a96e" stroke-width="0.8" opacity="0.5"/>
-    <line x1="137.9" y1="270.0" x2="141.3" y2="272.0" stroke="#c8a96e" stroke-width="0.8" opacity="0.5"/>
-    <line x1="143.0" y1="264.9" x2="145.0" y2="268.3" stroke="#c8a96e" stroke-width="0.8" opacity="0.5"/>
-    </g>
-
-    <!-- 時計針 (2s後) -->
-    <g id="og-hands-group" class="og-reveal" style="--og-delay:2s">
-      <!-- 時針 (太・短) -->
-      <g id="clock-hour-hand" style="transform-origin:150px 225px">
-        <polygon points="150,157 144.5,217 150,239 155.5,217"
-                 fill="#e0c878" opacity="0.95" filter="url(#f-hand)"/>
-        <polygon points="150,247 147,235 153,235"
-                 fill="#e0c878" opacity="0.4"/>
-      </g>
-      <!-- 分針 (細・長) -->
-      <g id="clock-minute-hand" style="transform-origin:150px 225px">
-        <polygon points="150,137 146,215 150,241 154,215"
-                 fill="#e0c878" opacity="0.88" filter="url(#f-hand)"/>
-        <polygon points="150,249 147.5,236 152.5,236"
-                 fill="#e0c878" opacity="0.32"/>
-      </g>
-      <!-- 秒針 (極細・赤金) -->
-      <g id="clock-second-hand" style="transform-origin:150px 225px">
-        <line x1="150" y1="131" x2="150" y2="251"
-              stroke="#ff9a3c" stroke-width="1.1" opacity="0.9"
-              stroke-linecap="round" filter="url(#f-hand)"/>
-        <circle cx="150" cy="137" r="2.8" fill="#ff9a3c" opacity="0.8"/>
-      </g>
-      <!-- 小秒針 -->
-      <g id="clock-small-second" style="transform-origin:150px 277px">
-        <line x1="150" y1="264" x2="150" y2="281"
-              stroke="#c8a96e" stroke-width="0.9" opacity="0.65"
-              stroke-linecap="round"/>
-      </g>
-      <!-- 中心キャップ -->
-      <circle cx="150" cy="225" r="7" fill="#0a0800" stroke="#e0c878" stroke-width="2.2"/>
-      <circle cx="150" cy="225" r="3" fill="#e0c878"/>
-    </g>
-
-  </g>
-</svg>
-    </div>
+    <canvas id="opening-clock-canvas"></canvas>
 
     <div id="opening-logo">TINYPERK</div>
     <div id="opening-sub">— time &amp; work —</div>
@@ -690,6 +260,15 @@
             <button class="btn btn-secondary" onclick="switchTab('tasks')" style="font-size:0.72rem;padding:0.25rem 0.6rem;">全件表示 →</button>
           </div>
           <div id="dash-top3-list"><!-- JS --></div>
+        </div>
+
+        <!-- 収入予測ウィジェット -->
+        <div class="income-forecast-card">
+          <div class="income-forecast-header">
+            <span class="income-forecast-label">見込み収入</span>
+            <span class="income-forecast-sub">進行中タスクの合計</span>
+          </div>
+          <div id="income-forecast-months" class="income-forecast-months"><!-- JS --></div>
         </div>
 
         <div class="dashboard-grid">
@@ -1469,7 +1048,7 @@
       </section>
 
       <!-- CONTACTS SCREEN -->
-      <section id="contacts-screen" class="screen">
+      <section id="contacts-screen" class="screen" aria-hidden="true" style="display:none;">
         <div class="screen-header">
           <h1 class="screen-title">👤 コンタクト</h1>
           <button class="btn btn-primary" onclick="openContactModal()">
@@ -1482,32 +1061,22 @@
       </section>
 
       <!-- GOALS SCREEN -->
-      <section id="goals-screen" class="screen">
+      <section id="memo-screen" class="screen">
         <div class="screen-header">
-          <h1 class="screen-title">🎯 目標管理</h1>
+          <h1 class="screen-title screen-header-band">メモ</h1>
+          <div class="memo-tabs">
+            <button class="memo-tab active" onclick="switchMemoTab('ideas')" id="memo-tab-ideas">&#x1F4A1; ひらめき</button>
+            <button class="memo-tab" onclick="switchMemoTab('goals')"  id="memo-tab-goals">&#x1F3AF; 目標</button>
+          </div>
         </div>
-        <div id="goals-content"></div>
+        <div id="memo-ideas-section">
+          <div id="ideas-content"></div>
+        </div>
+        <div id="memo-goals-section" style="display:none;">
+          <div id="goals-content"></div>
+        </div>
       </section>
 
-      <!-- EXPENSES SCREEN -->
-      <section id="expenses-screen" class="screen">
-        <div class="screen-header">
-          <h1 class="screen-title">💴 経費管理</h1>
-          <button class="btn btn-primary" onclick="openExpenseModal()">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            経費を追加
-          </button>
-        </div>
-        <div id="expenses-content"></div>
-      </section>
-
-      <!-- IDEAS SCREEN -->
-      <section id="ideas-screen" class="screen">
-        <div class="screen-header">
-          <h1 class="screen-title">💡 ひらめきメモ</h1>
-        </div>
-        <div id="ideas-content"></div>
-      </section>
     </main>
 
     <!-- Mobile More Drawer -->
@@ -1515,33 +1084,17 @@
     <div id="more-drawer" class="more-drawer">
       <div class="more-drawer-handle"></div>
       <div class="more-drawer-grid">
-        <a class="more-drawer-item" data-tab="deals" onclick="switchTab('deals');closeMoreDrawer()">
-          <span class="more-drawer-icon">💼</span>
-          <span>案件</span>
-        </a>
-        <a class="more-drawer-item" data-tab="contacts" onclick="switchTab('contacts');closeMoreDrawer()">
-          <span class="more-drawer-icon">👤</span>
-          <span>コンタクト</span>
-        </a>
-        <a class="more-drawer-item" data-tab="goals" onclick="switchTab('goals');closeMoreDrawer()">
-          <span class="more-drawer-icon">🎯</span>
-          <span>目標管理</span>
+        <a class="more-drawer-item" data-tab="memo" onclick="switchTab('memo');closeMoreDrawer()">
+          <span class="more-drawer-icon">📝</span>
+          <span>メモ</span>
         </a>
         <a class="more-drawer-item" data-tab="expenses" onclick="switchTab('expenses');closeMoreDrawer()">
           <span class="more-drawer-icon">💴</span>
-          <span>経費管理</span>
-        </a>
-        <a class="more-drawer-item" data-tab="ideas" onclick="switchTab('ideas');closeMoreDrawer()">
-          <span class="more-drawer-icon">💡</span>
-          <span>ひらめき</span>
+          <span>経費</span>
         </a>
         <a class="more-drawer-item" data-tab="calendar" onclick="switchTab('calendar');closeMoreDrawer()">
           <span class="more-drawer-icon">📅</span>
           <span>カレンダー</span>
-        </a>
-        <a class="more-drawer-item" data-tab="weekly" onclick="switchTab('weekly');closeMoreDrawer()">
-          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="16" y1="2" x2="16" y2="6"></line></svg>
-          <span>週次レポート</span>
         </a>
         <a class="more-drawer-item" data-tab="reports" onclick="switchTab('reports');closeMoreDrawer()">
           <span class="more-drawer-icon">📊</span>
@@ -2001,7 +1554,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=84"></script>
+  <script src="./app.js?v=89"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY
