@@ -8803,27 +8803,194 @@ function saveShakeMemo() {
 }
 
 // ─── 貼り付けCTA ─────────────────────────────────────────────────────────
-async function openPasteCTA() {
-  // クリップボードを読み取り試行
-  let text = '';
-  try {
-    text = await navigator.clipboard.readText();
-  } catch(e) {}
+// ─── 貼り付け登録モーダル ─────────────────────────────────────────────────
+// ダッシュボードの「LINEやメールをそのまま貼り付けて登録」ボタン用
+// スマホではclipboard APIが使えないため、専用モーダルで手動ペースト
 
-  // タスク追加モーダルを開いてAI解析エリアを表示
-  openAddTaskModal();
-  setTimeout(() => {
-    // ai-parse-area が折り畳まれている場合は開く
-    const area = document.getElementById('ai-parse-area');
-    if (area && area.style.display === 'none') toggleAiParseArea();
-    if (text) {
-      const pasteEl = document.getElementById('ai-paste-text');
-      if (pasteEl) {
-        pasteEl.value = text;
-        pasteEl.dispatchEvent(new Event('input')); // 高さ自動調整
-      }
+// モーダルの状態管理
+let _pasteModalStep = 1;       // 1=入力, 2=確認
+let _pasteModalParsed = null;  // AI解析結果（Step2で使用）
+
+function openPasteCTA() {
+  _pasteModalStep = 1;
+  _pasteModalParsed = null;
+
+  const overlay = document.getElementById('paste-modal-overlay');
+  if (!overlay) return;
+
+  // UIリセット
+  const step1 = document.getElementById('paste-step1');
+  const step2 = document.getElementById('paste-step2');
+  const ta    = document.getElementById('paste-modal-textarea');
+  const st    = document.getElementById('paste-modal-status');
+  const btn   = document.getElementById('paste-modal-action-btn');
+  const lbl   = document.getElementById('paste-modal-btn-label');
+  if (step1) step1.style.display = '';
+  if (step2) step2.style.display = 'none';
+  if (ta)    ta.value = '';
+  if (st)    { st.textContent = ''; st.style.color = 'var(--text-muted)'; }
+  if (btn)   btn.disabled = false;
+  if (lbl)   lbl.textContent = '✦ AIで解析';
+
+  // 背景スクロールロック（他モーダルと同じパターン）
+  state._scrollY = window.scrollY;
+  document.body.style.top = `-${state._scrollY}px`;
+  document.body.classList.add('modal-open');
+  overlay.classList.add('active');
+  setTimeout(() => ta?.focus(), 120);
+}
+
+function closePasteModal() {
+  const overlay = document.getElementById('paste-modal-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('active');
+  // スクロールロック解除
+  document.body.classList.remove('modal-open');
+  document.body.style.top = '';
+  window.scrollTo(0, state._scrollY || 0);
+}
+
+async function handlePasteModalAction() {
+  if (_pasteModalStep === 2) {
+    // ─── Step2: 登録確定 ────────────────────────────────────────────
+    if (!_pasteModalParsed) { closePasteModal(); return; }
+    const p = _pasteModalParsed;
+    const newTask = {
+      id:             Date.now(),
+      name:           p.name           || '無題タスク',
+      client:         p.client         || '',
+      dueDate:        p.dueDate        || '',
+      amount:         p.amount         || 0,
+      estimatedHours: p.estimatedHours || 0,
+      workType:       p.workType       || '',
+      priority:       p.priority       || 'medium',
+      memo:           p.memo           || '',
+      status:         'not-started',
+      createdAt:      getLocalDateStr(),
+      steps:          [],
+    };
+    if (!Array.isArray(state.tasks)) state.tasks = [];
+    state.tasks.unshift(newTask);
+    saveTasksToStorage();
+    renderApp();
+    closePasteModal();
+    showToast('✓ タスクを登録しました');
+    return;
+  }
+
+  // ─── Step1: AI解析 ──────────────────────────────────────────────
+  const ta  = document.getElementById('paste-modal-textarea');
+  const st  = document.getElementById('paste-modal-status');
+  const btn = document.getElementById('paste-modal-action-btn');
+  const lbl = document.getElementById('paste-modal-btn-label');
+  if (!ta || !st || !btn || !lbl) return;
+
+  const text = ta.value.trim();
+  if (!text) {
+    st.textContent = 'テキストを貼り付けてください';
+    st.style.color = 'var(--danger)';
+    return;
+  }
+
+  const apiKey = localStorage.getItem(_CLAUDE_KEY_STORE);
+  if (!apiKey) {
+    st.innerHTML = '⚠ <a href="#" onclick="closePasteModal();switchTab(\'settings\');return false;" style="color:var(--primary);">設定</a>でClaude APIキーを登録してください';
+    st.style.color = 'var(--primary)';
+    return;
+  }
+
+  btn.disabled = true;
+  lbl.textContent = '解析中...';
+  st.textContent = '';
+
+  const todayStr = getLocalDateStr();
+  const prompt = `あなたはタスク管理AIです。以下のLINEやメールの文章から、タスク登録に必要な情報を抽出してください。
+JSONのみを返してください（前後の説明や\`\`\`は不要）。
+
+今日の日付: ${todayStr}
+
+抽出フォーマット:
+{
+  "name": "タスク名（簡潔に20文字以内）",
+  "client": "クライアント名・会社名・人名（不明なら空文字）",
+  "dueDate": "YYYY-MM-DD形式（「今週中」「月末」等も今日の日付を基準に変換。不明なら空文字）",
+  "amount": 金額の数値（税別。「3万円」→30000。不明なら0）,
+  "estimatedHours": 作業時間の数値（不明なら0）,
+  "priority": "high"か"medium"か"low",
+  "workType": "業務カテゴリ（取材・執筆・撮影・デザイン・構成・編集・打ち合わせ等）",
+  "memo": "その他の重要情報（1-2文）"
+}
+
+文章:
+${text}`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `APIエラー (${resp.status})`);
     }
-  }, 250);
+
+    const data = await resp.json();
+    const rawText = data.content?.[0]?.text || '';
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('解析結果を読み取れませんでした');
+
+    _pasteModalParsed = JSON.parse(jsonMatch[0]);
+    const p = _pasteModalParsed;
+
+    // ── Step2 プレビュー表示 ──
+    const step1   = document.getElementById('paste-step1');
+    const step2   = document.getElementById('paste-step2');
+    const preview = document.getElementById('paste-preview');
+    if (step1) step1.style.display = 'none';
+    if (step2) step2.style.display = '';
+
+    const _h = escapeHtml;
+    const row = (label, value) => value
+      ? `<div style="display:flex;gap:0.5rem;align-items:baseline;font-size:0.88rem;">
+           <span style="color:var(--text-muted);min-width:5em;">${label}</span>
+           <span style="color:var(--text-primary);font-weight:600;">${_h(String(value))}</span>
+         </div>`
+      : '';
+
+    if (preview) {
+      preview.innerHTML = [
+        row('タスク名',  p.name),
+        row('クライアント', p.client),
+        row('納期',     p.dueDate),
+        row('金額',     p.amount > 0 ? p.amount.toLocaleString() + ' 円' : ''),
+        row('作業時間', p.estimatedHours > 0 ? p.estimatedHours + ' 時間' : ''),
+        row('業務種別', p.workType),
+        row('優先度',   p.priority === 'high' ? '🔴 高' : p.priority === 'low' ? '🟢 低' : '🟡 中'),
+        row('メモ',     p.memo),
+      ].filter(Boolean).join('');
+    }
+
+    _pasteModalStep = 2;
+    lbl.textContent = '✓ タスクを登録';
+    btn.disabled = false;
+
+  } catch (err) {
+    st.style.color = 'var(--danger)';
+    st.textContent = '❌ ' + (err.message || '解析に失敗しました');
+    btn.disabled = false;
+    lbl.textContent = '✦ 再解析';
+  }
 }
 
 // ─── 月末請求リマインダー ─────────────────────────────────────────────────

@@ -1197,6 +1197,42 @@
   <!-- SYNC STATUS -->
   <div id="sync-status" style="display:none;position:fixed;bottom:5rem;right:1rem;background:var(--bg-card);border:1px solid var(--border-color);border-radius:2rem;padding:0.4rem 1rem;font-size:0.8rem;color:var(--text-muted);z-index:100;box-shadow:var(--pop-shadow);"></div>
 
+  <!-- ======================================================
+       貼り付け専用モーダル（シンプル2ステップ）
+       ====================================================== -->
+  <div id="paste-modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-label="LINEから登録">
+    <div class="modal-content" style="max-width:520px;">
+      <div class="modal-header">
+        <h2 style="font-size:1.1rem;margin:0;font-family:var(--font-vintage);letter-spacing:0.06em;">📋 LINEやメールから登録</h2>
+        <button type="button" class="btn-modal-close" onclick="closePasteModal()" aria-label="閉じる">✕</button>
+      </div>
+      <div class="modal-body" style="gap:1rem;">
+
+        <!-- STEP1: 貼り付け -->
+        <div id="paste-step1">
+          <p style="font-size:0.85rem;color:var(--text-muted);margin:0 0 0.75rem;">LINEやメールの文章をそのままペーストしてください。AIが自動でタスク情報を抽出します。</p>
+          <textarea id="paste-modal-textarea" class="form-control" rows="7"
+            placeholder="例）&#10;お世話になっております。納期を6月30日でお願いできますか。金額は3万円でどうでしょうか。&#10;&#10;LINEやメールをそのまま貼り付けてOKです。"
+            style="font-size:1rem;resize:none;width:100%;"></textarea>
+          <div id="paste-modal-status" style="min-height:1.4em;font-size:0.82rem;color:var(--text-muted);margin-top:0.5rem;"></div>
+        </div>
+
+        <!-- STEP2: 確認プレビュー（解析後に表示） -->
+        <div id="paste-step2" style="display:none;">
+          <p style="font-size:0.85rem;color:var(--text-muted);margin:0 0 0.75rem;">以下の内容でタスクを登録します。修正する場合はタップして編集できます。</p>
+          <div id="paste-preview" style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:1rem;display:flex;flex-direction:column;gap:0.6rem;"></div>
+        </div>
+
+      </div>
+      <div class="modal-footer" style="display:flex;gap:0.75rem;justify-content:flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="closePasteModal()">キャンセル</button>
+        <button type="button" class="btn btn-primary" id="paste-modal-action-btn" onclick="handlePasteModalAction()">
+          <span id="paste-modal-btn-label">✦ AIで解析</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- SLIDE-UP MODAL (Add / Edit / Detail Panel) -->
   <div id="task-modal-overlay" class="modal-overlay">
     <div class="modal-content">
@@ -1554,7 +1590,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=89"></script>
+  <script src="./app.js?v=90"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY
