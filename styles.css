@@ -6088,3 +6088,24 @@ body {
   min-width: 120px;
   border-color: var(--primary) !important;
 }
+
+/* ===== タッチドラッグ ハイライト ===== */
+.tl-slot-touch-over {
+  background: var(--primary) !important;
+  outline: 2px solid var(--primary);
+  opacity: 0.85;
+}
+.tl-slot-touch-over .tl-slot-time {
+  color: #fff !important;
+}
+
+/* クイックバーボタン：ドラッグ可能感を出す */
+.tl-quickbar-btn {
+  touch-action: none; /* タッチドラッグを有効にする */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.tl-quickbar-btn:active {
+  transform: scale(0.96);
+  border-color: var(--primary) !important;
+}

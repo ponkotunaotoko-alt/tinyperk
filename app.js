@@ -2144,10 +2144,15 @@ function renderJournalTimeline() {
         <div class="tl-quickbar-label">📋 タスクを追加</div>
         <div class="tl-quickbar-list">
           ${todayTasks.map(t => `
-            <button class="tl-quickbar-btn" onclick="showTimeslotPicker('${t.id}')" title="${escapeHtml(t.name)}">
+            <button class="tl-quickbar-btn"
+              onclick="showTimeslotPicker('${t.id}')"
+              ontouchstart="tlTouchDragStart(event,'${t.id}')"
+              ontouchmove="tlTouchDragMove(event)"
+              ontouchend="tlTouchDragEnd(event)"
+              title="タップ→時間選択 / 長押しドラッグ→スロットに配置">
               <span class="tl-quickbar-dot" style="background:${statusColor[t.status]||'var(--text-muted)'}"></span>
               <span class="tl-quickbar-name">${escapeHtml(t.name.slice(0,14))}${t.name.length>14?'…':''}</span>
-              <span class="tl-quickbar-pin">📌</span>
+              <span class="tl-quickbar-pin">👆</span>
             </button>
           `).join('')}
         </div>`;
@@ -8325,4 +8330,109 @@ ${text}`;
     btn.disabled = false;
     btnLabel.textContent = '✦ 再解析';
   }
+}
+
+
+// ─── タッチドラッグ（クイックバー → タイムラインスロット） ─────────────────
+let _tlTouchTaskId = null;
+let _tlTouchGhost  = null;
+let _tlTouchTimer  = null;
+let _tlDragging    = false;
+
+function tlTouchDragStart(e, taskId) {
+  _tlTouchTaskId = taskId;
+  _tlDragging    = false;
+
+  // 200ms長押しでドラッグモード開始
+  _tlTouchTimer = setTimeout(() => {
+    _tlDragging = true;
+    const task = state.tasks.find(t => t.id === taskId);
+    const ghost = document.createElement('div');
+    ghost.id = 'tl-touch-ghost';
+    ghost.textContent = (task?.name || '').slice(0, 16);
+    ghost.style.cssText = [
+      'position:fixed',
+      'background:var(--primary)',
+      'color:#fff',
+      'padding:8px 14px',
+      'border-radius:4px',
+      'font-size:13px',
+      'font-family:var(--font-vintage)',
+      'letter-spacing:0.05em',
+      'z-index:9999',
+      'pointer-events:none',
+      'opacity:0.92',
+      'max-width:180px',
+      'white-space:nowrap',
+      'overflow:hidden',
+      'text-overflow:ellipsis',
+      'box-shadow:0 4px 16px rgba(0,0,0,0.4)',
+    ].join(';');
+    document.body.appendChild(ghost);
+    _tlTouchGhost = ghost;
+
+    const touch = e.touches[0];
+    ghost.style.left = (touch.clientX - 90) + 'px';
+    ghost.style.top  = (touch.clientY - 40) + 'px';
+
+    // 触覚フィードバック（対応端末）
+    if (navigator.vibrate) navigator.vibrate(30);
+  }, 200);
+}
+
+function tlTouchDragMove(e) {
+  if (!_tlDragging || !_tlTouchGhost) return;
+  e.preventDefault();
+  const touch = e.touches[0];
+
+  _tlTouchGhost.style.left = (touch.clientX - 90) + 'px';
+  _tlTouchGhost.style.top  = (touch.clientY - 40) + 'px';
+
+  // ゴーストを一瞬非表示にして下の要素を取得
+  _tlTouchGhost.style.visibility = 'hidden';
+  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  _tlTouchGhost.style.visibility = '';
+
+  // 前のハイライト解除
+  document.querySelectorAll('.tl-slot-touch-over').forEach(s => s.classList.remove('tl-slot-touch-over'));
+
+  if (el) {
+    const slot = el.closest('.tl-slot');
+    if (slot) slot.classList.add('tl-slot-touch-over');
+  }
+}
+
+function tlTouchDragEnd(e) {
+  if (_tlTouchTimer) { clearTimeout(_tlTouchTimer); _tlTouchTimer = null; }
+
+  // ゴースト削除
+  if (_tlTouchGhost) { _tlTouchGhost.remove(); _tlTouchGhost = null; }
+  document.querySelectorAll('.tl-slot-touch-over').forEach(s => s.classList.remove('tl-slot-touch-over'));
+
+  if (!_tlDragging) {
+    // 長押しなし→通常タップ→時間ピッカー
+    _tlTouchTaskId = null;
+    _tlDragging = false;
+    return;
+  }
+
+  const touch = e.changedTouches[0];
+  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  if (el && _tlTouchTaskId) {
+    const slot = el.closest('.tl-slot');
+    if (slot) {
+      const hour = slot.getAttribute('data-hour');
+      if (hour) {
+        assignTaskToTimeslot(_tlTouchTaskId, hour);
+        // 成功フィードバック
+        if (navigator.vibrate) navigator.vibrate([20, 30, 20]);
+      }
+    } else {
+      // スロット外にドロップ→ピッカーを開く
+      showTimeslotPicker(_tlTouchTaskId);
+    }
+  }
+
+  _tlTouchTaskId = null;
+  _tlDragging = false;
 }
