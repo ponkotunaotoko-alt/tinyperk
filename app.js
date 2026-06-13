@@ -1358,6 +1358,17 @@ function switchTab(tab) {
   const _mc = document.querySelector('.main-content');
   if (_mc) _mc.scrollTop = 0;
   window.scrollTo(0, 0);
+
+  // その他セクション: 対象タブなら自動展開
+  const _moreTabs = ['contacts','goals','expenses','ideas','deals'];
+  const _moreSection = document.getElementById('sidebar-more-section');
+  const _moreBtn = document.getElementById('sidebar-more-btn');
+  if (_moreSection && _moreBtn) {
+    if (_moreTabs.includes(tab)) {
+      _moreSection.style.display = 'block';
+      _moreBtn.setAttribute('aria-expanded','true');
+    }
+  }
   
   document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(item => {
     if (item.getAttribute('data-tab') === tab) {
@@ -1562,6 +1573,20 @@ function renderDashboard() {
 
   // ── 週クイックカード ──
   renderDashboardWeekQuick();
+
+  // ── 月末請求リマインダー ──
+  checkInvoiceReminder();
+
+  // ── 感情コピー（稼働時間の下） ──
+  const thisMonth = todayStr.slice(0,7);
+  const monthHours = state.timecards
+    .filter(tc => tc.date.startsWith(thisMonth))
+    .reduce((s,tc) => s+(tc.totalHours||0), 0);
+  const emotionalEl = document.getElementById('dash-emotional-copy');
+  if (emotionalEl) emotionalEl.textContent = getEmotionalHoursCopy(todayCard?.totalHours||0, monthHours);
+
+  // ── 今日の最優先3件 ──
+  renderTop3Tasks(todayStr);
 }
 
 function renderDashboardWeekQuick() {
@@ -1851,11 +1876,13 @@ function clockOut() {
 }
 
 function clockInFromJournal() {
+  if (navigator.vibrate) navigator.vibrate([30, 50, 100]);
   clockIn();
   renderJournal();
 }
 
 function clockOutFromJournal() {
+  if (navigator.vibrate) navigator.vibrate([30, 50, 30, 50, 100]);
   clockOut();
   renderJournal();
 }
@@ -3816,6 +3843,7 @@ function createTaskCard(task) {
   const card = document.createElement('div');
   card.className = `task-card ${task.status === 'completed' ? 'completed-task' : ''} ${task.status === 'revision' ? 'revision-task' : ''}`;
   card.setAttribute('data-status', task.status);
+  card._prevStatus = task.status;
   if (task.isCompressed) card.classList.add('compressed-alert');
   card.setAttribute('data-id', task.id);
   
@@ -4534,6 +4562,7 @@ function openEditTaskModal(taskId) {
   if (_unschEditEl) { _unschEditEl.checked = !!task.isUnscheduled; _toggleUnscheduledDate(!!task.isUnscheduled); }
   document.getElementById('task-due-date').value = task.dueDate || '';
   document.getElementById('task-client').value = task.client;
+  setTimeout(updateSamePriceHint, 80);
   document.getElementById('task-amount').value = task.amount;
   document.getElementById('task-estimated-hours').value = task.estimatedHours || '';
   const prioEl = document.getElementById('task-priority');
@@ -4607,6 +4636,16 @@ function autoSaveTask() {
     task.completedAt = getLocalDateStr();
     if (state.activeTimerTaskId === id) pauseTaskTimer();
     state._pendingReportTask = task;
+    // 完了スタンプアニメーション
+    setTimeout(() => {
+      const card = document.querySelector(`[data-task-id="${id}"]`);
+      if (card) {
+        card.style.position = 'relative';
+        card.classList.add('stamp-complete-anim');
+        if (navigator.vibrate) navigator.vibrate([20, 40, 60]);
+        setTimeout(() => card.classList.remove('stamp-complete-anim'), 700);
+      }
+    }, 100);
   } else if (newStatus !== 'completed') {
     task.completedAt = null;
   }
@@ -6385,6 +6424,7 @@ function renderContactList() {
         <div class="contact-right">
           ${tag && tag.key !== 'all' ? `<span class="contact-tag" style="background:${tag.color}22;color:${tag.color}">${tag.label}</span>` : ''}
           ${c.followUpDate ? `<div class="contact-followup ${overdue?'overdue':soon?'soon':''}">${overdue?'⚠️ ':soon?'⏰ ':'📅 '}${c.followUpDate.slice(5)}</div>` : ''}
+          ${getClientRelationBadge(c.name)}
         </div>
       </div>`;
   }).join('');
@@ -8440,3 +8480,476 @@ function tlTouchDragEnd(e) {
   _tlTouchTaskId = null;
   _tlDragging = false;
 }
+
+// ─── シェイクでひらめきメモ ────────────────────────────────────────────────
+(function() {
+  let _lastX = 0, _lastY = 0, _lastZ = 0;
+  let _shakeTs = 0;
+  const THRESHOLD = 18;
+  const COOLDOWN  = 1500;
+
+  function onMotion(e) {
+    const acc = e.accelerationIncludingGravity || e.acceleration;
+    if (!acc) return;
+    const { x=0, y=0, z=0 } = acc;
+    const delta = Math.abs(x - _lastX) + Math.abs(y - _lastY) + Math.abs(z - _lastZ);
+    _lastX = x; _lastY = y; _lastZ = z;
+    const now = Date.now();
+    if (delta > THRESHOLD && now - _shakeTs > COOLDOWN) {
+      _shakeTs = now;
+      openShakeMemo();
+    }
+  }
+
+  // iOS13+ requires permission
+  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    // 初回タップ時にパーミッション取得
+    document.addEventListener('touchend', async function _once() {
+      document.removeEventListener('touchend', _once);
+      try {
+        const perm = await DeviceMotionEvent.requestPermission();
+        if (perm === 'granted') window.addEventListener('devicemotion', onMotion);
+      } catch(e) {}
+    }, { once: false });
+  } else if (typeof DeviceMotionEvent !== 'undefined') {
+    window.addEventListener('devicemotion', onMotion);
+  }
+})();
+
+function openShakeMemo() {
+  const overlay = document.getElementById('shake-memo-overlay');
+  const text    = document.getElementById('shake-memo-text');
+  if (!overlay) return;
+  // すでに何かモーダルが開いていれば無視
+  if (document.querySelector('.modal-overlay.active')) return;
+  overlay.classList.add('active');
+  setTimeout(() => text?.focus(), 300);
+  if (navigator.vibrate) navigator.vibrate(30);
+}
+
+function closeShakeMemo() {
+  const overlay = document.getElementById('shake-memo-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+function saveShakeMemo() {
+  const text = document.getElementById('shake-memo-text')?.value.trim();
+  if (!text) { closeShakeMemo(); return; }
+  // ひらめきメモに保存
+  if (!state.ideas) state.ideas = [];
+  state.ideas.unshift({
+    id: 'idea_' + Date.now(),
+    text,
+    createdAt: getLocalDateStr(),
+    tags: [],
+  });
+  localStorage.setItem('tinyperk_ideas', JSON.stringify(state.ideas));
+  document.getElementById('shake-memo-text').value = '';
+  closeShakeMemo();
+  showToast('💡 メモを保存しました');
+}
+
+// ─── 貼り付けCTA ─────────────────────────────────────────────────────────
+async function openPasteCTA() {
+  // クリップボードを読み取り試行
+  let text = '';
+  try {
+    text = await navigator.clipboard.readText();
+  } catch(e) {}
+
+  // タスク追加モーダルを開いてAI解析エリアを表示
+  openAddTaskModal();
+  setTimeout(() => {
+    const toggleBtn = document.getElementById('btn-ai-parse-toggle');
+    const area = document.getElementById('ai-parse-section');
+    if (area && area.style.display === 'none') toggleAiParseArea();
+    if (text) {
+      const pasteEl = document.getElementById('ai-paste-text');
+      if (pasteEl) pasteEl.value = text;
+    }
+  }, 200);
+}
+
+// ─── 月末請求リマインダー ─────────────────────────────────────────────────
+function checkInvoiceReminder() {
+  const banner = document.getElementById('invoice-reminder-banner');
+  if (!banner) return;
+  const today = new Date();
+  const dayOfMonth = today.getDate();
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate();
+  const daysLeft = daysInMonth - dayOfMonth;
+  // 月末5日以内 かつ 完了済み未請求タスクがある場合
+  if (daysLeft <= 5) {
+    const thisMonth = getLocalDateStr().slice(0,7);
+    const unpaid = state.tasks.filter(t =>
+      t.status === 'completed' &&
+      t.amount > 0 &&
+      t.completedAt?.startsWith(thisMonth)
+    );
+    if (unpaid.length > 0) {
+      const total = unpaid.reduce((s,t) => s+(t.amount||0), 0);
+      const sub = document.getElementById('invoice-reminder-sub');
+      if (sub) sub.textContent = `${unpaid.length}件 ¥${total.toLocaleString()} — 月末まであと${daysLeft}日`;
+      banner.classList.add('visible');
+      return;
+    }
+  }
+  banner.classList.remove('visible');
+}
+
+// ─── 感情コピー：稼働時間 ────────────────────────────────────────────────
+function getEmotionalHoursCopy(hours, monthHours) {
+  if (!hours && !monthHours) return '';
+  const h = monthHours || hours;
+  const perDay = (h / new Date().getDate()).toFixed(1);
+  if (h < 20) return `まだ余裕がありそうです。無理せず進めましょう。`;
+  if (h < 50) return `いいペースです。1日平均 ${perDay}h 。`;
+  if (h < 80) return `よく働いています。休憩も仕事のうちです。`;
+  return `今月 ${h.toFixed(1)}h — 少しペースを落とせますか？`;
+}
+
+// ─── 前回と同じ金額 ─────────────────────────────────────────────────────
+function fillSamePrice(clientName) {
+  const client = clientName || document.getElementById('task-client')?.value.trim();
+  if (!client) return;
+  const prev = state.tasks
+    .filter(t => t.client === client && t.amount > 0)
+    .sort((a,b) => (b.id||'').localeCompare(a.id||''))[0];
+  if (!prev) { showToast('前回の金額が見つかりません'); return; }
+  const inp = document.getElementById('task-amount');
+  if (inp) {
+    inp.value = prev.amount;
+    inp.classList.add('field-highlight');
+    setTimeout(() => inp.classList.remove('field-highlight'), 800);
+  }
+}
+
+function updateSamePriceHint() {
+  const hint = document.getElementById('same-price-hint');
+  if (!hint) return;
+  const client = document.getElementById('task-client')?.value.trim();
+  if (!client) { hint.style.display = 'none'; return; }
+  const prev = state.tasks
+    .filter(t => t.client === client && t.amount > 0)
+    .sort((a,b) => (b.id||'').localeCompare(a.id||''))[0];
+  if (prev) {
+    hint.style.display = 'inline-flex';
+    hint.textContent = `前回と同じ ¥${prev.amount.toLocaleString()}`;
+    hint.onclick = () => fillSamePrice(client);
+  } else {
+    hint.style.display = 'none';
+  }
+}
+
+// ─── クライアント関係スコア ──────────────────────────────────────────────
+function getClientRelationBadge(clientName) {
+  if (!clientName) return '';
+  const tasks = state.tasks.filter(t => t.client === clientName);
+  if (tasks.length === 0) return '';
+  const lastTask = tasks.sort((a,b) => (b.completedAt||b.dueDate||'').localeCompare(a.completedAt||a.dueDate||''))[0];
+  const lastDate = lastTask.completedAt || lastTask.dueDate || '';
+  if (!lastDate) return '';
+  const daysDiff = Math.floor((Date.now() - new Date(lastDate)) / 86400000);
+  if (daysDiff <= 30) return `<span class="client-relation-badge client-relation-hot">🔥 ${daysDiff}日前</span>`;
+  if (daysDiff <= 90) return `<span class="client-relation-badge client-relation-warm">📅 ${daysDiff}日前</span>`;
+  return `<span class="client-relation-badge client-relation-cold">💤 ${daysDiff}日前</span>`;
+}
+
+// ─── 今日の最優先3件 ───────────────────────────────────────────────────────
+function renderTop3Tasks(todayStr) {
+  const el = document.getElementById('dash-top3-list');
+  if (!el) return;
+
+  const priorityOrder = { 'high': 0, 'medium': 1, 'low': 2, '': 3 };
+  const statusOrder = { 'in-progress': 0, 'revision': 1, 'not-started': 2 };
+
+  const candidates = state.tasks
+    .filter(t => t.status !== 'completed')
+    .sort((a, b) => {
+      // 1. 期日が今日のものを優先
+      const aDue = a.dueDate === todayStr ? 0 : 1;
+      const bDue = b.dueDate === todayStr ? 0 : 1;
+      if (aDue !== bDue) return aDue - bDue;
+      // 2. ステータス順
+      const aSt = statusOrder[a.status] ?? 9;
+      const bSt = statusOrder[b.status] ?? 9;
+      if (aSt !== bSt) return aSt - bSt;
+      // 3. 優先度順
+      return (priorityOrder[a.priority||''] ?? 3) - (priorityOrder[b.priority||''] ?? 3);
+    })
+    .slice(0, 3);
+
+  if (candidates.length === 0) {
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;padding:0.5rem 0;">🎉 未完了タスクはありません</div>';
+    return;
+  }
+
+  const statusLabel = { 'not-started': 'PENDING', 'in-progress': 'IN PROGRESS', 'revision': 'REVISION' };
+  const ranks = ['Ⅰ', 'Ⅱ', 'Ⅲ'];
+  el.innerHTML = candidates.map((t, i) => `
+    <div class="top3-card" onclick="openEditTaskModal('${t.id}')">
+      <span class="top3-rank">${ranks[i]}</span>
+      <div class="top3-body">
+        <div class="top3-name">${escapeHtml(t.name)}</div>
+        <div class="top3-meta">
+          ${t.client ? `👤 ${escapeHtml(t.client)} &nbsp;` : ''}
+          ${t.dueDate ? `📅 ${t.dueDate}` : '日程未定'}
+          &nbsp;
+          <span style="color:var(--primary);font-size:0.7rem;">${statusLabel[t.status]||t.status}</span>
+        </div>
+      </div>
+      ${t.amount ? `<span style="font-family:var(--font-vintage);color:var(--success);font-size:0.85rem;">¥${t.amount.toLocaleString()}</span>` : ''}
+    </div>`).join('');
+}
+
+// ─── サイドバー「その他」トグル ──────────────────────────────────────────
+function toggleSidebarMore() {
+  const more = document.getElementById('sidebar-more-section');
+  const btn  = document.getElementById('sidebar-more-btn');
+  if (!more) return;
+  const open = more.style.display !== 'none';
+  more.style.display = open ? 'none' : 'block';
+  if (btn) btn.setAttribute('aria-expanded', String(!open));
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CHRONO TRIGGER × TINYPERK  — 時の旅人 UI  v77
+// ═══════════════════════════════════════════════════════════
+
+// ─── 1. オープニングアニメーション ────────────────────────────────────────
+function initOpeningAnimation() {
+  const overlay = document.getElementById('opening-overlay');
+  if (!overlay) return;
+
+  // 背景に星を描く（CSS駆動 — JSは星描画とdisplay:none後処理だけ）
+  const canvas = document.getElementById('opening-stars');
+  if (canvas) {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+    for (let i = 0; i < 200; i++) {
+      const x = Math.random() * canvas.width;
+      const y = Math.random() * canvas.height;
+      const r = Math.random() * 1.6 + 0.4;
+      const a = Math.random() * 0.8 + 0.2;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = i % 8 === 0
+        ? `rgba(74,158,255,${a})`
+        : `rgba(200,169,110,${a})`;
+      ctx.fill();
+    }
+  }
+
+  // CSSアニメが終わった後（3.65s）にdisplay:noneで完全除去
+  setTimeout(() => overlay.classList.add('hidden'), 3700);
+}
+
+// ─── 2. 時間帯テーマ（ダッシュボード背景グラデ） ─────────────────────────
+const TIME_THEMES = [
+  // [開始時, 背景色, グラデ終端色, アクセント名]
+  { h:  0, bg: '#060610', c1: '#0f0a2a', label: '時の最果て' },
+  { h:  5, bg: '#0a0820', c1: '#1a0a3e', label: '夜明け前' },
+  { h:  7, bg: '#0f1a08', c1: '#1a3010', label: '太陽の石' },
+  { h: 12, bg: '#1a1005', c1: '#2e1e08', label: '午後の光' },
+  { h: 17, bg: '#200a04', c1: '#3a1208', label: 'ガルディア城の夕焼け' },
+  { h: 19, bg: '#060a14', c1: '#0a1428', label: '約束の地・静寂' },
+];
+
+function updateTimeBasedTheme() {
+  const h = new Date().getHours();
+  const theme = [...TIME_THEMES].reverse().find(t => h >= t.h) || TIME_THEMES[0];
+  const root = document.documentElement;
+  root.style.setProperty('--time-hour-bg', theme.bg);
+  root.style.setProperty('--time-hour-c1', theme.c1);
+}
+
+// ─── 3. 星フィールド（稼働時間に連動） ───────────────────────────────────
+function renderStarfield() {
+  const canvas = document.getElementById('starfield-canvas');
+  if (!canvas) return;
+
+  // 今日の稼働時間（分）を算出
+  const today = getLocalDateStr();
+  const log = (state.workLogs || []).find(l => l.date === today);
+  let minutesWorked = 0;
+  if (log && log.clockIn) {
+    const inMs  = new Date(`${today}T${log.clockIn}`).getTime();
+    const outMs = log.clockOut ? new Date(`${today}T${log.clockOut}`).getTime() : Date.now();
+    minutesWorked = Math.max(0, (outMs - inMs) / 60000);
+  }
+
+  // 8時間（480分）で満天：最大220個
+  const maxStars = 220;
+  const starCount = Math.min(maxStars, Math.floor((minutesWorked / 480) * maxStars));
+
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (let i = 0; i < starCount; i++) {
+    const x  = Math.random() * canvas.width;
+    const y  = Math.random() * canvas.height;
+    const sz = Math.random() < 0.1 ? 2 : 1; // 10%は大きめ
+    const a  = Math.random() * 0.5 + 0.1;
+    // 正方形ドット（16bit風）
+    ctx.fillStyle = i % 7 === 0
+      ? `rgba(74,158,255,${a})`     // たまに青
+      : `rgba(200,169,110,${a})`;   // 基本ゴールド
+    ctx.fillRect(x, y, sz, sz);
+  }
+
+  // ダッシュボード画面のときだけ表示
+  if (state.activeTab === 'dashboard') {
+    canvas.classList.add('visible');
+    canvas.style.display = 'block';
+  } else {
+    canvas.classList.remove('visible');
+  }
+}
+
+// ─── 4. タイムゲートトランジション ───────────────────────────────────────
+function triggerTimeGate(callback) {
+  const el = document.getElementById('timegate-overlay');
+  if (!el) { if (callback) callback(); return; }
+  el.classList.remove('active');
+  void el.offsetWidth; // reflow
+  el.classList.add('active');
+  // 中間点でコンテンツ切替
+  setTimeout(() => { if (callback) callback(); }, 110);
+  setTimeout(() => el.classList.remove('active'), 350);
+}
+
+// ─── 5. 正方形ピクセルパーティクル ───────────────────────────────────────
+function spawnPixelParticles(x, y) {
+  const canvas = document.getElementById('pixel-particle-canvas');
+  if (!canvas) return;
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const ctx = canvas.getContext('2d');
+
+  const COLORS = ['#c8a96e','#f0c060','#4a9eff','#a0d080','#f08040','#e8e0d0'];
+  const particles = Array.from({length: 24}, () => ({
+    x, y,
+    vx: (Math.random() - 0.5) * 9,
+    vy: (Math.random() - 0.5) * 9 - 2,
+    size: Math.floor(Math.random() * 5) + 3,
+    color: COLORS[Math.floor(Math.random() * COLORS.length)],
+    life: 1,
+    decay: Math.random() * 0.04 + 0.025,
+    gravity: 0.18,
+  }));
+
+  let raf;
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let alive = false;
+    particles.forEach(p => {
+      if (p.life <= 0) return;
+      alive = true;
+      p.x  += p.vx;
+      p.y  += p.vy;
+      p.vy += p.gravity;
+      p.life -= p.decay;
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(Math.round(p.x - p.size/2), Math.round(p.y - p.size/2), p.size, p.size);
+    });
+    ctx.globalAlpha = 1;
+    if (alive) raf = requestAnimationFrame(draw);
+    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  if (raf) cancelAnimationFrame(raf);
+  draw();
+}
+
+// ─── 6. PUNCH リプルエフェクト ────────────────────────────────────────────
+function triggerPunchRipple(btn) {
+  if (!btn) return;
+  const ripple = document.createElement('span');
+  ripple.className = 'punch-ripple';
+  const h = new Date().getHours();
+  // 時間帯でリプル色変化
+  const color = h >= 5 && h < 19
+    ? 'rgba(200,169,110,0.55)'   // 昼：ゴールド
+    : 'rgba(74,158,255,0.55)';   // 夜：タイムブルー
+  ripple.style.setProperty('--ripple-color', color);
+  ripple.style.left = '50%';
+  ripple.style.top  = '50%';
+  btn.appendChild(ripple);
+  setTimeout(() => ripple.remove(), 800);
+}
+
+// ─── 7. switchTab に タイムゲート + 星フィールド連携 ─────────────────────
+// 既存switchTabをラップ（タイムゲートエフェクト付き）
+(function() {
+  const _origFn = switchTab; // スコープ内で直接参照
+  switchTab = function(tab) {
+    triggerTimeGate(() => _origFn.call(this, tab));
+    // 星フィールド表示切替
+    setTimeout(() => {
+      const sf = document.getElementById('starfield-canvas');
+      if (sf) {
+        if (tab === 'dashboard') {
+          sf.style.display = 'block';
+          renderStarfield();
+          setTimeout(() => sf.classList.add('visible'), 80);
+        } else {
+          sf.classList.remove('visible');
+          setTimeout(() => { sf.style.display = 'none'; }, 1500);
+        }
+      }
+    }, 140);
+  };
+  window.switchTab = switchTab;
+})();
+
+// ─── 8. PUNCH IN/OUT にリプル + 時間帯テーマ更新 ─────────────────────────
+const _origClockIn  = window.clockIn;
+const _origClockOut = window.clockOut;
+if (typeof clockIn === 'function') {
+  const _ci = clockIn;
+  window.clockIn = function() {
+    triggerPunchRipple(document.getElementById('btn-clock-in'));
+    updateTimeBasedTheme();
+    _ci();
+    setTimeout(renderStarfield, 300);
+  };
+}
+if (typeof clockOut === 'function') {
+  const _co = clockOut;
+  window.clockOut = function() {
+    triggerPunchRipple(document.getElementById('btn-clock-out'));
+    updateTimeBasedTheme();
+    _co();
+    setTimeout(renderStarfield, 300);
+  };
+}
+
+// ─── 9. タスク完了時にピクセルパーティクル ───────────────────────────────
+const _origSaveTaskEdit = window.saveTaskEdit;
+if (typeof saveTaskEdit === 'function') {
+  const _ste = saveTaskEdit;
+  window.saveTaskEdit = function() {
+    const beforeStatus = (state.tasks.find(t => t.id === state.editingTaskId) || {}).status;
+    _ste();
+    const afterTask = state.tasks.find(t => t.id === state.editingTaskId);
+    if (afterTask && afterTask.status === 'completed' && beforeStatus !== 'completed') {
+      // 画面中央付近にパーティクル
+      const cx = window.innerWidth  / 2 + (Math.random() - 0.5) * 80;
+      const cy = window.innerHeight / 2 + (Math.random() - 0.5) * 60;
+      setTimeout(() => spawnPixelParticles(cx, cy), 200);
+    }
+  };
+}
+
+// ─── 10. 初期化 — DOMContentLoaded ───────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initOpeningAnimation();
+  updateTimeBasedTheme();
+  // 1分ごとに時間帯テーマを更新
+  setInterval(updateTimeBasedTheme, 60000);
+  // ダッシュボード初期表示の星
+  setTimeout(renderStarfield, 400);
+});

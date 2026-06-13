@@ -4,6 +4,8 @@
 
 /* ===== MINIMAL LIGHT DESIGN SYSTEM ===== */
 :root {
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   /* Brand — Vintage Gold */
   --primary: #c8a96e;
   --primary-glow: rgba(200,169,110,0.15);
@@ -296,7 +298,7 @@ h1, h2, h3, h4 {
   cursor: pointer;
   transition: transform 0.12s cubic-bezier(0.34,1.56,0.64,1),
               box-shadow 0.12s ease,
-              background 0.2s ease,
+              background 0.28s var(--ease-out),
               opacity 0.12s ease;
   font-family: var(--font-hand);
   box-shadow: var(--pop-shadow);
@@ -1527,7 +1529,7 @@ h1, h2, h3, h4 {
   padding: 0.85rem 1.1rem;
   font-size: 16px; /* iOS zoom防止 */
   font-family: inherit;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: border-color 0.28s var(--ease-out), box-shadow 0.18s ease;
   width: 100%;
   min-height: 52px; /* Large touch target */
 }
@@ -1582,7 +1584,7 @@ h1, h2, h3, h4 {
   font-weight: 700;
   font-size: 0.9rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.28s var(--ease-out);
   font-family: var(--font-head);
   user-select: none;
 }
@@ -2373,7 +2375,7 @@ h1, h2, h3, h4 {
   align-items: center;
   justify-content: center;
   gap: 0.3rem;
-  transition: width 0.2s ease;
+  transition: width 0.28s var(--ease-out);
   z-index: 0;
 }
 
@@ -4066,7 +4068,7 @@ h1, h2, h3, h4 {
   font-weight: 600;
   color: var(--primary);
   box-shadow: var(--pop-shadow-hover);
-  transition: transform 0.2s ease;
+  transition: transform 0.28s var(--ease-out);
   pointer-events: none;
 }
 #ptr-indicator.ptr-visible {
@@ -4259,6 +4261,8 @@ h1, h2, h3, h4 {
 /* ---- COMPREHENSIVE SCROLL FIX ---- */
 /* iOS: use dynamic viewport height everywhere */
 :root {
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --dvh: 1dvh; /* dynamic viewport height — supported iOS 15.4+ / Chrome 108+ */
 }
 
@@ -4299,7 +4303,7 @@ body.modal-open {
   touch-action: pan-y;
 }
 .task-row-swipe {
-  transition: transform 0.2s ease;
+  transition: transform 0.28s var(--ease-out);
   will-change: transform;
 }
 .task-row-delete-bg {
@@ -5598,17 +5602,7 @@ body.drawer-open { overflow: hidden; }
    VINTAGE FINAL POLISH — v64
    ============================================================ */
 
-/* ── Paper grain overlay (全画面) ── */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9990;
-  opacity: 0.028;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 200px 200px;
-}
+/* body::after — v77統合版に移行 */
 
 /* ── Warm page background vignette ── */
 body {
@@ -5618,7 +5612,7 @@ body {
 
 /* ── Card hover lift ── */
 .report-card {
-  transition: transform 0.18s ease, box-shadow 0.18s ease !important;
+  transition: transform 0.28s var(--ease-out), box-shadow 0.18s ease !important;
   cursor: default;
 }
 
@@ -5646,7 +5640,7 @@ body {
 /* ── Task cards — index card style ── */
 .task-card {
   border-left: 4px solid var(--border-color) !important;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-left-color 0.2s ease !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-left-color 0.28s var(--ease-out) !important;
 }
 
 .task-card[data-status="not-started"] { border-left-color: var(--text-muted) !important; }
@@ -6108,4 +6102,833 @@ body {
 .tl-quickbar-btn:active {
   transform: scale(0.96);
   border-color: var(--primary) !important;
+}
+
+/* ===== GOLD STAMP COMPLETION ANIMATION ===== */
+@keyframes goldInkBloom {
+  0%   { transform: scale(0.3) rotate(-8deg); opacity: 0; filter: blur(4px); }
+  40%  { transform: scale(1.18) rotate(2deg); opacity: 1; filter: blur(0); }
+  65%  { transform: scale(0.96) rotate(-1deg); }
+  80%  { transform: scale(1.04) rotate(0.5deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes goldRipple {
+  0%   { transform: scale(0); opacity: 0.6; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+@keyframes goldInkSpread {
+  0%   { box-shadow: 0 0 0 0 rgba(200,169,110,0.8); }
+  50%  { box-shadow: 0 0 0 12px rgba(200,169,110,0.25); }
+  100% { box-shadow: 0 0 0 24px rgba(200,169,110,0); }
+}
+
+.stamp-complete-anim {
+  animation: goldInkBloom 0.55s var(--spring) forwards,
+             goldInkSpread 0.6s ease-out forwards;
+}
+.stamp-complete-anim::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  animation: goldRipple 0.6s ease-out forwards;
+  background: rgba(200,169,110,0.3);
+  pointer-events: none;
+}
+
+/* ===== PUNCH IN/OUT 大型円形ボタン ===== */
+.punch-circle-wrap {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 2rem;
+  margin: 1rem 0;
+}
+.punch-circle-btn {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 3px solid var(--primary);
+  background: var(--bg-card);
+  color: var(--primary);
+  font-family: var(--font-vintage);
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  box-shadow:
+    inset 0 2px 4px rgba(0,0,0,0.3),
+    0 4px 12px rgba(0,0,0,0.4),
+    0 0 0 1px rgba(200,169,110,0.15);
+  transition: all 0.28s var(--spring);
+  position: relative;
+  overflow: hidden;
+}
+.punch-circle-btn:active {
+  transform: scale(0.93);
+  box-shadow:
+    inset 0 4px 8px rgba(0,0,0,0.5),
+    0 1px 4px rgba(0,0,0,0.3);
+}
+.punch-circle-btn.punch-in {
+  border-color: var(--primary);
+  background: linear-gradient(145deg, var(--bg-card), rgba(200,169,110,0.08));
+}
+.punch-circle-btn.punch-out {
+  border-color: var(--danger, #ef4444);
+  color: var(--danger, #ef4444);
+}
+.punch-circle-btn svg {
+  width: 28px;
+  height: 28px;
+}
+.punch-circle-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: var(--font-vintage);
+  letter-spacing: 0.1em;
+}
+
+/* ===== SHAKE MEMO フローティング ===== */
+@keyframes shakeMemoSlideIn {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes shakeMemoSlideOut {
+  from { transform: translateY(0); opacity: 1; }
+  to   { transform: translateY(100%); opacity: 0; }
+}
+#shake-memo-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 9990;
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+}
+#shake-memo-overlay.active {
+  display: flex;
+  animation: shakeMemoSlideIn 0.35s var(--spring);
+}
+#shake-memo-box {
+  width: 100%;
+  max-width: 500px;
+  background: var(--bg-card);
+  border-radius: 16px 16px 0 0;
+  padding: 1.25rem 1.5rem 2rem;
+  border-top: 3px solid var(--primary);
+  position: relative;
+}
+.shake-memo-handle {
+  width: 40px;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 2px;
+  margin: 0 auto 1rem;
+}
+.shake-memo-title {
+  font-family: var(--font-vintage);
+  font-size: 1rem;
+  letter-spacing: 0.1em;
+  color: var(--primary);
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+#shake-memo-text {
+  width: 100%;
+  min-height: 100px;
+  resize: vertical;
+}
+.shake-memo-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+/* ===== PASTE CTA ===== */
+.paste-cta-btn {
+  width: 100%;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, rgba(200,169,110,0.12), rgba(200,169,110,0.04));
+  border: 2px dashed var(--primary);
+  border-radius: var(--radius-md);
+  color: var(--primary);
+  font-family: var(--font-vintage);
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  transition: all 0.28s var(--spring);
+}
+.paste-cta-btn:active,
+.paste-cta-btn:hover {
+  background: linear-gradient(135deg, rgba(200,169,110,0.2), rgba(200,169,110,0.08));
+  transform: scale(1.01);
+}
+
+/* ===== 感情コピー 稼働時間 ===== */
+.emotional-hours-copy {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 0.3rem;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* ===== 前回と同じ金額 ===== */
+.same-price-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--primary);
+  cursor: pointer;
+  margin-top: 0.25rem;
+  border: 1px solid var(--primary);
+  border-radius: 2px;
+  padding: 0.15rem 0.5rem;
+  background: transparent;
+  font-family: var(--font-vintage);
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+}
+.same-price-hint:hover,
+.same-price-hint:active {
+  background: var(--primary);
+  color: var(--bg-dark);
+}
+
+/* ===== クライアント関係スコア ===== */
+.client-relation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 2px;
+  font-family: var(--font-vintage);
+  letter-spacing: 0.05em;
+}
+.client-relation-hot  { background: rgba(200,169,110,0.15); color: var(--primary); }
+.client-relation-warm { background: rgba(100,150,200,0.12); color: #7ab4d4; }
+.client-relation-cold { background: rgba(239,68,68,0.1); color: #f87171; }
+
+/* ===== 今日の最優先3件カード ===== */
+.top3-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  transition: all 0.28s var(--spring);
+}
+.top3-card:active,
+.top3-card:hover {
+  transform: translateX(3px);
+  border-left-color: var(--primary);
+  background: rgba(200,169,110,0.06);
+}
+.top3-rank {
+  font-family: var(--font-vintage);
+  font-size: 1.4rem;
+  color: var(--primary);
+  opacity: 0.5;
+  min-width: 28px;
+  text-align: center;
+  line-height: 1;
+}
+.top3-body { flex: 1; min-width: 0; }
+.top3-name {
+  font-weight: 700;
+  font-size: 0.92rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.top3-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+
+/* ===== 月末請求リマインダー バナー ===== */
+#invoice-reminder-banner {
+  background: linear-gradient(135deg, rgba(200,169,110,0.15), rgba(200,169,110,0.05));
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+  display: none;
+  align-items: center;
+  gap: 0.75rem;
+}
+#invoice-reminder-banner.visible { display: flex; }
+.invoice-reminder-icon { font-size: 1.4rem; }
+.invoice-reminder-body { flex: 1; }
+.invoice-reminder-title {
+  font-family: var(--font-vintage);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  color: var(--primary);
+}
+.invoice-reminder-sub { font-size: 0.75rem; color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════
+   WORN VINTAGE 古着屋 — 使い込まれた質感 v76
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── 1. 紙の色をより焼けた・くたびれた色に ── */
+:root {
+  --bg-dark:      #ede4cc;
+  --bg-card:      #f0e6ce;
+  --bg-secondary: #e6dac0;
+  --bg-input:     #e9dfc5;
+  --bg-hover:     #dfd3b8;
+  --border-color: #c0a878;
+  --worn-ink: rgba(26,18,8,0.85);
+
+  /* 染みカラー */
+  --stain-a: rgba(120,78,30,0.07);
+  --stain-b: rgba(90,55,20,0.05);
+  --stain-c: rgba(180,140,70,0.04);
+  --stain-ring: rgba(100,65,20,0.06);
+}
+[data-theme="dark"] {
+  --bg-dark: #141210;
+  --bg-card: #1e1b16;
+  --bg-secondary: #252118;
+  --bg-input: #252118;
+  --bg-hover: #2c2820;
+  --border-color: #3c3528;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-manual-theme]) {
+    --bg-dark: #141210;
+    --bg-card: #1e1b16;
+    --bg-secondary: #252118;
+    --bg-input: #252118;
+    --bg-hover: #2c2820;
+    --border-color: #3c3528;
+  }
+}
+
+/* ── 2. ページ全体グレイン（フィルム粒子） ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9997;
+  opacity: 0.055;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 300px 300px;
+}
+
+/* ── 3. カード — くたびれた影 + 染み ── */
+.report-card,
+.attendance-card,
+.dashboard-card {
+  box-shadow:
+    0 1px 0 rgba(26,18,8,0.12),
+    0 4px 10px rgba(26,18,8,0.10),
+    0 8px 20px rgba(26,18,8,0.06),
+    inset 0 1px 0 rgba(255,248,230,0.5),
+    inset 0 -1px 0 rgba(26,18,8,0.07);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 染み・焼け（コーヒーリング・湿気） */
+.report-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 55% 35% at 88% 12%, var(--stain-a) 0%, transparent 100%),
+    radial-gradient(ellipse 40% 50% at 7% 88%, var(--stain-b) 0%, transparent 100%),
+    radial-gradient(ellipse 30% 25% at 60% 70%, var(--stain-c) 0%, transparent 100%);
+  border-radius: inherit;
+}
+
+/* コーヒーリングの輪っか — 一部のカードに */
+.report-card:nth-child(odd)::before {
+  background:
+    radial-gradient(ellipse 55% 35% at 88% 12%, var(--stain-a) 0%, transparent 100%),
+    radial-gradient(ellipse 40% 50% at 7% 88%, var(--stain-b) 0%, transparent 100%),
+    radial-gradient(circle at 78% 82%, transparent 18px, var(--stain-ring) 19px, var(--stain-ring) 24px, transparent 25px),
+    radial-gradient(circle at 80% 80%, transparent 16px, var(--stain-ring) 17px, var(--stain-ring) 22px, transparent 23px);
+}
+
+/* ── 4. 破れた端 — カード下部のジャギー ── */
+.report-card::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 0; right: 0;
+  height: 7px;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 7px 0, transparent 6px, var(--bg-dark) 6px),
+    radial-gradient(circle at 7px 0, transparent 5px, var(--bg-dark) 5px);
+  background-size: 14px 7px, 14px 7px;
+  background-position: 0 0, 7px 0;
+  background-repeat: repeat-x;
+  z-index: 2;
+}
+
+/* ── 5. インク滲み — 見出し ── */
+h1, h2, h3,
+.screen-title,
+.report-card h3,
+.section-title {
+  text-shadow:
+    1px 1px 0 rgba(26,18,8,0.07),
+    -0.5px 0   0 rgba(200,160,80,0.12),
+     0.5px 0.5px 2px rgba(26,18,8,0.04);
+}
+
+/* ── 6. ロゴ — 強めのインク擦れ ── */
+.logo-text,
+.sidebar-logo,
+#app-logo {
+  text-shadow:
+     1.5px  1.5px 0   rgba(26,18,8,0.15),
+    -0.5px  0     0   rgba(200,160,70,0.2),
+     0      0     4px rgba(200,160,70,0.1);
+  letter-spacing: 0.06em;
+}
+
+/* ── 7. サイドバー — 使い古した革の縞 ── */
+.sidebar {
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 28px,
+      rgba(26,18,8,0.015) 28px,
+      rgba(26,18,8,0.015) 30px
+    ),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+  background-size: auto, 200px 200px;
+}
+
+/* ── 8. ナビアイテム — スタンプ擦れ ── */
+.nav-item {
+  position: relative;
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border: 1px dashed rgba(200,169,110,0.3);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* ── 9. ボタン — スタンプ印 ── */
+.btn,
+.btn-primary,
+.btn-secondary {
+  position: relative;
+}
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border: 1px solid rgba(255,248,220,0.2);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* ── 10. PUNCH円形 — 使い込んだ刻印 ── */
+.punch-circle-btn {
+  background: var(--bg-card) !important;
+  box-shadow:
+    0 2px 0 rgba(26,18,8,0.25),
+    0 4px 12px rgba(26,18,8,0.12),
+    inset 0 1px 0 rgba(255,248,220,0.6),
+    inset 0 -2px 4px rgba(26,18,8,0.08);
+}
+.punch-circle-btn:active {
+  box-shadow:
+    0 0px 0 rgba(26,18,8,0.25),
+    0 1px 4px rgba(26,18,8,0.12),
+    inset 0 2px 6px rgba(26,18,8,0.2);
+}
+
+/* ── 11. 入力欄 — 使い込んだノート ── */
+.form-control,
+input[type="text"],
+input[type="number"],
+input[type="date"],
+textarea,
+select {
+  border-color: var(--border-color) !important;
+  box-shadow: inset 0 1px 3px rgba(26,18,8,0.08), inset 0 0 0 1px rgba(26,18,8,0.03);
+}
+
+/* ── 12. タスクカード — ヤレた紙タグ ── */
+.task-item,
+.tl-slot-card {
+  position: relative;
+  box-shadow:
+    0 1px 0 rgba(26,18,8,0.10),
+    0 2px 8px rgba(26,18,8,0.07),
+    inset 0 1px 0 rgba(255,248,220,0.4);
+}
+
+/* ── 13. 横の折れ目 — 一部カード ── */
+.report-card:nth-child(even) > *:first-child::after {
+  content: '';
+  display: block;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(26,18,8,0.06) 15%,
+    rgba(26,18,8,0.10) 50%,
+    rgba(26,18,8,0.06) 85%,
+    transparent 100%
+  );
+  margin: 0.5rem -1rem;
+  box-shadow: 0 1px 0 rgba(255,248,220,0.5);
+}
+
+/* ── 14. スクロールバー — 擦れた革 ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 0;
+  border-left: 1px solid rgba(255,248,220,0.2);
+  box-shadow: inset 0 0 2px rgba(26,18,8,0.2);
+}
+
+/* ── 15. セクション区切り — 折り目 ── */
+hr, .divider {
+  border: none;
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0px,
+    transparent 4px,
+    var(--border-color) 4px,
+    var(--border-color) 7px,
+    transparent 7px,
+    transparent 12px
+  );
+  opacity: 0.6;
+}
+
+/* ── 16. スタンプアニメ — インク溜まり強化 ── */
+@keyframes goldInkBloom {
+  0%   { transform: scale(0.3) rotate(-8deg);  opacity: 0; filter: blur(4px); }
+  40%  { transform: scale(1.12) rotate(2deg);  opacity: 0.9; filter: blur(0.5px); }
+  65%  { transform: scale(0.96) rotate(-1deg); opacity: 1;   filter: blur(0); }
+  80%  { transform: scale(1.03) rotate(0.5deg); }
+  100% { transform: scale(1)    rotate(0deg);  opacity: 1;   filter: blur(0); }
+}
+
+/* ── 17. 全体セピアフィルタ（ほんのわずか） ── */
+body {
+  filter: sepia(0.06) contrast(1.01);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CHRONO TRIGGER × TINYPERK  — 時の旅人 UI  v77
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── タイムゲートブルー変数 ── */
+:root {
+  --time-blue:      #4a9eff;
+  --time-blue-glow: rgba(74,158,255,0.22);
+  --time-deep:      #0a0a1a;
+  --time-hour-bg:   #0a0a1a;   /* JS で上書き */
+  --time-hour-c1:   #1a1040;
+  --font-mono: 'Courier New', 'SF Mono', monospace;
+}
+
+/* ── 時間・金額の等幅数字 ── */
+.log-value,
+#dash-total-hours,
+#dash-monthly-revenue,
+.amount-display,
+.invoice-amount,
+.tl-slot-actual,
+[id$="-val"],
+.stat-number {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: 0.04em;
+}
+
+/* ════════════════════════════════
+   オープニングオーバーレイ
+   ════════════════════════════════ */
+#opening-overlay {
+  position: fixed;
+  inset: 0;
+  background: #06060f;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  /* CSS駆動: 2.8秒後に自動フェードアウト */
+  animation: opening-auto-exit 0.85s cubic-bezier(0.22,1,0.36,1) 2.8s forwards;
+}
+@keyframes opening-auto-exit {
+  0%   { opacity:1; pointer-events:auto; }
+  100% { opacity:0; pointer-events:none; visibility:hidden; }
+}
+#opening-overlay.skip {
+  animation-duration: 0.01s;
+  animation-delay: 0s;
+}
+#opening-overlay.hidden {
+  display: none;
+}
+
+#opening-stars {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#opening-pendulum-wrap {
+  width: 60px;
+  height: 160px;
+  transform-origin: 30px 8px;
+  animation: pendulum-swing 1.4s cubic-bezier(0.37,0,0.63,1) infinite alternate;
+}
+@keyframes pendulum-swing {
+  from { transform: rotate(-22deg); }
+  to   { transform: rotate(22deg); }
+}
+
+#opening-logo {
+  font-family: var(--font-vintage);
+  font-size: clamp(2.8rem, 8vw, 5rem);
+  letter-spacing: 0.15em;
+  color: #c8a96e;
+  opacity: 0;
+  text-shadow:
+    0 0 30px rgba(200,169,110,0.4),
+    2px 2px 0 rgba(26,18,8,0.6),
+    -1px 0 0 rgba(200,130,50,0.3);
+  animation: ink-bleed-in 1s cubic-bezier(0.22,1,0.36,1) 1.0s forwards;
+  filter: blur(6px);
+}
+@keyframes ink-bleed-in {
+  0%   { opacity:0; filter:blur(10px) contrast(0.5); letter-spacing:0.35em; }
+  40%  { opacity:0.7; filter:blur(2px) contrast(1.1); }
+  100% { opacity:1; filter:blur(0) contrast(1); letter-spacing:0.15em; }
+}
+
+#opening-sub {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.4em;
+  color: rgba(200,169,110,0.5);
+  opacity: 0;
+  animation: fade-up-in 0.7s ease 1.6s forwards;
+  text-transform: uppercase;
+}
+@keyframes fade-up-in {
+  from { opacity:0; transform:translateY(8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* ════════════════════════════════
+   走査線レイヤー（ブラウン管質感）
+   ════════════════════════════════ */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9996;
+  /* 走査線 + グレイン統合 */
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(0,0,0,0.022) 3px,
+      rgba(0,0,0,0.022) 4px
+    ),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: auto, 300px 300px;
+  opacity: 0.9;
+  animation: scanline-drift 10s linear infinite;
+}
+@keyframes scanline-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 0 80px; }
+}
+
+/* ════════════════════════════════
+   ドットグリッド — スタンプ背景
+   ════════════════════════════════ */
+.report-card,
+.attendance-card,
+.dashboard-card {
+  background-image:
+    radial-gradient(circle, rgba(200,169,110,0.10) 1px, transparent 1px);
+  background-size: 10px 10px;
+}
+
+/* ════════════════════════════════
+   タイムゲートトランジション
+   ════════════════════════════════ */
+#timegate-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(90deg,
+    transparent 48%,
+    rgba(74,158,255,0.9) 50%,
+    rgba(200,169,110,0.7) 51%,
+    transparent 53%
+  );
+  z-index: 9990;
+  pointer-events: none;
+  opacity: 0;
+  transform: scaleX(0);
+  transform-origin: center;
+}
+#timegate-overlay.active {
+  animation: timegate-pass 0.32s cubic-bezier(0.22,1,0.36,1) forwards;
+}
+@keyframes timegate-pass {
+  0%   { opacity:0; transform:scaleX(0); }
+  30%  { opacity:1; transform:scaleX(1); }
+  70%  { opacity:1; transform:scaleX(1); }
+  100% { opacity:0; transform:scaleX(0); }
+}
+
+/* ════════════════════════════════
+   星フィールドcanvas — ダッシュボード
+   ════════════════════════════════ */
+#starfield-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 1.5s ease;
+  display: none;
+}
+#starfield-canvas.visible {
+  opacity: 0.55;
+}
+
+/* ════════════════════════════════
+   時間帯グラデーション — ダッシュボードヘッダ
+   ════════════════════════════════ */
+.screen-header-band {
+  position: relative;
+  overflow: hidden;
+}
+.screen-header-band::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, var(--time-hour-bg) 0%, var(--time-hour-c1) 100%);
+  opacity: 0.18;
+  pointer-events: none;
+  transition: background 2s ease, opacity 2s ease;
+  z-index: 0;
+}
+/* ダッシュボードのscreen-titleをバンドに */
+#screen-dashboard > .screen-title {
+  position: relative;
+  z-index: 1;
+}
+
+/* ════════════════════════════════
+   PUNCH リプルエフェクト
+   ════════════════════════════════ */
+.punch-ripple {
+  position: absolute;
+  border-radius: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -50%) scale(0);
+  background: var(--ripple-color, rgba(74,158,255,0.5));
+  pointer-events: none;
+  animation: punch-ripple-anim 0.7s cubic-bezier(0.22,1,0.36,1) forwards;
+}
+@keyframes punch-ripple-anim {
+  0%   { transform:translate(-50%,-50%) scale(0); opacity:0.8; }
+  100% { transform:translate(-50%,-50%) scale(18); opacity:0; }
+}
+
+/* punch-circle-btn は relative 必要 */
+.punch-circle-btn { overflow: hidden; }
+
+/* ════════════════════════════════
+   ピクセルパーティクルcanvas
+   ════════════════════════════════ */
+#pixel-particle-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9000;
+  width: 100%;
+  height: 100%;
+}
+
+/* ════════════════════════════════
+   時間表示 — ブルーアクセント
+   ════════════════════════════════ */
+.btn-clock.in  { border-color: var(--time-blue) !important; color: var(--time-blue) !important; }
+.btn-clock.in .btn-clock-main { color: var(--time-blue); }
+#dash-clock-in-val,
+#dash-clock-out-val,
+.tl-slot-sw-time,
+#dash-today-hours {
+  color: var(--time-blue);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ════════════════════════════════
+   ナビ active — タイムゲートグロー
+   ════════════════════════════════ */
+.nav-item.active {
+  position: relative;
+}
+.nav-item.active::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 20%;
+  height: 60%;
+  width: 2px;
+  background: var(--time-blue);
+  box-shadow: 0 0 8px var(--time-blue), 0 0 16px var(--time-blue-glow);
+  border-radius: 1px;
 }
