@@ -632,6 +632,11 @@
             <button class="tl-filter-btn" data-filter="revision">修正中</button>
             <button class="tl-filter-btn" data-filter="completed">完了</button>
           </div>
+          <!-- 完了フィルター選択時の月次セレクター -->
+          <div id="tasks-month-filter-row" style="display:none;" class="tasks-month-filter-row">
+            <span class="tasks-month-filter-label">📅 月を選択：</span>
+            <select id="tasks-month-select" class="form-control" style="width:auto;font-size:0.85rem;padding:0.3rem 0.7rem;height:auto;" onchange="onTaskMonthChange(this.value)"></select>
+          </div>
           <div class="tasks-sort-row">
             <span style="font-size:0.8rem;color:var(--text-muted);">並び替え：</span>
             <select id="tasks-sort-select" class="form-control" style="width:auto;font-size:0.85rem;padding:0.3rem 0.6rem;height:auto;">
@@ -711,6 +716,8 @@
             <h3 class="journal-timeline-title">🕐 時間割</h3>
             <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
           <span class="journal-timeline-hint">タスクをドラッグして配置</span>
+          <!-- タスククイックバー（タイムライン上部・モバイル用） -->
+          <div id="journal-timeline-quickbar" class="journal-timeline-quickbar" style="display:none;"></div>
           <button class="btn btn-secondary tl-quick-btn" onclick="showAddSpecialSlotModal('break')">🍱 休憩</button>
           <button class="btn btn-secondary tl-quick-btn" onclick="showAddSpecialSlotModal('travel')">🚗 移動</button>
           <button class="btn btn-secondary tl-quick-btn" onclick="showFreeTimeModal()">📋 空き時間を共有</button>
@@ -1496,7 +1503,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=69"></script>
+  <script src="./app.js?v=72"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

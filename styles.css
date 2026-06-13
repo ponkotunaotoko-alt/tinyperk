@@ -5967,3 +5967,124 @@ body {
 .field-filled {
   animation: fieldHighlight 1.2s ease forwards;
 }
+
+/* ===== タイムライン クイックバー（タスク追加用） ===== */
+.journal-timeline-quickbar {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.tl-quickbar-label {
+  font-family: var(--font-vintage);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+.tl-quickbar-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.tl-quickbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.6rem;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+}
+.tl-quickbar-btn:active,
+.tl-quickbar-btn:hover {
+  border-color: var(--primary);
+  background: var(--bg-hover);
+}
+.tl-quickbar-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.tl-quickbar-name {
+  font-size: 0.78rem;
+}
+.tl-quickbar-pin {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+/* ===== iPad 最適化 (769px–1024px) 追加調整 ===== */
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* フォームを1カラムに */
+  .modal-content {
+    max-width: 640px;
+    width: 92vw;
+  }
+  .modal-body {
+    padding: 1.5rem 1.75rem;
+  }
+  /* 2カラムグリッドをそのまま活用（iPadは横幅があるので問題なし） */
+  .form-control {
+    min-height: 52px;
+    font-size: 16px;
+    padding: 0.85rem 1rem;
+  }
+  /* タスクカードをもう少し広く */
+  .task-card {
+    padding: 1rem 1.25rem;
+  }
+  /* ダッシュボードグリッドを2カラムに（既存設定確認済み） */
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  /* レポートカードの余白調整 */
+  .report-card {
+    padding: 1.25rem 1.5rem;
+  }
+  /* スクリーンヘッダー余白 */
+  .screen-header {
+    padding: 0.85rem 0;
+    margin-bottom: 1rem;
+  }
+  /* タイムラインスロットをiPadで大きく */
+  .tl-slot {
+    min-height: 70px;
+  }
+  /* カレンダーセルの高さ */
+  .calendar-day {
+    min-height: 80px;
+  }
+  /* ナビアイコンを少し大きく */
+  .nav-item svg {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+/* ===== 完了タスク 月次フィルター ===== */
+.tasks-month-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  flex-wrap: wrap;
+}
+.tasks-month-filter-label {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-family: var(--font-vintage);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+#tasks-month-select {
+  min-width: 120px;
+  border-color: var(--primary) !important;
+}

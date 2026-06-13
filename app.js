@@ -199,6 +199,7 @@ let state = {
 
   // Task list tab
   taskListFilter: 'active',
+  completedMonthFilter: '', // 'YYYY-MM' or '' (= current month)
   taskListSort: 'dueDate',
   taskSearchQuery: '',
 
@@ -1153,6 +1154,9 @@ function setupEventListeners() {
     document.querySelectorAll('.tl-filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     state.taskListFilter = btn.getAttribute('data-filter');
+    const monthRow = document.getElementById('tasks-month-filter-row');
+    if (monthRow) monthRow.style.display = state.taskListFilter === 'completed' ? 'flex' : 'none';
+    if (state.taskListFilter === 'completed') buildMonthFilterOptions();
     renderTaskList();
   });
   document.getElementById('tasks-sort-select').addEventListener('change', (e) => {
@@ -1317,8 +1321,43 @@ function setupEventListeners() {
 }
 
 // Switch between screens
+
+// ─── 完了タスク 月次フィルター ────────────────────────────────────────
+function buildMonthFilterOptions() {
+  const sel = document.getElementById('tasks-month-select');
+  if (!sel) return;
+  // 完了タスクが存在する月一覧を収集
+  const months = new Set();
+  state.tasks.filter(t => t.status === 'completed').forEach(t => {
+    const d = t.completedAt || t.dueDate || '';
+    if (d.length >= 7) months.add(d.slice(0,7));
+  });
+  const currentMonth = getLocalDateStr().slice(0,7);
+  months.add(currentMonth); // 今月は常に含む
+  const sorted = [...months].sort().reverse(); // 新しい月が先頭
+  sel.innerHTML = sorted.map(m => {
+    const [y, mo] = m.split('-');
+    const label = `${y}年${parseInt(mo)}月`;
+    return `<option value="${m}">${label}</option>`;
+  }).join('');
+  // デフォルト = state.completedMonthFilter or 今月
+  const target = state.completedMonthFilter || currentMonth;
+  sel.value = months.has(target) ? target : sorted[0];
+  state.completedMonthFilter = sel.value;
+}
+
+function onTaskMonthChange(val) {
+  state.completedMonthFilter = val;
+  renderTaskList();
+}
+
 function switchTab(tab) {
   state.activeTab = tab;
+
+  // ページ切替時に最上部へスクロール
+  const _mc = document.querySelector('.main-content');
+  if (_mc) _mc.scrollTop = 0;
+  window.scrollTo(0, 0);
   
   document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(item => {
     if (item.getAttribute('data-tab') === tab) {
@@ -2093,6 +2132,31 @@ function renderJournalTimeline() {
   const timeline = entry.timeline || {};
   const hours = Array.from({ length: 10 }, (_, i) => String(i + 9).padStart(2, '0'));
 
+  // ── タイムライン上部: タスクを追加するクイックバー ──
+  const quickBarEl = document.getElementById('journal-timeline-quickbar');
+  if (quickBarEl) {
+    const todayTasks = state.tasks.filter(t =>
+      t.dueDate === date || (t.status !== 'completed' && t.dueDate <= date)
+    ).slice(0, 8);
+    const statusColor = { 'not-started': 'var(--text-muted)', 'in-progress': 'var(--primary)', 'revision': '#f97316', 'completed': 'var(--success)' };
+    if (todayTasks.length > 0) {
+      quickBarEl.innerHTML = `
+        <div class="tl-quickbar-label">📋 タスクを追加</div>
+        <div class="tl-quickbar-list">
+          ${todayTasks.map(t => `
+            <button class="tl-quickbar-btn" onclick="showTimeslotPicker('${t.id}')" title="${escapeHtml(t.name)}">
+              <span class="tl-quickbar-dot" style="background:${statusColor[t.status]||'var(--text-muted)'}"></span>
+              <span class="tl-quickbar-name">${escapeHtml(t.name.slice(0,14))}${t.name.length>14?'…':''}</span>
+              <span class="tl-quickbar-pin">📌</span>
+            </button>
+          `).join('')}
+        </div>`;
+      quickBarEl.style.display = 'block';
+    } else {
+      quickBarEl.style.display = 'none';
+    }
+  }
+
   const TL_UNIT = 64; // px per 1h slot
 
   el.innerHTML = hours.map(h => {
@@ -2643,7 +2707,15 @@ function renderTaskList() {
   let tasks = [...state.tasks];
   const f = state.taskListFilter;
   if (f === 'active') tasks = tasks.filter(t => t.status !== 'completed');
-  else if (f !== 'all') tasks = tasks.filter(t => t.status === f);
+  else if (f === 'completed') {
+    tasks = tasks.filter(t => t.status === 'completed');
+    // 月次フィルター
+    const selMonth = state.completedMonthFilter || getLocalDateStr().slice(0,7);
+    tasks = tasks.filter(t => {
+      const d = t.completedAt || t.dueDate || '';
+      return d.startsWith(selMonth);
+    });
+  } else if (f !== 'all') tasks = tasks.filter(t => t.status === f);
 
   // #5 Search
   const q = state.taskSearchQuery || '';
@@ -2966,7 +3038,7 @@ function renderJournal() {
 
     // 稼働時間カード
     const hoursLabel = timecard
-      ? `${timecard.clockIn || '--'} → ${timecard.clockOut || '--'}（${timecard.totalHours != null ? timecard.totalHours + 'h' : '--'}）`
+      ? `${timecard.clockIn || '--'} → ${timecard.clockOut || '--'}（${timecard.totalHours != null ? parseFloat(timecard.totalHours).toFixed(1) + 'h' : '--'}）`
       : '記録なし';
     const isToday = date === todayStr;
     let clockBtns = '';
@@ -4230,6 +4302,13 @@ function pauseTaskTimer() {
   if (task && state.editingTaskId === task.id) {
     document.getElementById('task-stopwatch-val').textContent = formatSecondsToHHMMSS(task.spentSeconds || 0);
   }
+  // タイムラインカードのrunningクラスを全て解除（小さいストップウォッチの表示も止める）
+  document.querySelectorAll('.tl-slot-sw-btn.running').forEach(btn => {
+    btn.classList.remove('running');
+    btn.title = '計測開始';
+    const disp = btn.querySelector('.tl-sw-disp');
+    if (disp && task) disp.textContent = formatSecondsToHHMMSS(task.spentSeconds || 0);
+  });
 }
 
 function resetTaskTimer(taskId) {
@@ -6034,13 +6113,13 @@ function renderDealStats() {
   if (!el) return;
   const active = state.deals.filter(d => d.stage !== 'won' && d.stage !== 'lost');
   const won    = state.deals.filter(d => d.stage === 'won');
-  const pipeline = active.reduce((s,d) => s + (d.amount||0) * (d.probability||50)/100, 0);
+  const pipeline = active.reduce((s,d) => s + (d.amount||0), 0);
   const wonAmt   = won.reduce((s,d) => s + (d.amount||0), 0);
   el.innerHTML = `
     <div class="deal-stat-card">
       <div class="deal-stat-label">パイプライン総額</div>
       <div class="deal-stat-value" style="color:var(--primary)">¥${pipeline.toLocaleString()}</div>
-      <div class="deal-stat-sub">期待値（確度込み）</div>
+      <div class="deal-stat-sub">合計金額</div>
     </div>
     <div class="deal-stat-card">
       <div class="deal-stat-label">進行中案件</div>
@@ -6328,7 +6407,7 @@ function openContactModal(id = null) {
       </div>
       <div class="ocr-bar">
         <button class="btn-ocr" id="btn-ocr" onclick="scanBusinessCard()">📷 名刺を読み取る</button>
-        <input type="file" id="business-card-input" accept="image/*" capture="environment" style="display:none" onchange="processBizCardImage(event)">
+        <input type="file" id="business-card-input" accept="image/*" style="display:none" onchange="processBizCardImage(event)">
         <span id="ocr-status" class="ocr-status-msg" style="display:none"></span>
       </div>
       <div class="modal-body">
@@ -7256,7 +7335,7 @@ function renderDashboardPipelineWidget() {
   const el = document.getElementById('dashboard-pipeline-widget');
   if (!el) return;
   const active = state.deals.filter(d => d.stage !== 'won' && d.stage !== 'lost');
-  const pipeline = active.reduce((s,d) => s + (d.amount||0) * (d.probability||50)/100, 0);
+  const pipeline = active.reduce((s,d) => s + (d.amount||0), 0);
   const today = getLocalDateStr();
   const followUps = state.contacts.filter(c => c.followUpDate && c.followUpDate <= addDays(today, 3));
 
@@ -7837,7 +7916,10 @@ function scanBusinessCard() {
     if (go) { closeContactModal(); switchTab('settings'); }
     return;
   }
-  document.getElementById('business-card-input')?.click();
+  // iOSではJSからのclick()がブロックされる場合があるため
+  // labelタグ経由で直接triggerする
+  const inp = document.getElementById('business-card-input');
+  if (inp) inp.click();
 }
 
 async function processBizCardImage(event) {
@@ -7924,7 +8006,13 @@ async function processBizCardImage(event) {
   } catch (err) {
     console.error('[OCR]', err);
     if (statusEl) {
-      statusEl.textContent = `❌ ${err.message}`;
+      let msg = err.message || '不明なエラー';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        msg = 'ネットワークエラー。インターネット接続を確認してください。';
+      } else if (msg.includes('401') || msg.includes('invalid_api_key')) {
+        msg = 'APIキーが無効です。設定画面で再登録してください。';
+      }
+      statusEl.textContent = `❌ ${msg}`;
       statusEl.style.color = 'var(--danger, #ef4444)';
       statusEl.style.display = 'block';
     }
