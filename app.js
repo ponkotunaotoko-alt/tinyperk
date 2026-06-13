@@ -2135,9 +2135,13 @@ function renderJournalTimeline() {
   // ── タイムライン上部: タスクを追加するクイックバー ──
   const quickBarEl = document.getElementById('journal-timeline-quickbar');
   if (quickBarEl) {
+    // 未完了タスクを全て表示（日付に関わらず）+ 今日完了分も含む
     const todayTasks = state.tasks.filter(t =>
-      t.dueDate === date || (t.status !== 'completed' && t.dueDate <= date)
-    ).slice(0, 8);
+      t.status !== 'completed' || t.completedAt === date
+    ).sort((a, b) => {
+      const order = { 'in-progress': 0, 'not-started': 1, 'revision': 2, 'completed': 3 };
+      return (order[a.status] ?? 9) - (order[b.status] ?? 9);
+    }).slice(0, 10);
     const statusColor = { 'not-started': 'var(--text-muted)', 'in-progress': 'var(--primary)', 'revision': '#f97316', 'completed': 'var(--success)' };
     if (todayTasks.length > 0) {
       quickBarEl.innerHTML = `
