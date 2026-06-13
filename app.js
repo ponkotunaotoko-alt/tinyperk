@@ -8721,28 +8721,55 @@ function initOpeningAnimation() {
   const overlay = document.getElementById('opening-overlay');
   if (!overlay) return;
 
-  // 背景に星を描く（CSS駆動 — JSは星描画とdisplay:none後処理だけ）
+  // ── 星を描く ──
   const canvas = document.getElementById('opening-stars');
   if (canvas) {
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
     const ctx = canvas.getContext('2d');
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < 220; i++) {
       const x = Math.random() * canvas.width;
       const y = Math.random() * canvas.height;
-      const r = Math.random() * 1.6 + 0.4;
-      const a = Math.random() * 0.8 + 0.2;
+      const r = Math.random() * 1.8 + 0.3;
+      const a = Math.random() * 0.75 + 0.15;
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = i % 8 === 0
+      ctx.fillStyle = i % 9 === 0
         ? `rgba(74,158,255,${a})`
-        : `rgba(200,169,110,${a})`;
+        : `rgba(200,169,110,${a * 0.85})`;
       ctx.fill();
     }
+    // 時計周りにホワイトグロー効果
+    const grd = ctx.createRadialGradient(
+      canvas.width/2, canvas.height*0.38,  10,
+      canvas.width/2, canvas.height*0.38, 200
+    );
+    grd.addColorStop(0,   'rgba(200,169,110,0.06)');
+    grd.addColorStop(0.5, 'rgba(74,158,255,0.02)');
+    grd.addColorStop(1,   'transparent');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  // CSSアニメが終わった後（3.65s）にdisplay:noneで完全除去
-  setTimeout(() => overlay.classList.add('hidden'), 3700);
+  // ── 時計針を現在時刻に合わせる（負のdelay） ──
+  const now  = new Date();
+  const h    = now.getHours() % 12;
+  const m    = now.getMinutes();
+  const s    = now.getSeconds();
+  const ms   = now.getMilliseconds();
+  // 秒 + ミリ秒で滑らかに
+  const totalSec = h * 3600 + m * 60 + s + ms / 1000;
+
+  const hourHand   = document.getElementById('clock-hour-hand');
+  const minuteHand = document.getElementById('clock-minute-hand');
+  const secondHand = document.getElementById('clock-second-hand');
+
+  if (hourHand)   hourHand.style.animationDelay   = `-${totalSec}s`;
+  if (minuteHand) minuteHand.style.animationDelay = `-${m * 60 + s + ms/1000}s`;
+  if (secondHand) secondHand.style.animationDelay = `-${s + ms/1000}s`;
+
+  // ── CSSアニメ完了後（5.2s）にdisplay:none ──
+  setTimeout(() => overlay.classList.add('hidden'), 5300);
 }
 
 // ─── 2. 時間帯テーマ（ダッシュボード背景グラデ） ─────────────────────────
