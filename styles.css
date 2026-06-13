@@ -273,6 +273,8 @@ h1, h2, h3, h4 {
 
 .screen-title {
   font-size: 2rem;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* Primary/Secondary Buttons */
@@ -6370,6 +6372,8 @@ body {
   display: none;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
+  overflow: hidden;
 }
 #invoice-reminder-banner.visible { display: flex; }
 .invoice-reminder-icon { font-size: 1.4rem; }

@@ -8813,14 +8813,17 @@ async function openPasteCTA() {
   // タスク追加モーダルを開いてAI解析エリアを表示
   openAddTaskModal();
   setTimeout(() => {
-    const toggleBtn = document.getElementById('btn-ai-parse-toggle');
-    const area = document.getElementById('ai-parse-section');
+    // ai-parse-area が折り畳まれている場合は開く
+    const area = document.getElementById('ai-parse-area');
     if (area && area.style.display === 'none') toggleAiParseArea();
     if (text) {
       const pasteEl = document.getElementById('ai-paste-text');
-      if (pasteEl) pasteEl.value = text;
+      if (pasteEl) {
+        pasteEl.value = text;
+        pasteEl.dispatchEvent(new Event('input')); // 高さ自動調整
+      }
     }
-  }, 200);
+  }, 250);
 }
 
 // ─── 月末請求リマインダー ─────────────────────────────────────────────────
