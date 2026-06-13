@@ -8768,8 +8768,8 @@ function initOpeningAnimation() {
   if (minuteHand) minuteHand.style.animationDelay = `-${m * 60 + s + ms/1000}s`;
   if (secondHand) secondHand.style.animationDelay = `-${s + ms/1000}s`;
 
-  // ── CSSアニメ完了後（5.2s）にdisplay:none ──
-  setTimeout(() => overlay.classList.add('hidden'), 5300);
+  // ── CSSアニメ完了後（10.5s）にdisplay:none (余韻込み) ──
+  setTimeout(() => overlay.classList.add('hidden'), 10600);
 }
 
 // ─── 2. 時間帯テーマ（ダッシュボード背景グラデ） ─────────────────────────
