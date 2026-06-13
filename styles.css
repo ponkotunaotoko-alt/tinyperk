@@ -6689,15 +6689,26 @@ body {
 #opening-overlay {
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse at 50% 35%, #0c0a18 0%, #04040c 65%);
+  /* 重厚な油絵背景: 多層グラデーション */
+  background:
+    radial-gradient(ellipse 55% 40% at 50% 62%,  rgba(160,120,40,0.10) 0%, transparent 100%),
+    radial-gradient(ellipse 80% 55% at 50% 55%,  rgba(60,35,100,0.22) 0%, transparent 100%),
+    radial-gradient(ellipse 50% 40% at 18% 30%,  rgba(20,40,100,0.18) 0%, transparent 100%),
+    radial-gradient(ellipse 45% 35% at 82% 70%,  rgba(80,20,80,0.14)  0%, transparent 100%),
+    radial-gradient(ellipse 100% 60% at 50% 100%, rgba(10,5,30,0.6)   0%, transparent 100%),
+    linear-gradient(175deg, #08060f 0%, #04030a 45%, #060410 100%);
   z-index: 99999;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0;
-  /* 余韻あるフェード: 8.5s後に2sかけて消える */
+  -webkit-animation: opening-auto-exit 2s ease-in-out 8.5s forwards;
   animation: opening-auto-exit 2s ease-in-out 8.5s forwards;
+}
+@-webkit-keyframes opening-auto-exit {
+  0%   { opacity:1; }
+  100% { opacity:0; pointer-events:none; visibility:hidden; }
 }
 @keyframes opening-auto-exit {
   0%   { opacity:1; }
@@ -6727,16 +6738,26 @@ body {
   justify-content: center;
 }
 #opening-clock-svg {
-  width: min(74vw, 300px);
+  width: min(78vw, 300px);
   height: auto;
-  filter: drop-shadow(0 0 30px rgba(200,169,110,0.15))
-          drop-shadow(0 0 80px rgba(100,80,180,0.06));
+  filter: drop-shadow(0 0 25px rgba(200,169,110,0.20))
+          drop-shadow(0 0 70px rgba(200,169,110,0.07))
+          drop-shadow(0 0 120px rgba(80,50,160,0.08));
+}
+/* 小秒針は秒針と同期（60s） */
+#clock-small-second {
+  animation: clock-spin 60s linear infinite;
 }
 
 /* 段階的reveal: og-reveal クラス */
 .og-reveal {
   opacity: 0;
+  -webkit-animation: og-fade-in 2s ease var(--og-delay, 1.5s) forwards;
   animation: og-fade-in 2s ease var(--og-delay, 1.5s) forwards;
+}
+@-webkit-keyframes og-fade-in {
+  from { opacity:0; -webkit-filter:blur(4px); filter:blur(4px); }
+  to   { opacity:1; -webkit-filter:blur(0);   filter:blur(0); }
 }
 @keyframes og-fade-in {
   from { opacity:0; filter:blur(4px); }
@@ -6752,13 +6773,21 @@ body {
   to   { transform: rotate(360deg); }
 }
 
-/* 振り子 — 最初から揺れる */
+/* 懐中時計 — チェーンから揺れる */
 #og-pendulum-wrap {
-  animation: pendulum-ct 2.1s cubic-bezier(0.37,0,0.63,1) infinite alternate;
+  -webkit-animation: pocket-watch-swing 2.4s cubic-bezier(0.37,0,0.63,1) infinite alternate;
+  animation: pocket-watch-swing 2.4s cubic-bezier(0.37,0,0.63,1) infinite alternate;
+  -webkit-transform-origin: 150px 0px;
+  transform-origin: 150px 0px;
+  transform-box: fill-box;
 }
-@keyframes pendulum-ct {
-  from { transform: rotate(-16deg); }
-  to   { transform: rotate(16deg); }
+@-webkit-keyframes pocket-watch-swing {
+  from { -webkit-transform: rotate(-13deg); transform: rotate(-13deg); }
+  to   { -webkit-transform: rotate(13deg);  transform: rotate(13deg); }
+}
+@keyframes pocket-watch-swing {
+  from { transform: rotate(-13deg); }
+  to   { transform: rotate(13deg); }
 }
 
 /* TINYPERK ロゴ */
@@ -6818,7 +6847,7 @@ body::after {
     ),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: auto, 300px 300px;
-  opacity: 0.9;
+  opacity: 0.04;
   animation: scanline-drift 10s linear infinite;
 }
 @keyframes scanline-drift {
