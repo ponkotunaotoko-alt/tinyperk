@@ -1596,14 +1596,15 @@ function renderApp() {
 // DASHBOARD RENDERING & ACTIONS
 // ----------------------------------------------------------------------------
 function renderWeeklySummary() {
-  // 今週の日〜土を計算（日曜始まり）
+  // 今週の月〜日を計算（月曜始まり）
   const today = new Date();
   const todayStr = getLocalDateStr();
   const dow = today.getDay(); // 0=日
+  const mondayOffset = (dow + 6) % 7; // Sun→6, Mon→0, Tue→1...
   const weekDays = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);
-    d.setDate(today.getDate() - dow + i);
+    d.setDate(today.getDate() - mondayOffset + i);
     weekDays.push(toLocalDateStr(d));
   }
 
@@ -1770,10 +1771,11 @@ function renderDashboardWeekQuick() {
   if (!card) return;
   const today = new Date();
   const dow = today.getDay();
+  const mondayOffset = (dow + 6) % 7;
   const weekDays = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);
-    d.setDate(today.getDate() - dow + i);
+    d.setDate(today.getDate() - mondayOffset + i);
     weekDays.push(toLocalDateStr(d));
   }
   const tasks = state.tasks || [];
@@ -3966,7 +3968,8 @@ function renderCalendar() {
   calendarGrid.innerHTML = '';
   weekdays.forEach(el => calendarGrid.appendChild(el));
 
-  const firstDayIndex = new Date(year, month, 1).getDay();
+  // 月曜始まり: Mon=0, Tue=1, ..., Sun=6
+  const firstDayIndex = (new Date(year, month, 1).getDay() + 6) % 7;
   const totalDays = new Date(year, month + 1, 0).getDate();
   const prevMonthTotalDays = new Date(year, month, 0).getDate();
 
@@ -8670,10 +8673,11 @@ async function processBizCardImage(event) {
 function getWeekDays(offset) {
   const today = new Date();
   const dow = today.getDay();
+  const mondayOffset = (dow + 6) % 7; // 月曜始まり
   const result = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);
-    d.setDate(today.getDate() - dow + i + offset * 7);
+    d.setDate(today.getDate() - mondayOffset + i + offset * 7);
     result.push(toLocalDateStr(d));
   }
   return result;

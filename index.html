@@ -511,13 +511,13 @@
           </div>
 
           <div id="calendar-grid" class="calendar-grid">
-            <div class="calendar-weekday" style="color: var(--danger);">日</div>
             <div class="calendar-weekday">月</div>
             <div class="calendar-weekday">火</div>
             <div class="calendar-weekday">水</div>
             <div class="calendar-weekday">木</div>
             <div class="calendar-weekday">金</div>
             <div class="calendar-weekday" style="color: var(--secondary);">土</div>
+            <div class="calendar-weekday" style="color: var(--danger);">日</div>
           </div>
         </div>
 
@@ -1014,7 +1014,7 @@
               <span style="background:var(--success);color:#fff;font-size:0.7rem;padding:0.1em 0.5em;border-radius:99px;font-weight:700;">無料</span>
             </div>
             <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:0.6rem;">
-              LINEやメールからのタスク登録に使用します。1日100万トークンまで無料。<br>
+              LINEやメールからのタスク登録・<strong>名刺読み取り（OCR）</strong>に使用します。1日100万トークンまで無料。<br>
               <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color:var(--primary)">aistudio.google.com でAPIキーを無料取得 →</a>
             </p>
             <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
@@ -1026,11 +1026,14 @@
             <div id="gemini-api-key-status" style="font-size:0.82rem;margin-top:0.4rem;color:var(--text-muted)"></div>
           </div>
 
-          <!-- Claude API（名刺OCR専用） -->
+          <!-- Claude API（サブ） -->
           <div style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:0.9rem;">
-            <div style="font-weight:700;font-size:0.95rem;margin-bottom:0.4rem;">🃏 Anthropic Claude API（名刺読み取り専用）</div>
+            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">
+              <span style="font-weight:700;font-size:0.95rem;">🃏 Anthropic Claude API</span>
+              <span style="background:var(--text-muted);color:#fff;font-size:0.7rem;padding:0.1em 0.5em;border-radius:99px;font-weight:700;">任意</span>
+            </div>
             <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:0.6rem;">
-              名刺画像の読み取りに使用します（有料）。LINEからの登録はGeminiまたは自動解析を使用します。
+              GeminiキーがないときのサブAIとして使用します（有料）。Geminiで十分なため通常は不要です。
               <a href="https://console.anthropic.com/" target="_blank" rel="noopener" style="color:var(--primary)">APIキーを取得 →</a>
             </p>
             <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
@@ -1043,7 +1046,7 @@
           </div>
 
           <p style="font-size:0.78rem;color:var(--text-muted);margin-top:0.6rem;">
-            ※ APIキー未登録でもLINEやメールからのタスク登録は自動解析で動作します。
+            ※ APIキー未登録でもタスク登録は自動解析で動作します。名刺読み取りはGeminiキーが必要です。
           </p>
         </div>
 
@@ -1630,7 +1633,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=93"></script>
+  <script src="./app.js?v=94"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY
