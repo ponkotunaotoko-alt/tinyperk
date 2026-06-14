@@ -8520,14 +8520,13 @@ function _maskKey(key) {
 
 // ─── 名刺OCR ─────────────────────────────────────────────────────────
 function scanBusinessCard() {
-  const key = localStorage.getItem(_CLAUDE_KEY_STORE);
-  if (!key) {
-    const go = confirm('Claude APIキーが未登録です。設定画面に移動しますか？');
+  const geminiKey = localStorage.getItem(_GEMINI_KEY_STORE);
+  const claudeKey = localStorage.getItem(_CLAUDE_KEY_STORE);
+  if (!geminiKey && !claudeKey) {
+    const go = confirm('APIキーが未登録です。\n設定画面でGemini APIキー（無料）を登録すると名刺読み取りが使えます。\n設定画面へ移動しますか？');
     if (go) { closeContactModal(); switchTab('settings'); }
     return;
   }
-  // iOSではJSからのclick()がブロックされる場合があるため
-  // labelタグ経由で直接triggerする
   const inp = document.getElementById('business-card-input');
   if (inp) inp.click();
 }
@@ -8536,75 +8535,109 @@ async function processBizCardImage(event) {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  const btn = document.getElementById('btn-ocr');
+  const btn      = document.getElementById('btn-ocr');
   const statusEl = document.getElementById('ocr-status');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 読み取り中…'; }
   if (statusEl) { statusEl.style.display = 'none'; statusEl.textContent = ''; }
 
   try {
-    // 画像をbase64に変換（メモリ内処理のみ・保存なし）
+    // 画像を base64 に変換（メモリ内処理のみ・保存なし）
     const base64 = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = e => resolve(e.target.result.split(',')[1]);
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
-
     const mediaType = (file.type && file.type.startsWith('image/')) ? file.type : 'image/jpeg';
-    const key = localStorage.getItem(_CLAUDE_KEY_STORE);
 
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 512,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-            { type: 'text', text: `この名刺から情報を抽出し、JSONのみを返してください（前後の説明不要）。
+    const ocrPrompt = `この名刺から情報を抽出し、JSONのみを返してください（前後の説明不要）。
 フォーマット: {"name":"","company":"","role":"","email":"","phone":"","address":"","url":""}
-不明な項目は空文字列にしてください。` }
-          ]
-        }]
-      })
-    });
+不明な項目は空文字列にしてください。`;
 
-    if (!resp.ok) {
-      const errBody = await resp.json().catch(() => ({}));
-      throw new Error(errBody?.error?.message || `APIエラー (${resp.status})`);
+    let rawText = '';
+
+    const geminiKey = localStorage.getItem(_GEMINI_KEY_STORE);
+    const claudeKey = localStorage.getItem(_CLAUDE_KEY_STORE);
+
+    // ── Gemini（無料・優先） ────────────────────────────────────────────
+    if (geminiKey) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`;
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inline_data: { mime_type: mediaType, data: base64 } },
+              { text: ocrPrompt }
+            ]
+          }]
+        })
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        const raw = err?.error?.message || '';
+        if (resp.status === 400 && raw.includes('API_KEY')) throw new Error('GeminiのAPIキーが無効です。設定画面で確認してください。');
+        if (resp.status === 429) throw new Error('Geminiの無料枠を超えました。しばらく待ってから再試行してください。');
+        throw new Error(`Gemini APIエラー (${resp.status})`);
+      }
+      const data = await resp.json();
+      rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    // ── Claude（有料・フォールバック） ────────────────────────────────
+    } else if (claudeKey) {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': claudeKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 512,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+              { type: 'text', text: ocrPrompt }
+            ]
+          }]
+        })
+      });
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({}));
+        const raw = errBody?.error?.message || '';
+        if (resp.status === 401) throw new Error('Claude APIキーが無効です。設定画面で再登録してください。');
+        if (raw.toLowerCase().includes('credit') || raw.toLowerCase().includes('balance'))
+          throw new Error('Claude APIクレジットが不足しています。Gemini APIキー（無料）の登録もご検討ください。');
+        throw new Error(raw || `APIエラー (${resp.status})`);
+      }
+      const data = await resp.json();
+      rawText = data.content?.[0]?.text || '';
+    } else {
+      throw new Error('APIキーが設定されていません。設定画面でGemini APIキー（無料）を登録してください。');
     }
 
-    const data = await resp.json();
-    const text = data.content?.[0]?.text || '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('JSONの解析に失敗しました。もう一度試してください。');
-
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('読み取り結果を解析できませんでした。画像をはっきり撮影してから再試行してください。');
     const info = JSON.parse(jsonMatch[0]);
 
     // フォームへ反映（既存値は上書きしない）
-    const fill = (id, val) => {
-      const el = document.getElementById(id);
-      if (el && !el.value && val) el.value = val;
-    };
-    fill('contact-name', info.name);
+    const fill = (id, val) => { const el = document.getElementById(id); if (el && !el.value && val) el.value = val; };
+    fill('contact-name',    info.name);
     fill('contact-company', info.company);
-    fill('contact-email', info.email);
-    fill('contact-phone', info.phone);
+    fill('contact-email',   info.email);
+    fill('contact-phone',   info.phone);
 
-    // 役職・住所・URLはメモに追記
+    // 役職・住所・URL はメモに追記
     const notesEl = document.getElementById('contact-notes');
     if (notesEl && !notesEl.value) {
       const extras = [];
-      if (info.role) extras.push(`役職: ${info.role}`);
+      if (info.role)    extras.push(`役職: ${info.role}`);
       if (info.address) extras.push(`住所: ${info.address}`);
-      if (info.url) extras.push(`Web: ${info.url}`);
+      if (info.url)     extras.push(`Web: ${info.url}`);
       if (extras.length) notesEl.value = extras.join('\n');
     }
 
@@ -8619,8 +8652,6 @@ async function processBizCardImage(event) {
       let msg = err.message || '不明なエラー';
       if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
         msg = 'ネットワークエラー。インターネット接続を確認してください。';
-      } else if (msg.includes('401') || msg.includes('invalid_api_key')) {
-        msg = 'APIキーが無効です。設定画面で再登録してください。';
       }
       statusEl.textContent = `❌ ${msg}`;
       statusEl.style.color = 'var(--danger, #ef4444)';
@@ -8628,7 +8659,7 @@ async function processBizCardImage(event) {
     }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '📷 名刺を読み取る'; }
-    event.target.value = ''; // ファイル選択をリセット
+    event.target.value = '';
   }
 }
 
