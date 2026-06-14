@@ -9507,12 +9507,14 @@ function initOpeningAnimation() {
     ctx.clearRect(0, 0, CW, CH);
     ctx.save();
 
-    // ── 振り子（大きく ±35度、コサインで右から開始、自然減衰） ──
+    // ── 振り子（サイン波で中心から自然に振り始め、ゆっくり減衰） ──
     const SWING_AMP = 35 * Math.PI / 180;
-    const SWING_T   = 2.4; // 周期(秒)（大きい時計は周期が長め）
+    const SWING_T   = 3.2; // 周期(秒) — 大きな時計は重くゆっくり
+    const easeIn    = Math.min(elapsed / 0.6, 1); // 最初0.6秒でふわっと立ち上がる
     const swayAngle = SWING_AMP
-      * Math.cos(2 * Math.PI * elapsed / SWING_T)
-      * Math.exp(-elapsed * 0.09);
+      * Math.sin(2 * Math.PI * elapsed / SWING_T)
+      * Math.exp(-elapsed * 0.042)  // 緩やかな減衰（長く揺れ続ける）
+      * easeIn;
 
     // チェーン固定点（PIVOT_Y）を軸に回転 → 本物の振り子動作
     ctx.translate(cx, PIVOT_Y);
