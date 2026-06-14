@@ -9480,19 +9480,19 @@ function initOpeningAnimation() {
   const clkCanvas = document.getElementById('opening-clock-canvas');
   if (!clkCanvas) { setTimeout(() => overlay.classList.add('hidden'), 10600); return; }
 
-  // ── キャンバスを画面上半分に広げる ──
+  // ── キャンバスをフルスクリーンに ──
   const CW   = window.innerWidth;
-  const CH   = Math.round(window.innerHeight * 0.50);
-  const SIZE = Math.min(CW * 0.62, 220);   // 時計の直径基準
+  const CH   = window.innerHeight;
+  const SIZE = CW * 1.72;   // 画面幅より大きく → 左右にはみ出す
   clkCanvas.width  = CW;
   clkCanvas.height = CH;
   clkCanvas.style.width  = CW + 'px';
   clkCanvas.style.height = CH + 'px';
 
   const cx      = CW / 2;
-  const PIVOT_Y = CH * 0.04;   // チェーン固定点（上端付近）
-  const cy      = CH * 0.60;   // 時計の中心
-  const R       = SIZE * 0.44; // 外径
+  const PIVOT_Y = CH * 0.02;   // チェーン固定点（最上端）
+  const cy      = CH * 0.50;   // 時計の中心（画面中央）
+  const R       = SIZE * 0.44; // 外径（画面より大きい）
 
   let startTime = null;
   let rafId;
@@ -9507,9 +9507,9 @@ function initOpeningAnimation() {
     ctx.clearRect(0, 0, CW, CH);
     ctx.save();
 
-    // ── 振り子（大きく ±30度、コサインで右から開始、自然減衰） ──
-    const SWING_AMP = 30 * Math.PI / 180;
-    const SWING_T   = 2.2; // 周期(秒)
+    // ── 振り子（大きく ±35度、コサインで右から開始、自然減衰） ──
+    const SWING_AMP = 35 * Math.PI / 180;
+    const SWING_T   = 2.4; // 周期(秒)（大きい時計は周期が長め）
     const swayAngle = SWING_AMP
       * Math.cos(2 * Math.PI * elapsed / SWING_T)
       * Math.exp(-elapsed * 0.09);
