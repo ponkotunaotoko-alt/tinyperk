@@ -9927,4 +9927,166 @@ function showUndoBanner(message, onUndo) {
   banner._timer = setTimeout(() => banner.classList.remove('visible'), 3200);
 }
 
+// ============================================================
+// 返信文作成モーダル
+// ============================================================
+function openReplyModal() {
+  state._scrollY = window.scrollY;
+  document.body.style.top = `-${state._scrollY}px`;
+  document.body.classList.add('modal-open');
+  const overlay = document.getElementById('reply-modal-overlay');
+  overlay.classList.add('active');
+  resetReplyModal();
+  setTimeout(() => document.getElementById('reply-input-textarea')?.focus(), 120);
+}
+
+function closeReplyModal() {
+  const overlay = document.getElementById('reply-modal-overlay');
+  overlay.classList.remove('active');
+  document.body.classList.remove('modal-open');
+  document.body.style.top = '';
+  window.scrollTo(0, state._scrollY || 0);
+}
+
+function resetReplyModal() {
+  document.getElementById('reply-step1').style.display = '';
+  document.getElementById('reply-step2').style.display = 'none';
+  document.getElementById('reply-input-textarea').value = '';
+  document.getElementById('reply-scene-select').value = 'auto';
+  document.getElementById('reply-status').textContent = '';
+  document.getElementById('reply-action-btn').style.display = '';
+  document.getElementById('reply-action-label').textContent = '✦ 返信文を生成';
+}
+
+async function handleReplyGenerate() {
+  const text = document.getElementById('reply-input-textarea').value.trim();
+  if (!text) { showTrayToast('会話文を貼り付けてください'); return; }
+
+  const btn = document.getElementById('reply-action-btn');
+  const lbl = document.getElementById('reply-action-label');
+  const statusEl = document.getElementById('reply-status');
+  btn.disabled = true;
+  lbl.textContent = '✦ 生成中…';
+  statusEl.textContent = '';
+
+  const scene = document.getElementById('reply-scene-select').value;
+
+  let reply = null;
+  const geminiKey = localStorage.getItem(_GEMINI_KEY_STORE);
+  const claudeKey = localStorage.getItem(_CLAUDE_KEY_STORE);
+
+  if (geminiKey) {
+    reply = await _callGeminiForReply(text, scene, geminiKey);
+  } else if (claudeKey) {
+    reply = await _callClaudeForReply(text, scene, claudeKey);
+  }
+
+  if (!reply) {
+    reply = _generateRuleBasedReply(text, scene);
+    statusEl.textContent = '✦ テンプレートで生成しました（Gemini APIキー登録で精度UP）';
+    statusEl.style.color = 'var(--text-muted)';
+  } else {
+    statusEl.textContent = '';
+  }
+
+  btn.disabled = false;
+  lbl.textContent = '✦ 返信文を生成';
+
+  // Step2へ
+  const detectedScene = _detectReplyScene(text, scene);
+  const sceneLabels = { accept: '✅ 依頼受諾・納期確認', revision: '🔄 修正対応・差し戻し', delivery: '📦 納品報告・完了連絡', auto: '' };
+  document.getElementById('reply-scene-label').textContent = sceneLabels[detectedScene] || '';
+  document.getElementById('reply-output-textarea').value = reply;
+  document.getElementById('reply-step1').style.display = 'none';
+  document.getElementById('reply-step2').style.display = '';
+  document.getElementById('reply-action-btn').style.display = 'none';
+}
+
+function _detectReplyScene(text, selectedScene) {
+  if (selectedScene !== 'auto') return selectedScene;
+  if (/修正|差し戻し|変更|直し|やり直し|フィードバック/i.test(text)) return 'revision';
+  if (/納品|完成|送り?ます|アップ|提出|完了|仕上がり/i.test(text)) return 'delivery';
+  return 'accept';
+}
+
+async function _callGeminiForReply(text, scene, key) {
+  const sceneGuide = scene === 'accept'   ? '依頼受諾・納期確認の返信' :
+                     scene === 'revision' ? '修正対応・差し戻しへの返信' :
+                     scene === 'delivery' ? '納品報告・完了連絡の返信' :
+                                           '状況に応じた最適な返信';
+  const prompt = `あなたはフリーランサーのアシスタントです。\n以下の会話に対して「${sceneGuide}」として適切な返信文を日本語で生成してください。\n\n条件:\n- 相手のトーン（ビジネス丁寧体 or カジュアル）に合わせる\n- 簡潔で誠実な文体\n- 署名・宛名は不要\n- 返信文のみを出力（前置きや説明は不要）\n\n会話内容:\n${text}`;
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+  } catch { return null; }
+}
+
+async function _callClaudeForReply(text, scene, key) {
+  const sceneGuide = scene === 'accept'   ? '依頼受諾・納期確認の返信' :
+                     scene === 'revision' ? '修正対応・差し戻しへの返信' :
+                     scene === 'delivery' ? '納品報告・完了連絡の返信' :
+                                           '状況に応じた最適な返信';
+  const prompt = `あなたはフリーランサーのアシスタントです。以下の会話に対して「${sceneGuide}」として適切な返信文を生成してください。署名・宛名不要。返信文のみ出力。\n\n会話:\n${text}`;
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({ model: 'claude-3-haiku-20240307', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.content?.[0]?.text?.trim() || null;
+  } catch { return null; }
+}
+
+function _generateRuleBasedReply(text, scene) {
+  const detected = _detectReplyScene(text, scene);
+  // 納期を抽出（あれば）
+  const dateMatch = text.match(/(\d{1,2})[\/月](\d{1,2})日?|来週|今月末|月末/);
+  const dateHint = dateMatch ? `（${dateMatch[0]}）` : '';
+  const biz = /お世話|よろしく|ご連絡|拝啓|誠に|ご確認|ご依頼/.test(text);
+  const salutation = biz ? 'お世話になっております。' : '';
+
+  if (detected === 'revision') {
+    return biz
+      ? `${salutation}ご指摘ありがとうございます。\n修正内容を確認いたしました。対応いたしますので、少々お時間をいただけますでしょうか。\n修正が完了次第、ご連絡いたします。\nどうぞよろしくお願いいたします。`
+      : `ご連絡ありがとうございます！\n修正内容、確認しました。対応しますのでしばらくお待ちください。\n完了したらまたご連絡します。よろしくお願いします。`;
+  }
+  if (detected === 'delivery') {
+    return biz
+      ? `${salutation}お世話になっております。\n先ほど、作業が完了いたしましたのでご報告申し上げます。\nご確認のほど、よろしくお願いいたします。\n何かございましたらお気軽にお申し付けください。`
+      : `お疲れ様です！\n作業が完了しましたのでご確認ください。\nご不明な点があればお気軽にどうぞ。`;
+  }
+  // accept (default)
+  return biz
+    ? `${salutation}ご依頼ありがとうございます。\n内容を確認いたしました。承りましたので、進めてまいります${dateHint}。\nどうぞよろしくお願いいたします。`
+    : `ありがとうございます！\n了解しました、進めます${dateHint}。\nよろしくお願いします！`;
+}
+
+async function copyReplyText() {
+  const text = document.getElementById('reply-output-textarea').value;
+  try {
+    await navigator.clipboard.writeText(text);
+    showTrayToast('📋 返信文をコピーしました');
+  } catch {
+    document.getElementById('reply-output-textarea').select();
+    document.execCommand('copy');
+    showTrayToast('📋 返信文をコピーしました');
+  }
+}
+
 

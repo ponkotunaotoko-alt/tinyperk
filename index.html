@@ -217,6 +217,9 @@
           <button class="paste-cta-btn" onclick="openPasteCTA()">
             <span>📋</span> LINEやメールをそのまま貼り付けて登録
           </button>
+          <button class="paste-cta-btn" onclick="openReplyModal()" style="background:var(--bg-secondary);border-color:var(--primary);color:var(--primary);">
+            <span>✉️</span> 返信文を作成
+          </button>
           <button class="btn btn-primary btn-add-task">
             <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             タスク追加
@@ -1229,6 +1232,54 @@
   <div id="sync-status" style="display:none;position:fixed;bottom:5rem;right:1rem;background:var(--bg-card);border:1px solid var(--border-color);border-radius:2rem;padding:0.4rem 1rem;font-size:0.8rem;color:var(--text-muted);z-index:100;box-shadow:var(--pop-shadow);"></div>
 
   <!-- ======================================================
+       返信文作成モーダル
+       ====================================================== -->
+  <div id="reply-modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-label="返信文作成">
+    <div class="modal-content" style="max-width:540px;">
+      <div class="modal-header">
+        <h2 style="font-size:1.1rem;margin:0;font-family:var(--font-vintage);letter-spacing:0.06em;">✉️ 返信文を作成</h2>
+        <button type="button" class="btn-modal-close" onclick="closeReplyModal()" aria-label="閉じる">✕</button>
+      </div>
+      <div class="modal-body" style="gap:1rem;">
+
+        <!-- STEP1: 貼り付け -->
+        <div id="reply-step1">
+          <p style="font-size:0.85rem;color:var(--text-muted);margin:0 0 0.6rem;">相手からのLINEやメールをそのまま貼り付けてください。AIが文脈を読んで返信文を生成します。</p>
+          <textarea id="reply-input-textarea" class="form-control" rows="7"
+            placeholder="例）&#10;お世話になっております。先日依頼した件ですが、修正をお願いできますか？&#10;〇〇の部分を△△に変更いただけると助かります。"></textarea>
+          <div style="margin-top:0.6rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+            <label style="font-size:0.82rem;color:var(--text-muted);flex-shrink:0;">シーン（任意）:</label>
+            <select id="reply-scene-select" class="form-control" style="flex:1;min-width:180px;font-size:0.85rem;">
+              <option value="auto">🤖 AIが自動判断</option>
+              <option value="accept">✅ 依頼受諾・納期確認</option>
+              <option value="revision">🔄 修正対応・差し戻し</option>
+              <option value="delivery">📦 納品報告・完了連絡</option>
+            </select>
+          </div>
+          <div id="reply-status" style="min-height:1.4em;font-size:0.82rem;color:var(--text-muted);margin-top:0.5rem;"></div>
+        </div>
+
+        <!-- STEP2: 生成結果 -->
+        <div id="reply-step2" style="display:none;">
+          <div id="reply-scene-label" style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.4rem;"></div>
+          <textarea id="reply-output-textarea" class="form-control" rows="9" style="line-height:1.7;"></textarea>
+          <div style="display:flex;gap:0.5rem;margin-top:0.6rem;flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary" style="flex:1;" onclick="copyReplyText()">📋 コピー</button>
+            <button type="button" class="btn btn-secondary" onclick="resetReplyModal()">↩ やり直す</button>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeReplyModal()">閉じる</button>
+        <button type="button" class="btn btn-primary" id="reply-action-btn" onclick="handleReplyGenerate()">
+          <span id="reply-action-label">✦ 返信文を生成</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================
        貼り付け専用モーダル（シンプル2ステップ）
        ====================================================== -->
   <div id="paste-modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-label="LINEから登録">
@@ -1633,7 +1684,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=94"></script>
+  <script src="./app.js?v=95"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY
