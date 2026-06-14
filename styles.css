@@ -6802,9 +6802,11 @@ body {
 /* 懐中時計 — チェーンから揺れる */
 /* ════ オープニング時計キャンバス ════ */
 #opening-clock-canvas {
+  position: absolute;
   display: block;
-  width: min(88vw, 360px);
-  height: min(88vw, 360px);
+  left: 0;
+  top: 0;
+  /* サイズはJSで設定 */
 }
 
 /* og-reveal は不要だが念のため残す */

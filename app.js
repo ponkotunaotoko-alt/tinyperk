@@ -1650,7 +1650,8 @@ function renderWeeklySummary() {
     chartEl.innerHTML = hoursPerDay.map((h, i) => {
       const pct = Math.round((h / maxHours) * 100);
       const isToday = weekDays[i] === todayStr;
-      const color = isToday ? 'var(--primary)' : (i === 0 ? 'var(--danger)' : i === 6 ? 'var(--secondary)' : 'var(--border-color)');
+      // 月曜始まり: i=5が土, i=6が日
+      const color = isToday ? 'var(--primary)' : (i === 6 ? 'var(--danger)' : i === 5 ? 'var(--secondary)' : 'var(--border-color)');
       const barColor = isToday ? 'var(--primary)' : (h > 0 ? 'var(--text-muted)' : 'var(--border-color)');
       return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:2px;">
         <div style="font-size:0.65rem;color:${isToday ? 'var(--primary)' : 'var(--text-muted)'};font-weight:${isToday?'700':'400'};">${h > 0 ? h.toFixed(1) : ''}</div>
@@ -9479,14 +9480,20 @@ function initOpeningAnimation() {
   const clkCanvas = document.getElementById('opening-clock-canvas');
   if (!clkCanvas) { setTimeout(() => overlay.classList.add('hidden'), 10600); return; }
 
-  const SIZE = Math.min(window.innerWidth * 0.88, 360);
-  clkCanvas.width  = SIZE;
-  clkCanvas.height = SIZE;
-  const cx = SIZE / 2;
-  const cy = SIZE / 2;
-  const R  = SIZE * 0.44;   // 外径
+  // ── キャンバスを画面上半分に広げる ──
+  const CW   = window.innerWidth;
+  const CH   = Math.round(window.innerHeight * 0.50);
+  const SIZE = Math.min(CW * 0.62, 220);   // 時計の直径基準
+  clkCanvas.width  = CW;
+  clkCanvas.height = CH;
+  clkCanvas.style.width  = CW + 'px';
+  clkCanvas.style.height = CH + 'px';
 
-  let swayAngle = 0;
+  const cx      = CW / 2;
+  const PIVOT_Y = CH * 0.04;   // チェーン固定点（上端付近）
+  const cy      = CH * 0.60;   // 時計の中心
+  const R       = SIZE * 0.44; // 外径
+
   let startTime = null;
   let rafId;
 
@@ -9494,21 +9501,50 @@ function initOpeningAnimation() {
     if (!startTime) startTime = ts;
     const elapsed = (ts - startTime) / 1000; // 秒
 
-    // 画面フェード(overlay CSSが担当)が始まる8.5s以降はrAF停止
     if (elapsed > 9.5) { cancelAnimationFrame(rafId); return; }
 
     const ctx = clkCanvas.getContext('2d');
-    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.clearRect(0, 0, CW, CH);
     ctx.save();
 
-    // ── 振り子スウェイ（ゆったり ±9度） ──
-    const SWAY_AMP = 9 * Math.PI / 180;
-    const SWAY_T   = 3.0;  // 周期(秒) — ゆっくり
-    swayAngle = Math.sin((elapsed / SWAY_T) * Math.PI) * SWAY_AMP
-              * Math.exp(-elapsed * 0.018); // 減衰
-    ctx.translate(cx, cy);
+    // ── 振り子（大きく ±30度、コサインで右から開始、自然減衰） ──
+    const SWING_AMP = 30 * Math.PI / 180;
+    const SWING_T   = 2.2; // 周期(秒)
+    const swayAngle = SWING_AMP
+      * Math.cos(2 * Math.PI * elapsed / SWING_T)
+      * Math.exp(-elapsed * 0.09);
+
+    // チェーン固定点（PIVOT_Y）を軸に回転 → 本物の振り子動作
+    ctx.translate(cx, PIVOT_Y);
     ctx.rotate(swayAngle);
-    ctx.translate(-cx, -cy);
+    ctx.translate(-cx, -PIVOT_Y);
+
+    // ── チェーン（固定点から時計上端まで） ──
+    const chainBotY = cy - R * 0.97;
+    const linkCount = 15;
+    for (let i = 0; i <= linkCount; i++) {
+      const t  = i / linkCount;
+      const ly = PIVOT_Y + (chainBotY - PIVOT_Y) * t;
+      const alpha = 0.55 + 0.25 * (1 - t);
+      ctx.save();
+      ctx.translate(cx, ly);
+      ctx.rotate((i % 2) * Math.PI / 2);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, SIZE * 0.014, SIZE * 0.025, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(200,169,110,${alpha})`;
+      ctx.lineWidth = SIZE * 0.011;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 固定金具（上端の金具）
+    const pinTop = ctx.createRadialGradient(cx, PIVOT_Y, 0, cx, PIVOT_Y, SIZE * 0.022);
+    pinTop.addColorStop(0, '#ffe09a');
+    pinTop.addColorStop(1, '#8a6028');
+    ctx.beginPath();
+    ctx.arc(cx, PIVOT_Y, SIZE * 0.022, 0, Math.PI * 2);
+    ctx.fillStyle = pinTop;
+    ctx.fill();
 
     // ── 外縁グロー ──
     const glow = ctx.createRadialGradient(cx, cy, R * 0.7, cx, cy, R * 1.4);
