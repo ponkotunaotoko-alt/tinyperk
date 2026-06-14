@@ -2577,6 +2577,12 @@ h1, h2, h3, h4 {
 .tl-due.overdue { color: var(--danger, #f87171); font-weight: 700; }
 .tl-steps { color: var(--primary); font-weight: 700; }
 .tl-amount { color: var(--success, #4ade80); font-weight: 700; }
+/* 完成予定日（自分の目標） */
+.tl-target-date {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  opacity: 0.85;
+}
 
 .tasks-empty {
   text-align: center;
@@ -3024,6 +3030,31 @@ h1, h2, h3, h4 {
 .tl-task-row.dragging {
   opacity: 0.5;
   transform: scale(0.98);
+}
+
+/* 日誌追加ボタン（スマホ用タップ / PCはD&Dと併用） */
+.tl-journal-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.15s;
+  align-self: center;
+}
+.task-row-swipe:hover .tl-journal-btn,
+.task-row-swipe:focus-within .tl-journal-btn {
+  opacity: 1;
+}
+/* スマホは常に表示 */
+@media (max-width: 768px) {
+  .tl-journal-btn {
+    opacity: 0.6;
+    font-size: 1rem;
+  }
 }
 
 @media (max-width: 768px) {

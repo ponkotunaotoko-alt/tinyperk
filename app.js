@@ -1361,6 +1361,12 @@ function setupEventListeners() {
   const unschCb = document.getElementById('task-unscheduled');
   if (unschCb) unschCb.addEventListener('change', () => _toggleUnscheduledDate(unschCb.checked));
 
+  // ノルマ日・完成予定日 → バッファヒント更新
+  const dueDateInput    = document.getElementById('task-due-date');
+  const targetDateInput = document.getElementById('task-target-date');
+  if (dueDateInput)    dueDateInput.addEventListener('change', _updateBufferHint);
+  if (targetDateInput) targetDateInput.addEventListener('change', _updateBufferHint);
+
   // Steps editor
   const btnAddStep = document.getElementById('btn-add-step');
   if (btnAddStep) btnAddStep.addEventListener('click', addEditingStep);
@@ -1514,6 +1520,7 @@ function switchTab(tab) {
     populateBusinessInfoForm();
     populateWorkSettingsForm();
     loadClaudeApiKeyStatus();
+    loadGeminiApiKeyStatus();
   } else if (tab === 'tasks') {
     renderTaskList();
   } else if (tab === 'journal') {
@@ -2537,7 +2544,7 @@ function handleTimelineDrop(e, hour) {
   const taskId = e.dataTransfer.getData('text/x-tinyperk-task')
              || e.dataTransfer.getData('text/plain');
   if (!taskId) return;
-  const task = state.tasks.find(t => t.id === taskId);
+  const task = state.tasks.find(t => String(t.id) === String(taskId));
   if (!task) return;
 
   const date = state.journalDate;
@@ -3000,12 +3007,16 @@ function renderTaskList() {
               <span class="tl-client">👤 ${escapeHtml(task.client || '—')}</span>
               ${task.isUnscheduled
                 ? `<span class="tag-unscheduled">📋 日程未定</span>`
-                : `<span class="${dueCls}">📅 ${task.dueDate || '—'}${isOverdue ? ' ⚠️' : ''}</span>`}
+                : `<span class="${dueCls}">🎯 ${task.dueDate || '—'}${isOverdue ? ' ⚠️' : ''}</span>`}
+              ${task.targetDate && !task.isUnscheduled
+                ? `<span class="tl-target-date">✅ ${task.targetDate}</span>`
+                : ''}
               ${stepText}
               ${task.estimatedHours ? `<span class="tl-estimated">⏳ ${task.estimatedHours}h</span>` : ''}
               ${task.amount ? `<span class="tl-amount">¥${Number(task.amount).toLocaleString()}</span>` : ''}
             </div>
           </div>
+          <button type="button" class="tl-journal-btn" onclick="event.stopPropagation();addTaskToJournal('${task.id}')" title="日誌に追加">📓</button>
         </div>
       </div>`;
   }
@@ -3420,7 +3431,8 @@ function setupJournalDropZone(textarea) {
     e.preventDefault();
     textarea.classList.remove('journal-drop-active');
 
-    const task = state.tasks.find(t => t.id === taskId);
+    // t.id はNumber、taskIdはdataTransfer経由でString → String()で統一比較
+    const task = state.tasks.find(t => String(t.id) === String(taskId));
     if (!task) return;
 
     const statusLabel = { 'not-started': 'PENDING', 'in-progress': 'IN PROGRESS', 'revision': 'REVISION', 'completed': 'DONE' };
@@ -3442,6 +3454,28 @@ function setupJournalDropZone(textarea) {
 
     showTrayToast(`📌 「${task.name}」を日誌に追加しました`);
   });
+}
+
+// スマホ用：タップで日誌にタスクを追記（タスクリストの 📓 ボタン）
+function addTaskToJournal(taskId) {
+  const task = state.tasks.find(t => String(t.id) === String(taskId));
+  if (!task) return;
+  const statusLabel = { 'not-started': 'PENDING', 'in-progress': 'IN PROGRESS', 'revision': 'REVISION', 'completed': 'DONE' };
+  const spent = task.spentSeconds > 0 ? ` ⏱${fmtSeconds(task.spentSeconds)}` : '';
+  const line = `\n- 【${statusLabel[task.status] || task.status}】${task.name}（${task.client || '—'}）${spent}`;
+
+  const date = state.journalDate || getLocalDateStr();
+  if (!state.journalEntries[date]) state.journalEntries[date] = {};
+  state.journalEntries[date].text = (state.journalEntries[date].text || '') + line;
+  saveJournalToStorage();
+
+  // 日誌タブが開いていれば textarea も更新
+  const textEl = document.getElementById('journal-text');
+  if (textEl && state.activeTab === 'journal') {
+    textEl.value = state.journalEntries[date].text;
+  }
+
+  showTrayToast(`📓 「${task.name}」を日誌に追加しました`);
 }
 
 function saveJournalEntry() {
@@ -4736,6 +4770,28 @@ function _toggleUnscheduledDate(isUnscheduled) {
   if (isUnscheduled) dueDateEl.value = '';
 }
 
+// ノルマ日・完成予定日の「バッファ」表示
+function _updateBufferHint() {
+  const hintEl = document.getElementById('task-buffer-hint');
+  if (!hintEl) return;
+  const due    = document.getElementById('task-due-date')?.value;
+  const target = document.getElementById('task-target-date')?.value;
+  if (!due || !target) { hintEl.textContent = ''; return; }
+  const dueMs    = new Date(due).getTime();
+  const targetMs = new Date(target).getTime();
+  const bufDays  = Math.round((dueMs - targetMs) / 86400000);
+  if (bufDays < 0) {
+    hintEl.textContent = `⚠️ 完成予定がノルマより${Math.abs(bufDays)}日後になっています`;
+    hintEl.style.color = 'var(--danger)';
+  } else if (bufDays === 0) {
+    hintEl.textContent = '⚠️ 完成予定とノルマが同日です。余裕を持つと安心です。';
+    hintEl.style.color = 'var(--warning, #f0a030)';
+  } else {
+    hintEl.textContent = `✓ ノルマまで ${bufDays}日の余裕があります`;
+    hintEl.style.color = 'var(--success)';
+  }
+}
+
 function openAddTaskModal(prefilledDate) {
   state.editingTaskId = null;
   document.getElementById('modal-title').textContent = '新しいタスクを追加';
@@ -4751,6 +4807,8 @@ function openAddTaskModal(prefilledDate) {
   document.getElementById('task-name').value = '';
   document.getElementById('task-details').value = '';
   document.getElementById('task-due-date').value = prefilledDate || getLocalDateStr();
+  const _tdEl = document.getElementById('task-target-date'); if (_tdEl) _tdEl.value = '';
+  const _bufEl = document.getElementById('task-buffer-hint'); if (_bufEl) _bufEl.textContent = '';
   document.getElementById('task-client').value = '';
   document.getElementById('task-amount').value = '';
   document.getElementById('task-estimated-hours').value = '';
@@ -4802,6 +4860,9 @@ function openEditTaskModal(taskId) {
   const _unschEditEl = document.getElementById('task-unscheduled');
   if (_unschEditEl) { _unschEditEl.checked = !!task.isUnscheduled; _toggleUnscheduledDate(!!task.isUnscheduled); }
   document.getElementById('task-due-date').value = task.dueDate || '';
+  const _targetEl = document.getElementById('task-target-date');
+  if (_targetEl) _targetEl.value = task.targetDate || '';
+  _updateBufferHint();
   document.getElementById('task-client').value = task.client;
   setTimeout(updateSamePriceHint, 80);
   document.getElementById('task-amount').value = task.amount;
@@ -4915,6 +4976,7 @@ function handleTaskFormSubmit(e) {
   const details = document.getElementById('task-details').value.trim();
   const isUnscheduled = document.getElementById('task-unscheduled')?.checked || false;
   const dueDate = isUnscheduled ? null : (document.getElementById('task-due-date').value || null);
+  const targetDate = document.getElementById('task-target-date')?.value || null;
   const client = document.getElementById('task-client').value.trim();
   const amount = parseFloat(document.getElementById('task-amount').value) || 0;
   const estimatedHours = parseFloat(document.getElementById('task-estimated-hours').value) || 0;
@@ -4943,6 +5005,7 @@ function handleTaskFormSubmit(e) {
       task.details = details;
       task.isUnscheduled = isUnscheduled;
       task.dueDate = dueDate;
+      task.targetDate = targetDate;
       task.client = client;
       task.amount = amount;
       task.estimatedHours = estimatedHours;
@@ -4993,6 +5056,7 @@ function handleTaskFormSubmit(e) {
       details,
       isUnscheduled,
       dueDate,
+      targetDate,
       originalDueDate: dueDate,
       client,
       amount,
@@ -8160,8 +8224,252 @@ pauseTaskTimer = function() {
   if (_focusState.active) closeFocusMode();
 };
 
+// ─── ルールベースタスクパーサー（APIキー不要・完全無料） ─────────────────
+function parseTaskRuleBased(text) {
+  const today = new Date();
+  const todayStr = getLocalDateStr();
+
+  // ── 日付抽出 ──────────────────────────────────────────
+  let dueDate = '';
+
+  // YYYY-MM-DD / YYYY/MM/DD
+  const isoMatch = text.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (isoMatch) {
+    dueDate = `${isoMatch[1]}-${String(isoMatch[2]).padStart(2,'0')}-${String(isoMatch[3]).padStart(2,'0')}`;
+  }
+
+  // M/D or MM/DD (例: 6/25, 12/31)
+  if (!dueDate) {
+    const slashMatch = text.match(/(?<!\d)(\d{1,2})\/(\d{1,2})(?!\d)/);
+    if (slashMatch) {
+      const m = parseInt(slashMatch[1]), d = parseInt(slashMatch[2]);
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        const yr = today.getFullYear();
+        const dt = new Date(yr, m - 1, d);
+        if (dt < today) dt.setFullYear(yr + 1);
+        dueDate = toLocalDateStr(dt);
+      }
+    }
+  }
+
+  // M月D日 / M月D
+  if (!dueDate) {
+    const jpMatch = text.match(/(\d{1,2})月(\d{1,2})日?/);
+    if (jpMatch) {
+      const m = parseInt(jpMatch[1]), d = parseInt(jpMatch[2]);
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        const yr = today.getFullYear();
+        const dt = new Date(yr, m - 1, d);
+        if (dt < today) dt.setFullYear(yr + 1);
+        dueDate = toLocalDateStr(dt);
+      }
+    }
+  }
+
+  // 相対日付
+  if (!dueDate) {
+    const _addDays = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return toLocalDateStr(d); };
+    const _monthEnd = (offset) => {
+      const d = new Date(today.getFullYear(), today.getMonth() + 1 + offset, 0);
+      return toLocalDateStr(d);
+    };
+    if (/今日|本日/.test(text))     dueDate = todayStr;
+    else if (/明後日|あさって/.test(text)) dueDate = _addDays(2);
+    else if (/明日/.test(text))       dueDate = _addDays(1);
+    else if (/再来週/.test(text))     dueDate = _addDays(14);
+    else if (/来週中|来週末/.test(text)) dueDate = _addDays(7);
+    else if (/来週/.test(text))       dueDate = _addDays(7);
+    else if (/今週中|今週末|週内/.test(text)) {
+      const dow = today.getDay(); // 0=Sun
+      dueDate = _addDays((5 - dow + 7) % 7 || 5);
+    }
+    else if (/来月末/.test(text))     dueDate = _monthEnd(1);
+    else if (/今月末|月末/.test(text)) dueDate = _monthEnd(0);
+  }
+
+  // ── 金額抽出 ──────────────────────────────────────────
+  let amount = 0;
+  const manMatch = text.match(/(\d+(?:\.\d+)?)万円/);
+  if (manMatch) amount = Math.round(parseFloat(manMatch[1]) * 10000);
+  if (!amount) {
+    const yenSymMatch = text.match(/[¥￥](\d[\d,]*)/);
+    if (yenSymMatch) amount = parseInt(yenSymMatch[1].replace(/,/g, ''));
+  }
+  if (!amount) {
+    const yenMatch = text.match(/(\d[\d,]{2,})円/);
+    if (yenMatch) amount = parseInt(yenMatch[1].replace(/,/g, ''));
+  }
+
+  // ── 時間抽出 ──────────────────────────────────────────
+  let estimatedHours = 0;
+  const hMatch = text.match(/(\d+(?:\.\d+)?)\s*[時hH]間?/);
+  if (hMatch) estimatedHours = parseFloat(hMatch[1]);
+
+  // ── 優先度 ──────────────────────────────────────────
+  let priority = 'medium';
+  if (/急ぎ|至急|ASAP|asap|緊急|urgent|すぐ|早急|急いで/.test(text)) priority = 'high';
+  if (/余裕|急がない|いつでも|のんびり/.test(text)) priority = 'low';
+
+  // ── タスク名（最初の意味のある行） ──────────────────────────────────────
+  const skipPhrases = /^(お世話になっております|ご連絡いただき|よろしくお願い|確認|ありがとう|初めまして|いつも|拝啓|連日|すみません)/;
+  const lines = text.split(/[\n。！？!?]/).map(l => l.trim()).filter(l => l.length >= 4);
+  let name = '';
+  for (const line of lines) {
+    if (skipPhrases.test(line)) continue;
+    // 日時・挨拶だけの行はスキップ
+    if (/^\d{1,2}[\/月]\d{1,2}/.test(line)) continue;
+    name = line.replace(/[「」【】『』]/, '').substring(0, 28).trim();
+    if (name) break;
+  }
+  if (!name && lines.length > 0) name = lines[0].substring(0, 28).trim();
+
+  // ── 業務種別 ──────────────────────────────────────────
+  let workType = '';
+  const workMap = [
+    ['取材', '取材'], ['撮影', '撮影'], ['動画', '動画撮影'], ['編集', '編集'],
+    ['執筆|ライティング|原稿', '執筆'], ['デザイン', 'デザイン'],
+    ['打ち合わせ|ミーティング|MTG|打合せ', '打ち合わせ'],
+    ['納品', '納品'], ['校正|修正', '修正・校正']
+  ];
+  for (const [pat, label] of workMap) {
+    if (new RegExp(pat).test(text)) { workType = label; break; }
+  }
+
+  // ── メモ（dueDate に関わる一文） ──────────────────────────────────────
+  let memo = '';
+  const memoLine = lines.find(l => l.includes('ください') || l.includes('お願い') || l.includes('確認'));
+  if (memoLine && memoLine !== name) memo = memoLine.substring(0, 50);
+
+  return { name, client: '', dueDate, amount, estimatedHours, priority, workType, memo };
+}
+
+// ─── AI呼び出し共通（Claude / Gemini 両対応） ─────────────────────────────
+const _CLAUDE_KEY_STORE  = 'tinyperk_claude_api_key';
+const _GEMINI_KEY_STORE  = 'tinyperk_gemini_api_key';
+
+async function _callAIForTaskParse(text) {
+  const claudeKey = localStorage.getItem(_CLAUDE_KEY_STORE);
+  const geminiKey = localStorage.getItem(_GEMINI_KEY_STORE);
+
+  const todayStr = getLocalDateStr();
+  const prompt = `あなたはタスク管理AIです。以下のLINEやメールの文章から、タスク登録に必要な情報を抽出してください。
+JSONのみを返してください（前後の説明や\`\`\`は不要）。
+
+今日の日付: ${todayStr}
+
+抽出フォーマット:
+{
+  "name": "タスク名（簡潔に20文字以内）",
+  "client": "クライアント名・会社名・人名（不明なら空文字）",
+  "dueDate": "YYYY-MM-DD形式（「今週中」「月末」等も今日の日付を基準に変換。不明なら空文字）",
+  "amount": 金額の数値（税別。「3万円」→30000。不明なら0）,
+  "estimatedHours": 作業時間の数値（不明なら0）,
+  "priority": "high"か"medium"か"low",
+  "workType": "業務カテゴリ（取材・執筆・撮影・デザイン・構成・編集・打ち合わせ等）",
+  "memo": "その他の重要情報（1-2文）"
+}
+
+文章:
+${text}`;
+
+  // ── Gemini（無料・推奨） ──────────────────────────────────────────────
+  if (geminiKey) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      const raw = err?.error?.message || '';
+      if (resp.status === 400 && raw.includes('API_KEY')) throw new Error('GeminiのAPIキーが無効です。設定画面で確認してください。');
+      if (resp.status === 429) throw new Error('Gemini APIの無料枠を超えました。しばらく待ってから再試行してください。');
+      throw new Error(`Gemini APIエラー (${resp.status})${raw ? ': ' + raw : ''}`);
+    }
+    const data = await resp.json();
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Gemini解析結果を読み取れませんでした');
+    return JSON.parse(jsonMatch[0]);
+  }
+
+  // ── Claude（有料） ────────────────────────────────────────────────────
+  if (claudeKey) {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': claudeKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      const raw = err?.error?.message || '';
+      if (resp.status === 401) throw new Error('Claude APIキーが無効です。設定画面で再登録してください。');
+      if (resp.status === 429 || raw.toLowerCase().includes('credit') || raw.toLowerCase().includes('balance'))
+        throw new Error('Claude APIクレジットが不足しています。console.anthropic.com で追加してください。');
+      throw new Error(`Claude APIエラー (${resp.status})`);
+    }
+    const data = await resp.json();
+    const rawText = data.content?.[0]?.text || '';
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Claude解析結果を読み取れませんでした');
+    return JSON.parse(jsonMatch[0]);
+  }
+
+  // ── APIキーなし → ルールベース ────────────────────────────────────────
+  return null; // caller will fall back to parseTaskRuleBased
+}
+
+// ─── Gemini APIキー管理（無料・推奨） ────────────────────────────────────
+function saveGeminiApiKey() {
+  const input    = document.getElementById('gemini-api-key-input');
+  const statusEl = document.getElementById('gemini-api-key-status');
+  if (!input) return;
+  const key = input.value.trim();
+  if (!key) {
+    if (statusEl) { statusEl.textContent = 'キーを入力してください。'; statusEl.style.color = 'var(--danger)'; }
+    return;
+  }
+  localStorage.setItem(_GEMINI_KEY_STORE, key);
+  input.value = '';
+  if (statusEl) {
+    statusEl.textContent = `✅ 保存済み — ${_maskKey(key)}`;
+    statusEl.style.color = 'var(--success)';
+  }
+}
+
+function clearGeminiApiKey() {
+  localStorage.removeItem(_GEMINI_KEY_STORE);
+  const input    = document.getElementById('gemini-api-key-input');
+  const statusEl = document.getElementById('gemini-api-key-status');
+  if (input) input.value = '';
+  if (statusEl) { statusEl.textContent = '削除しました。'; statusEl.style.color = 'var(--text-muted)'; }
+}
+
+function loadGeminiApiKeyStatus() {
+  const statusEl = document.getElementById('gemini-api-key-status');
+  if (!statusEl) return;
+  const key = localStorage.getItem(_GEMINI_KEY_STORE);
+  if (key) {
+    statusEl.textContent = `✅ 登録済み — ${_maskKey(key)}`;
+    statusEl.style.color = 'var(--success)';
+  } else {
+    statusEl.textContent = 'APIキー未登録。登録するとAIによる高精度解析が使えます。';
+    statusEl.style.color = 'var(--text-muted)';
+  }
+}
+
 // ─── Claude APIキー管理 ────────────────────────────────────────────
-const _CLAUDE_KEY_STORE = 'tinyperk_claude_api_key';
+// (Claudeキーは名刺OCR専用として残す; LINEパースはGemini/ルールベースを優先)
 
 function saveClaudeApiKey() {
   const input = document.getElementById('claude-api-key-input');
@@ -8566,7 +8874,18 @@ ${text}`;
 
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `APIエラー (${resp.status})`);
+      const raw = err?.error?.message || '';
+      let msg;
+      if (resp.status === 401) {
+        msg = 'APIキーが無効です。設定画面で正しいキーを入力してください。';
+      } else if (resp.status === 429 || raw.toLowerCase().includes('credit') || raw.toLowerCase().includes('balance')) {
+        msg = 'APIクレジットが不足しています。console.anthropic.com › Plans & Billing でクレジットを追加してください。';
+      } else if (resp.status === 529 || resp.status >= 500) {
+        msg = 'Anthropic APIが一時的に混雑しています。しばらく待ってから再試行してください。';
+      } else {
+        msg = `APIエラー (${resp.status})${raw ? ': ' + raw : ''}`;
+      }
+      throw new Error(msg);
     }
 
     const data = await resp.json();
@@ -8878,7 +9197,7 @@ async function handlePasteModalAction() {
     return;
   }
 
-  // ─── Step1: AI解析 ──────────────────────────────────────────────
+  // ─── Step1: 解析 ──────────────────────────────────────────────
   const ta  = document.getElementById('paste-modal-textarea');
   const st  = document.getElementById('paste-modal-status');
   const btn = document.getElementById('paste-modal-action-btn');
@@ -8892,66 +9211,24 @@ async function handlePasteModalAction() {
     return;
   }
 
-  const apiKey = localStorage.getItem(_CLAUDE_KEY_STORE);
-  if (!apiKey) {
-    st.innerHTML = '⚠ <a href="#" onclick="closePasteModal();switchTab(\'settings\');return false;" style="color:var(--primary);">設定</a>でClaude APIキーを登録してください';
-    st.style.color = 'var(--primary)';
-    return;
-  }
-
   btn.disabled = true;
-  lbl.textContent = '解析中...';
+  const hasGemini = !!localStorage.getItem(_GEMINI_KEY_STORE);
+  const hasClaude = !!localStorage.getItem(_CLAUDE_KEY_STORE);
+  lbl.textContent = (hasGemini || hasClaude) ? 'AI解析中...' : '解析中...';
   st.textContent = '';
 
-  const todayStr = getLocalDateStr();
-  const prompt = `あなたはタスク管理AIです。以下のLINEやメールの文章から、タスク登録に必要な情報を抽出してください。
-JSONのみを返してください（前後の説明や\`\`\`は不要）。
-
-今日の日付: ${todayStr}
-
-抽出フォーマット:
-{
-  "name": "タスク名（簡潔に20文字以内）",
-  "client": "クライアント名・会社名・人名（不明なら空文字）",
-  "dueDate": "YYYY-MM-DD形式（「今週中」「月末」等も今日の日付を基準に変換。不明なら空文字）",
-  "amount": 金額の数値（税別。「3万円」→30000。不明なら0）,
-  "estimatedHours": 作業時間の数値（不明なら0）,
-  "priority": "high"か"medium"か"low",
-  "workType": "業務カテゴリ（取材・執筆・撮影・デザイン・構成・編集・打ち合わせ等）",
-  "memo": "その他の重要情報（1-2文）"
-}
-
-文章:
-${text}`;
-
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 400,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
+    // AI → なければルールベース
+    let parsed = await _callAIForTaskParse(text);
+    const usedAI = parsed !== null;
+    if (!parsed) parsed = parseTaskRuleBased(text);
 
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `APIエラー (${resp.status})`);
-    }
-
-    const data = await resp.json();
-    const rawText = data.content?.[0]?.text || '';
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('解析結果を読み取れませんでした');
-
-    _pasteModalParsed = JSON.parse(jsonMatch[0]);
+    _pasteModalParsed = parsed;
     const p = _pasteModalParsed;
+
+    // ステータスに使用モードを表示
+    st.textContent = usedAI ? '✦ AIで解析しました' : '✦ 自動解析しました（APIキー不要）';
+    st.style.color = 'var(--text-muted)';
 
     // ── Step2 プレビュー表示 ──
     const step1   = document.getElementById('paste-step1');

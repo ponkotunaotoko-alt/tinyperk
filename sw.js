@@ -1,4 +1,4 @@
-const CACHE_NAME = 'task-invoice-v90';
+const CACHE_NAME = 'task-invoice-v92';
 const ASSETS = [
   './',
   './index.html',
