@@ -6359,6 +6359,29 @@ body {
   .paste-hints-row { grid-template-columns: 1fr; }
 }
 
+/* ===== AI解析結果 編集フォーム（Step2） ===== */
+.pp-row {
+  display: grid;
+  grid-template-columns: 5.5em 1fr;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+}
+.pp-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pp-input { flex: 1; }
+.pp-fc {
+  font-size: 0.85rem !important;
+  padding: 0.3rem 0.5rem !important;
+  height: auto !important;
+  min-height: 36px;
+  border-radius: var(--radius-sm) !important;
+}
+.pp-fc textarea { min-height: 60px; }
+
 /* ===== 感情コピー 稼働時間 ===== */
 .emotional-hours-copy {
   font-size: 0.78rem;

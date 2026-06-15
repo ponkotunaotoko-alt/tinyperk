@@ -1335,11 +1335,14 @@ function setupEventListeners() {
   window.addEventListener('beforeunload', autoSaveTimerOnUnload);
 
   // Onboarding
-  // ステータスラジオ変更時に自動保存
+  // ステータスラジオ変更時に自動保存 + 入金ステータスの表示切替
   document.querySelectorAll('input[name="task-status"]').forEach(radio => {
     radio.addEventListener('change', () => {
       const id = document.getElementById('task-id').value;
       if (id) autoSaveTask(); // 編集時のみ自動保存
+      // 完了時のみ入金ステータスフィールドを表示
+      const pgEl = document.getElementById('payment-status-group');
+      if (pgEl) pgEl.style.display = radio.value === 'completed' ? 'block' : 'none';
     });
   });
 
@@ -4812,6 +4815,7 @@ function openAddTaskModal(prefilledDate) {
   document.getElementById('task-id').value = '';
   document.getElementById('task-name').value = '';
   document.getElementById('task-details').value = '';
+  const _sdEl = document.getElementById('task-start-date'); if (_sdEl) _sdEl.value = '';
   document.getElementById('task-due-date').value = prefilledDate || getLocalDateStr();
   const _tdEl = document.getElementById('task-target-date'); if (_tdEl) _tdEl.value = '';
   const _bufEl = document.getElementById('task-buffer-hint'); if (_bufEl) _bufEl.textContent = '';
@@ -4821,6 +4825,8 @@ function openAddTaskModal(prefilledDate) {
   document.getElementById('task-predecessor').value = '';
   document.getElementById('task-deadline-fixed').checked = false;
   document.querySelector(`input[name="task-status"][value="not-started"]`).checked = true;
+  const _psEl = document.getElementById('task-payment-status'); if (_psEl) _psEl.value = '';
+  const _pgEl = document.getElementById('payment-status-group'); if (_pgEl) _pgEl.style.display = 'none';
   const _prioEl = document.getElementById('task-priority'); if (_prioEl) _prioEl.value = 'medium';
   const _unschEl = document.getElementById('task-unscheduled');
   if (_unschEl) { _unschEl.checked = false; _toggleUnscheduledDate(false); }
@@ -4865,6 +4871,8 @@ function openEditTaskModal(taskId) {
   document.getElementById('task-details').value = task.details;
   const _unschEditEl = document.getElementById('task-unscheduled');
   if (_unschEditEl) { _unschEditEl.checked = !!task.isUnscheduled; _toggleUnscheduledDate(!!task.isUnscheduled); }
+  const _startEl = document.getElementById('task-start-date');
+  if (_startEl) _startEl.value = task.startDate || '';
   document.getElementById('task-due-date').value = task.dueDate || '';
   const _targetEl = document.getElementById('task-target-date');
   if (_targetEl) _targetEl.value = task.targetDate || '';
@@ -4884,6 +4892,11 @@ function openEditTaskModal(taskId) {
   const _safeStatus = _validStatuses.includes(task.status) ? task.status : 'not-started';
   const _radioEl = document.querySelector(`input[name="task-status"][value="${_safeStatus}"]`);
   if (_radioEl) _radioEl.checked = true;
+  // 入金ステータス
+  const _psEditEl = document.getElementById('task-payment-status');
+  if (_psEditEl) _psEditEl.value = task.paymentStatus || '';
+  const _pgEditEl = document.getElementById('payment-status-group');
+  if (_pgEditEl) _pgEditEl.style.display = task.status === 'completed' ? 'block' : 'none';
 
   initStepsEditor(task);
   updateClientSuggestions();
@@ -4981,6 +4994,7 @@ function handleTaskFormSubmit(e) {
   const name = document.getElementById('task-name').value.trim();
   const details = document.getElementById('task-details').value.trim();
   const isUnscheduled = document.getElementById('task-unscheduled')?.checked || false;
+  const startDate = document.getElementById('task-start-date')?.value || null;
   const dueDate = isUnscheduled ? null : (document.getElementById('task-due-date').value || null);
   const targetDate = document.getElementById('task-target-date')?.value || null;
   const client = document.getElementById('task-client').value.trim();
@@ -4992,6 +5006,7 @@ function handleTaskFormSubmit(e) {
   const isDeadlineFixed = document.getElementById('task-deadline-fixed').checked;
   const priority = document.getElementById('task-priority')?.value || 'medium';
   const workType = document.getElementById('task-work-type')?.value.trim() || '';
+  const paymentStatus = document.getElementById('task-payment-status')?.value || '';
 
   if (!name || !client || (!isUnscheduled && !dueDate)) {
     showToastError('タスク名、クライアント名は必須です。期日がある場合は入力してください。');
@@ -5010,6 +5025,7 @@ function handleTaskFormSubmit(e) {
       task.name = name;
       task.details = details;
       task.isUnscheduled = isUnscheduled;
+      task.startDate = startDate;
       task.dueDate = dueDate;
       task.targetDate = targetDate;
       task.client = client;
@@ -5020,6 +5036,7 @@ function handleTaskFormSubmit(e) {
       task.isDeadlineFixed = isDeadlineFixed;
       task.priority = priority;
       task.workType = workType;
+      task.paymentStatus = paymentStatus;
       const _projSelSub = document.getElementById('task-project');
       if (_projSelSub) task.projectId = _projSelSub.value || null;
       // If changed from unscheduled → scheduled, remove any pending proposal
@@ -5061,6 +5078,7 @@ function handleTaskFormSubmit(e) {
       name,
       details,
       isUnscheduled,
+      startDate,
       dueDate,
       targetDate,
       originalDueDate: dueDate,
@@ -5073,6 +5091,7 @@ function handleTaskFormSubmit(e) {
       isDeadlineFixed,
       priority,
       workType,
+      paymentStatus,
       projectId: (document.getElementById('task-project')?.value) || null,
       spentSeconds: 0,
       steps: JSON.parse(JSON.stringify(state.editingSteps))
@@ -5319,6 +5338,9 @@ function renderInvoicePreview(selectedMonth, selectedClient) {
   const subtotal = completedTasks.reduce((s, t) => s + (t.amount || 0), 0);
   const tax = Math.round(subtotal * 0.1);
   const total = subtotal + tax;
+  const withholding = document.getElementById('invoice-withholding')?.checked;
+  const withholdingAmt = withholding ? Math.round(subtotal * 0.1021) : 0;
+  const netTotal = total - withholdingAmt;
 
   // Client name for invoice
   const clientName = selectedClient !== 'all' ? selectedClient : (completedTasks[0]?.client || 'ご担当者');
@@ -5359,8 +5381,8 @@ function renderInvoicePreview(selectedMonth, selectedClient) {
 
       <!-- 合計 -->
       <div style="background:#f5f5f5; border:1px solid #ccc; padding:1rem 1.5rem; margin-bottom:1.5rem; border-radius:4px;">
-        <span style="font-size:0.9rem;">ご請求金額（税込）</span>
-        <span style="font-size:2rem; font-weight:900; margin-left:1rem; color:#1a1a2e;">¥${new Intl.NumberFormat('ja-JP').format(total)}</span>
+        <span style="font-size:0.9rem;">ご請求金額（税込${withholding ? '・源泉控除後' : ''}）</span>
+        <span style="font-size:2rem; font-weight:900; margin-left:1rem; color:#1a1a2e;">¥${new Intl.NumberFormat('ja-JP').format(netTotal)}</span>
       </div>
 
       <!-- 明細テーブル -->
@@ -5391,6 +5413,16 @@ function renderInvoicePreview(selectedMonth, selectedClient) {
             <td colspan="5" style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">合計（税込）</td>
             <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">¥${new Intl.NumberFormat('ja-JP').format(total)}</td>
           </tr>
+          ${withholding ? `
+          <tr>
+            <td colspan="5" style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right; color:#c0392b;">源泉徴収税額（10.21%）</td>
+            <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right; color:#c0392b;">▲¥${new Intl.NumberFormat('ja-JP').format(withholdingAmt)}</td>
+          </tr>
+          <tr style="background:#fff3e0; font-weight:900; font-size:1.05em;">
+            <td colspan="5" style="padding:0.5rem 0.75rem; border:2px solid #e67e22; text-align:right;">差引ご請求金額</td>
+            <td style="padding:0.5rem 0.75rem; border:2px solid #e67e22; text-align:right; color:#d35400;">¥${new Intl.NumberFormat('ja-JP').format(netTotal)}</td>
+          </tr>
+          ` : ''}
         </tfoot>
       </table>
 
@@ -5543,6 +5575,8 @@ function renderInvoiceReport() {
   renderWorkTypeAnalysis(completedTasks);
   renderWorkTypeRevenue(completedTasks);
   renderEstimationGuide();
+  // 入金管理
+  renderPaymentTracker();
 
   completedTasks.forEach(task => {
     const taxExcl = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(task.amount || 0);
@@ -5568,6 +5602,239 @@ function renderInvoiceReport() {
 }
 
 
+
+// ── 入金管理 ──────────────────────────────────────────────────────────────
+function renderPaymentTracker() {
+  const section = document.getElementById('payment-tracker-section');
+  const el = document.getElementById('payment-tracker-content');
+  if (!el) return;
+
+  const billable = state.tasks.filter(t => t.status === 'completed' && (t.amount || 0) > 0);
+  if (billable.length === 0) {
+    if (section) section.style.display = 'none';
+    return;
+  }
+  if (section) section.style.display = 'block';
+
+  const fmt = (n) => '¥' + Math.round(n).toLocaleString('ja-JP');
+  const groups = [
+    { key: '', label: '💼 未請求', color: '#64748b', tasks: billable.filter(t => !t.paymentStatus) },
+    { key: 'invoiced', label: '📤 請求済み', color: '#f59e0b', tasks: billable.filter(t => t.paymentStatus === 'invoiced') },
+    { key: 'paid', label: '✅ 入金済み', color: '#16a34a', tasks: billable.filter(t => t.paymentStatus === 'paid') }
+  ];
+
+  const totalUnpaid = groups[0].tasks.reduce((s,t)=>s+(t.amount||0)*1.1,0);
+  const totalInvoiced = groups[1].tasks.reduce((s,t)=>s+(t.amount||0)*1.1,0);
+  const totalPaid = groups[2].tasks.reduce((s,t)=>s+(t.amount||0)*1.1,0);
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-bottom:1.25rem;">
+      <div style="background:var(--bg-secondary);border-radius:10px;padding:0.85rem;text-align:center;">
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">未請求</div>
+        <div style="font-size:1.1rem;font-weight:700;color:#64748b;">${fmt(totalUnpaid)}</div>
+      </div>
+      <div style="background:var(--bg-secondary);border-radius:10px;padding:0.85rem;text-align:center;">
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">請求済み</div>
+        <div style="font-size:1.1rem;font-weight:700;color:#f59e0b;">${fmt(totalInvoiced)}</div>
+      </div>
+      <div style="background:var(--bg-secondary);border-radius:10px;padding:0.85rem;text-align:center;">
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">入金済み</div>
+        <div style="font-size:1.1rem;font-weight:700;color:#16a34a;">${fmt(totalPaid)}</div>
+      </div>
+    </div>
+    ${groups.map(g => g.tasks.length === 0 ? '' : `
+      <div style="margin-bottom:1rem;">
+        <div style="font-size:0.82rem;font-weight:700;color:${g.color};margin-bottom:0.5rem;">${g.label} (${g.tasks.length}件 / ${fmt(g.tasks.reduce((s,t)=>s+(t.amount||0)*1.1,0))})</div>
+        ${g.tasks.slice(0,8).map(t => `
+          <div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0;border-bottom:1px solid var(--border-light);">
+            <div style="flex:1;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHTML(t.name)}</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);white-space:nowrap;">${t.client||''}</div>
+            <div style="font-size:0.82rem;font-weight:700;white-space:nowrap;">${fmt((t.amount||0)*1.1)}</div>
+            <select onchange="setPaymentStatus('${t.id}',this.value)" style="font-size:0.75rem;padding:0.2rem 0.35rem;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-primary);cursor:pointer;">
+              <option value="" ${!t.paymentStatus?'selected':''}>未請求</option>
+              <option value="invoiced" ${t.paymentStatus==='invoiced'?'selected':''}>請求済み</option>
+              <option value="paid" ${t.paymentStatus==='paid'?'selected':''}>入金済み</option>
+            </select>
+          </div>
+        `).join('')}
+      </div>
+    `).join('')}
+  `;
+}
+
+function setPaymentStatus(taskId, status) {
+  const task = state.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  task.paymentStatus = status;
+  saveTasksToStorage();
+  renderPaymentTracker();
+}
+
+// ── 見積書 ──────────────────────────────────────────────────────────────────
+function openEstimateModal() {
+  closeInvoiceModal();
+  document.getElementById('estimate-modal-overlay').style.display = 'flex';
+  refreshEstimatePreview();
+}
+
+function closeEstimateModal() {
+  document.getElementById('estimate-modal-overlay').style.display = 'none';
+}
+
+function refreshEstimatePreview() {
+  const client = document.getElementById('estimate-client')?.value.trim() || '';
+  const days = parseInt(document.getElementById('estimate-validity')?.value || '30');
+  renderEstimatePreview(client, days);
+}
+
+function renderEstimatePreview(clientName, validDays = 30) {
+  const bi = state.businessInfo;
+  const issueDate = getLocalDateStr();
+  const expiryD = new Date(); expiryD.setDate(expiryD.getDate() + validDays);
+  const expiryDate = toLocalDateStr(expiryD);
+
+  // Use active (non-completed) tasks as estimate items, or allow manual items
+  const estimateTasks = state.tasks.filter(t =>
+    t.status !== 'completed' && t.amount > 0 &&
+    (!clientName || t.client.includes(clientName) || clientName.includes(t.client))
+  );
+
+  const subtotal = estimateTasks.reduce((s, t) => s + (t.amount || 0), 0);
+  const tax = Math.round(subtotal * 0.1);
+  const total = subtotal + tax;
+  const displayClient = clientName || '（クライアント名を入力）';
+
+  const rows = estimateTasks.length > 0 ? estimateTasks.map((t, i) => `
+    <tr>
+      <td style="padding:0.5rem 0.75rem; border:1px solid #ccc;">${i+1}</td>
+      <td style="padding:0.5rem 0.75rem; border:1px solid #ccc;">${escapeHTML(t.name)}${t.workType?` <span style="font-size:0.8em;color:#888;">[${escapeHTML(t.workType)}]</span>`:''}</td>
+      <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:center;">${t.estimatedHours ? t.estimatedHours+'h' : '—'}</td>
+      <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">1</td>
+      <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">${new Intl.NumberFormat('ja-JP').format(t.amount || 0)}</td>
+      <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">${new Intl.NumberFormat('ja-JP').format(t.amount || 0)}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="6" style="padding:1rem; text-align:center; border:1px solid #ccc; color:#888;">進行中のタスクがありません（上部でクライアント名を入力してください）</td></tr>';
+
+  const preview = document.getElementById('estimate-preview');
+  preview.innerHTML = `
+    <div id="estimate-print-area" style="background:#fff; color:#222; padding:2rem; font-family:'Noto Sans JP',sans-serif; font-size:0.9rem; max-width:720px; margin:0 auto; border:1px solid #ddd;">
+      <h1 style="text-align:center; font-size:1.8rem; letter-spacing:0.2em; margin-bottom:2rem; color:#222;">御　見　積　書</h1>
+
+      <div style="display:flex; justify-content:space-between; margin-bottom:2rem; gap:1rem; flex-wrap:wrap;">
+        <div>
+          <div style="font-size:1.1rem; font-weight:700; border-bottom:2px solid #222; padding-bottom:0.25rem; margin-bottom:0.5rem;">${escapeHTML(displayClient)} 御中</div>
+          <div style="font-size:0.85rem; color:#555;">見積発行日: ${issueDate}</div>
+          <div style="font-size:0.85rem; color:#c0392b;">有効期限: ${expiryDate}（${validDays}日間）</div>
+        </div>
+        <div style="text-align:right; font-size:0.85rem; line-height:1.7;">
+          <div style="font-size:1rem; font-weight:700;">${escapeHTML(bi.company || bi.name || '')}</div>
+          ${bi.company && bi.name ? `<div>${escapeHTML(bi.name)}</div>` : ''}
+          ${bi.address ? `<div>${escapeHTML(bi.address)}</div>` : ''}
+          ${bi.phone ? `<div>TEL: ${escapeHTML(bi.phone)}</div>` : ''}
+          ${bi.email ? `<div>${escapeHTML(bi.email)}</div>` : ''}
+          ${bi.invoiceNumber ? `<div style="margin-top:0.25rem; font-size:0.8rem; color:#666;">登録番号: ${escapeHTML(bi.invoiceNumber)}</div>` : ''}
+        </div>
+      </div>
+
+      <div style="background:#f5f5f5; border:1px solid #ccc; padding:1rem 1.5rem; margin-bottom:1.5rem; border-radius:4px;">
+        <span style="font-size:0.9rem;">御見積金額（税込）</span>
+        <span style="font-size:2rem; font-weight:900; margin-left:1rem; color:#1a1a2e;">¥${new Intl.NumberFormat('ja-JP').format(total)}</span>
+      </div>
+
+      <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:1.5rem;">
+        <thead>
+          <tr style="background:#222; color:#fff;">
+            <th style="padding:0.5rem 0.75rem; border:1px solid #ccc; width:2.5rem;">#</th>
+            <th style="padding:0.5rem 0.75rem; border:1px solid #ccc;">品目・作業内容</th>
+            <th style="padding:0.5rem 0.75rem; border:1px solid #ccc; width:4rem; text-align:center;">想定時間</th>
+            <th style="padding:0.5rem 0.75rem; border:1px solid #ccc; width:3rem; text-align:right;">数量</th>
+            <th style="padding:0.5rem 0.75rem; border:1px solid #ccc; width:6rem; text-align:right;">単価</th>
+            <th style="padding:0.5rem 0.75rem; border:1px solid #ccc; width:6rem; text-align:right;">金額</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr>
+            <td colspan="5" style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right; font-weight:700;">小計</td>
+            <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">¥${new Intl.NumberFormat('ja-JP').format(subtotal)}</td>
+          </tr>
+          <tr>
+            <td colspan="5" style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">消費税（10%）</td>
+            <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">¥${new Intl.NumberFormat('ja-JP').format(tax)}</td>
+          </tr>
+          <tr style="background:#f0f0f0; font-weight:700;">
+            <td colspan="5" style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">合計（税込）</td>
+            <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">¥${new Intl.NumberFormat('ja-JP').format(total)}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div style="margin-top:1.5rem; font-size:0.8rem; color:#888;">
+        <div style="font-weight:700; margin-bottom:0.25rem; color:#444;">備考</div>
+        <div>・本見積書の有効期限は${expiryDate}までです。</div>
+        <div>・消費税は10%で計算しています。</div>
+        ${bi.invoiceNumber ? '<div>・適格請求書発行事業者（インボイス登録済み）</div>' : ''}
+      </div>
+    </div>
+  `;
+}
+
+// ── 確定申告サポートカード ────────────────────────────────────────────────────
+function renderAnnualTaxSupportCard() {
+  const thisYear = new Date().getFullYear().toString();
+  const yearRevenue = state.tasks
+    .filter(t => t.status === 'completed' && t.completedAt && t.completedAt.startsWith(thisYear))
+    .reduce((s, t) => s + (t.amount || 0), 0);
+  const yearExpenses = state.expenses
+    .filter(e => e.date && e.date.startsWith(thisYear))
+    .reduce((s, e) => s + (e.amount || 0), 0);
+  const netIncome = yearRevenue - yearExpenses;
+  const basicDeduction = 480000; // 基礎控除（令和6年〜）
+  const blueDeduction  = 650000; // 青色申告特別控除（65万円）
+  const taxableIncome = Math.max(0, netIncome - basicDeduction - blueDeduction);
+
+  // 所得税速算表（令和5年分）
+  let estimatedTax = 0;
+  if (taxableIncome <= 1950000)      estimatedTax = taxableIncome * 0.05;
+  else if (taxableIncome <= 3300000) estimatedTax = taxableIncome * 0.10 - 97500;
+  else if (taxableIncome <= 6950000) estimatedTax = taxableIncome * 0.20 - 427500;
+  else if (taxableIncome <= 9000000) estimatedTax = taxableIncome * 0.23 - 636000;
+  else                               estimatedTax = taxableIncome * 0.33 - 1536000;
+  estimatedTax = Math.max(0, Math.round(estimatedTax));
+
+  const fmt = (n) => '¥' + Math.round(n).toLocaleString('ja-JP');
+
+  return `
+    <div style="background:linear-gradient(135deg,var(--bg-secondary),var(--primary-glow));border:1px solid var(--border-color);border-radius:14px;padding:1.25rem;margin-bottom:1.25rem;">
+      <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;">
+        <span style="font-size:1.2rem;">🗂️</span>
+        <span style="font-weight:700;font-size:0.95rem;">${thisYear}年 確定申告サポート</span>
+        <span style="font-size:0.72rem;color:var(--text-muted);margin-left:auto;">概算・参考値</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.65rem;margin-bottom:0.75rem;">
+        <div style="background:var(--bg-card);border-radius:10px;padding:0.75rem;">
+          <div style="font-size:0.72rem;color:var(--text-muted);">年間売上（税別）</div>
+          <div style="font-size:1.1rem;font-weight:700;color:var(--success);">${fmt(yearRevenue)}</div>
+        </div>
+        <div style="background:var(--bg-card);border-radius:10px;padding:0.75rem;">
+          <div style="font-size:0.72rem;color:var(--text-muted);">年間経費</div>
+          <div style="font-size:1.1rem;font-weight:700;color:var(--danger);">${fmt(yearExpenses)}</div>
+        </div>
+        <div style="background:var(--bg-card);border-radius:10px;padding:0.75rem;">
+          <div style="font-size:0.72rem;color:var(--text-muted);">差引所得（概算）</div>
+          <div style="font-size:1.1rem;font-weight:700;color:var(--primary);">${fmt(netIncome)}</div>
+        </div>
+        <div style="background:var(--bg-card);border-radius:10px;padding:0.75rem;">
+          <div style="font-size:0.72rem;color:var(--text-muted);">推定所得税（概算）</div>
+          <div style="font-size:1.1rem;font-weight:700;color:var(--warning);">${fmt(estimatedTax)}</div>
+        </div>
+      </div>
+      <div style="font-size:0.75rem;color:var(--text-muted);line-height:1.6;">
+        ※ 青色申告特別控除65万円・基礎控除48万円を適用した概算です。社会保険料控除等は含みません。正確な税額は税理士へご相談ください。
+      </div>
+    </div>
+  `;
+}
 
 // ── 業務種別別 売上・実績サマリー（今月フィルター済み） ──────────────────
 function renderWorkTypeRevenue(tasks) {
@@ -7163,6 +7430,7 @@ function renderExpenses() {
   const currentMonthLabel = new Date().toLocaleDateString('ja-JP',{year:'numeric',month:'long'});
 
   el.innerHTML = `
+    ${renderAnnualTaxSupportCard()}
     <div class="expense-summary-row">
       <div class="expense-summary-card">
         <div class="expense-summary-label">今月の支出</div>
@@ -9424,25 +9692,31 @@ function closePasteModal() {
 
 async function handlePasteModalAction() {
   if (_pasteModalStep === 2) {
-    // ─── Step2: 登録確定 ────────────────────────────────────────────
-    if (!_pasteModalParsed) { closePasteModal(); return; }
-    const p = _pasteModalParsed;
+    // ─── Step2: 登録確定（編集フォームから値を読む） ──────────────────
+    const name     = document.getElementById('pp-name')?.value.trim()       || '無題タスク';
+    const client   = document.getElementById('pp-client')?.value.trim()     || '';
+    const dueDate  = document.getElementById('pp-duedate')?.value           || '';
+    const amount   = parseFloat(document.getElementById('pp-amount')?.value) || 0;
+    const estHours = parseFloat(document.getElementById('pp-hours')?.value)  || 0;
+    const workType = document.getElementById('pp-worktype')?.value.trim()   || '';
+    const priority = document.getElementById('pp-priority')?.value          || 'medium';
+    const memo     = document.getElementById('pp-memo')?.value.trim()       || '';
+
     const newTask = {
       id:             Date.now(),
-      name:           p.name           || '無題タスク',
-      client:         p.client         || '',
-      dueDate:        p.dueDate        || '',
-      amount:         p.amount         || 0,
-      estimatedHours: p.estimatedHours || 0,
-      workType:       p.workType       || '',
-      priority:       p.priority       || 'medium',
-      memo:           p.memo           || '',
+      name,
+      client,
+      dueDate,
+      amount,
+      estimatedHours: estHours,
+      workType,
+      priority,
+      memo,
       status:         'not-started',
       createdAt:      getLocalDateStr(),
       steps:          [],
     };
-    // 使った業務ジャンルを履歴に保存
-    if (p.workType) _saveWorktypeToHistory(p.workType);
+    if (workType) _saveWorktypeToHistory(workType);
     if (!Array.isArray(state.tasks)) state.tasks = [];
     state.tasks.unshift(newTask);
     saveTasksToStorage();
@@ -9492,32 +9766,45 @@ async function handlePasteModalAction() {
     st.textContent = usedAI ? '✦ AIで解析しました' : '✦ 自動解析しました（APIキー不要）';
     st.style.color = 'var(--text-muted)';
 
-    // ── Step2 プレビュー表示 ──
+    // ── Step2 編集フォーム表示 ──
     const step1   = document.getElementById('paste-step1');
     const step2   = document.getElementById('paste-step2');
     const preview = document.getElementById('paste-preview');
     if (step1) step1.style.display = 'none';
     if (step2) step2.style.display = '';
 
-    const _h = escapeHtml;
-    const row = (label, value) => value
-      ? `<div style="display:flex;gap:0.5rem;align-items:baseline;font-size:0.88rem;">
-           <span style="color:var(--text-muted);min-width:5em;">${label}</span>
-           <span style="color:var(--text-primary);font-weight:600;">${_h(String(value))}</span>
-         </div>`
-      : '';
+    // 業務種別セレクトの options を生成
+    const worktypeOpts = (() => {
+      const hist = _getWorktypeHistory().filter(v => v !== p.workType);
+      const defs = _WORKTYPE_DEFAULTS.filter(v => v !== p.workType && !hist.includes(v));
+      const all  = p.workType ? [p.workType, ...hist, ...defs] : ['', ...hist, ...defs];
+      return all.map((v, i) => {
+        const sel = (i === 0 && p.workType) || (!p.workType && i === 0) ? ' selected' : '';
+        return `<option value="${escapeHtml(v)}"${sel}>${v ? escapeHtml(v) : '（なし）'}</option>`;
+      }).join('');
+    })();
+
+    const fRow = (label, input) =>
+      `<div class="pp-row">
+         <label class="pp-label">${label}</label>
+         <div class="pp-input">${input}</div>
+       </div>`;
 
     if (preview) {
       preview.innerHTML = [
-        row('タスク名',  p.name),
-        row('クライアント', p.client),
-        row('納期',     p.dueDate),
-        row('金額',     p.amount > 0 ? p.amount.toLocaleString() + ' 円' : ''),
-        row('作業時間', p.estimatedHours > 0 ? p.estimatedHours + ' 時間' : ''),
-        row('業務種別', p.workType),
-        row('優先度',   p.priority === 'high' ? '🔴 高' : p.priority === 'low' ? '🟢 低' : '🟡 中'),
-        row('メモ',     p.memo),
-      ].filter(Boolean).join('');
+        fRow('タスク名',    `<input id="pp-name"     type="text"   class="form-control pp-fc" value="${escapeHtml(p.name||'')}">` ),
+        fRow('クライアント',`<input id="pp-client"   type="text"   class="form-control pp-fc" value="${escapeHtml(p.client||'')}">` ),
+        fRow('納期',        `<input id="pp-duedate"  type="date"   class="form-control pp-fc" value="${escapeHtml(p.dueDate||'')}">` ),
+        fRow('金額（税別）',`<input id="pp-amount"   type="number" class="form-control pp-fc" value="${p.amount||''}" min="0" placeholder="0">` ),
+        fRow('作業時間(h)', `<input id="pp-hours"    type="number" class="form-control pp-fc" value="${p.estimatedHours||''}" min="0" step="0.5" placeholder="0">` ),
+        fRow('業務種別',    `<select id="pp-worktype" class="form-control pp-fc">${worktypeOpts}</select>` ),
+        fRow('優先度',      `<select id="pp-priority" class="form-control pp-fc">
+                               <option value="high"   ${p.priority==='high'  ?'selected':''}>🔴 高</option>
+                               <option value="medium" ${p.priority==='medium'?'selected':''}>🟡 中</option>
+                               <option value="low"    ${p.priority==='low'   ?'selected':''}>🟢 低</option>
+                             </select>` ),
+        fRow('メモ',        `<textarea id="pp-memo" class="form-control pp-fc" rows="3" style="resize:none;">${escapeHtml(p.memo||'')}</textarea>` ),
+      ].join('');
     }
 
     _pasteModalStep = 2;
@@ -9733,14 +10020,13 @@ function initOpeningAnimation() {
     ctx.clearRect(0, 0, CW, CH);
     ctx.save();
 
-    // ── 振り子（サイン波で中心から自然に振り始め、ゆっくり減衰） ──
-    const SWING_AMP = 35 * Math.PI / 180;
-    const SWING_T   = 3.2; // 周期(秒) — 大きな時計は重くゆっくり
-    const easeIn    = Math.min(elapsed / 0.6, 1); // 最初0.6秒でふわっと立ち上がる
+    // ── 振り子（物理的な振り子運動：最大振れ角から自然に振り始め減衰） ──
+    // sin は中心スタートで不自然。cos は最大振れ角スタート → 本物の振り子
+    const SWING_AMP = 28 * Math.PI / 180; // 振れ角（やや控えめで優雅に）
+    const SWING_T   = 3.4; // 周期(秒) — 重い振り子は少しゆっくり
     const swayAngle = SWING_AMP
-      * Math.sin(2 * Math.PI * elapsed / SWING_T)
-      * Math.exp(-elapsed * 0.042)  // 緩やかな減衰（長く揺れ続ける）
-      * easeIn;
+      * Math.cos(2 * Math.PI * elapsed / SWING_T)
+      * Math.exp(-elapsed * 0.038); // 緩やかな減衰
 
     // チェーン固定点（PIVOT_Y）を軸に回転 → 本物の振り子動作
     ctx.translate(cx, PIVOT_Y);
