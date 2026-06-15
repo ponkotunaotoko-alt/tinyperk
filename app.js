@@ -8392,7 +8392,7 @@ function parseTaskRuleBased(text, hints = {}) {
 
   // ── メモ（dueDate に関わる一文） ──────────────────────────────────────
   let memo = '';
-  const memoLine = lines.find(l => l.includes('ください') || l.includes('お願い') || l.includes('確認'));
+  const memoLine = rawLines.find(l => l.includes('ください') || l.includes('お願い') || l.includes('確認'));
   if (memoLine && memoLine !== name) memo = memoLine.substring(0, 50);
 
   // ── ユーザー補足ヒントで上書き ─────────────────────────────────────────
@@ -9327,15 +9327,63 @@ function saveShakeMemo() {
 let _pasteModalStep = 1;       // 1=入力, 2=確認
 let _pasteModalParsed = null;  // AI解析結果（Step2で使用）
 
+// ── 業務ジャンル履歴管理 ──────────────────────────────────────────────────
+const _WORKTYPE_HISTORY_KEY = 'tinyperk_worktype_history';
+const _WORKTYPE_DEFAULTS = ['取材','執筆・ライティング','撮影','動画編集','デザイン','構成・編集','Web制作','打ち合わせ','資料作成','その他'];
+
+function _getWorktypeHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(_WORKTYPE_HISTORY_KEY) || '[]');
+  } catch { return []; }
+}
+
+function _saveWorktypeToHistory(wt) {
+  if (!wt) return;
+  let hist = _getWorktypeHistory().filter(v => v !== wt);
+  hist.unshift(wt); // 最近使ったものを先頭に
+  hist = hist.slice(0, 20); // 最大20件
+  localStorage.setItem(_WORKTYPE_HISTORY_KEY, JSON.stringify(hist));
+}
+
+function _buildWorktypeOptions(selectedValue) {
+  const sel = document.getElementById('paste-hint-worktype');
+  if (!sel) return;
+
+  const history = _getWorktypeHistory();
+  // 履歴にないデフォルト項目
+  const defaults = _WORKTYPE_DEFAULTS.filter(v => !history.includes(v));
+
+  let html = '<option value="">自動判定</option>';
+
+  if (history.length > 0) {
+    html += '<optgroup label="最近使った業務">';
+    history.forEach(v => {
+      const sel_ = v === selectedValue ? ' selected' : '';
+      html += `<option${sel_}>${v}</option>`;
+    });
+    html += '</optgroup>';
+  }
+
+  if (defaults.length > 0) {
+    html += '<optgroup label="業務カテゴリ">';
+    defaults.forEach(v => {
+      const sel_ = v === selectedValue ? ' selected' : '';
+      html += `<option${sel_}>${v}</option>`;
+    });
+    html += '</optgroup>';
+  }
+
+  sel.innerHTML = html;
+}
+
 function openPasteCTA() {
   _pasteModalStep = 1;
   _pasteModalParsed = null;
 
-  // ヒント欄をリセット
-  const hintWorktype = document.getElementById('paste-hint-worktype');
+  // ヒント欄をリセット・業務ジャンル履歴を反映
+  _buildWorktypeOptions('');
   const hintDuedate  = document.getElementById('paste-hint-duedate');
   const hintNote     = document.getElementById('paste-hint-note');
-  if (hintWorktype) hintWorktype.value = '';
   if (hintDuedate)  hintDuedate.value  = '';
   if (hintNote)     hintNote.value     = '';
 
@@ -9393,6 +9441,8 @@ async function handlePasteModalAction() {
       createdAt:      getLocalDateStr(),
       steps:          [],
     };
+    // 使った業務ジャンルを履歴に保存
+    if (p.workType) _saveWorktypeToHistory(p.workType);
     if (!Array.isArray(state.tasks)) state.tasks = [];
     state.tasks.unshift(newTask);
     saveTasksToStorage();
