@@ -8316,18 +8316,67 @@ function parseTaskRuleBased(text, hints = {}) {
   if (/急ぎ|至急|ASAP|asap|緊急|urgent|すぐ|早急|急いで/.test(text)) priority = 'high';
   if (/余裕|急がない|いつでも|のんびり/.test(text)) priority = 'low';
 
-  // ── タスク名（最初の意味のある行） ──────────────────────────────────────
-  const skipPhrases = /^(お世話になっております|ご連絡いただき|よろしくお願い|確認|ありがとう|初めまして|いつも|拝啓|連日|すみません)/;
-  const lines = text.split(/[\n。！？!?]/).map(l => l.trim()).filter(l => l.length >= 4);
+  // ── タスク名（改良版） ──────────────────────────────────────────────────
+  const skipPhrases = /^(お疲れ様|お世話になって|ご連絡いただき|よろしくお願い|ご確認のほど|ありがとうございます|ありがとう|初めまして|いつもお世話|いつも|拝啓|連日|すみません|失礼します|お忙しい|お時間)/;
+  // 日時のみ・挨拶のみ行を判定
+  // 日時のみ行: 数字/スラッシュ/曜日漢字/時刻記号などで構成されるか、行頭が日付パターン
+  const isDateTimeLine  = (l) =>
+    /^[\d\/\-年月日（）()〜~:：\s,、。！!月火水木金土日曜]+$/.test(l) ||
+    /^\d{1,2}[\/月]\d{1,2}[\s（(（]/.test(l);
+  const isGreetingLine  = (l) => skipPhrases.test(l) || /^(ご確認|ご相談|ご依頼|お願い|よろしく)/.test(l);
+
+  const rawLines = text.split(/\n/).map(l => l.trim()).filter(l => l.length >= 2);
+
+  // ① ■/◆/●/▶ で始まる行を探す（日時だけの行は次の行へ）
   let name = '';
-  for (const line of lines) {
-    if (skipPhrases.test(line)) continue;
-    // 日時・挨拶だけの行はスキップ
-    if (/^\d{1,2}[\/月]\d{1,2}/.test(line)) continue;
-    name = line.replace(/[「」【】『』]/, '').substring(0, 28).trim();
-    if (name) break;
+  for (let i = 0; i < rawLines.length; i++) {
+    const l = rawLines[i];
+    if (/^[■◆●▶▸➤→]/.test(l)) {
+      const body = l.replace(/^[■◆●▶▸➤→]\s*/, '').trim();
+      if (!isDateTimeLine(body) && !isGreetingLine(body) && body.length >= 3) {
+        name = body; break;
+      }
+      // ■ 行が日時のみ → 次の行が本題
+      if (isDateTimeLine(body) && i + 1 < rawLines.length) {
+        const nextLine = rawLines[i + 1].trim();
+        if (!isDateTimeLine(nextLine) && !isGreetingLine(nextLine) && nextLine.length >= 3) {
+          name = nextLine; break;
+        }
+      }
+    }
   }
-  if (!name && lines.length > 0) name = lines[0].substring(0, 28).trim();
+
+  // ② カタカナ・英語の固有名詞を含む行を優先
+  if (!name) {
+    for (const l of rawLines) {
+      if (isGreetingLine(l) || isDateTimeLine(l)) continue;
+      if (/[ァ-ヿA-Za-z]{3,}/.test(l) && l.length >= 4) { name = l; break; }
+    }
+  }
+
+  // ③ 最初の意味のある行
+  if (!name) {
+    for (const l of rawLines) {
+      if (isGreetingLine(l) || isDateTimeLine(l)) continue;
+      if (l.length >= 4) { name = l; break; }
+    }
+  }
+
+  if (!name && rawLines.length > 0) name = rawLines[0];
+
+  // 住所・括弧内の長い補足を除去してタスク名を簡潔に
+  name = name
+    .replace(/（[^）]{15,}）/g, '')   // 長い括弧内（住所など）を削除
+    .replace(/\([^)]{15,}\)/g, '')
+    .replace(/[「」『』【】]/g, '')
+    .replace(/^\d{1,2}[月\/]\d{1,2}.*/, '') // 行頭が日付なら削除
+    .trim()
+    .substring(0, 38);
+
+  // ジャンルが指定されている場合は接頭辞を付ける
+  if (hints.workType && name && !name.startsWith('【')) {
+    name = `【${hints.workType}】${name}`.substring(0, 40);
+  }
 
   // ── 業務種別 ──────────────────────────────────────────
   let workType = '';
@@ -8381,6 +8430,13 @@ async function _callAIForTaskParse(text, hints = {}) {
   const nextFri       = _addDays((5 - dow + 7) % 7 + 7);    // 来週金曜
   const thisMonthEnd  = _monthEnd(0);
   const nextMonthEnd  = _monthEnd(1);
+  // few-shot例用: 6/25の日付（過去なら翌年）
+  const ex0625 = (() => {
+    const yr = new Date().getFullYear();
+    const d = new Date(yr, 5, 25);
+    if (d < new Date()) d.setFullYear(yr + 1);
+    return toLocalDateStr(d);
+  })();
 
   // ── プロンプト（システム指示）─────────────────────────────────────────
   const systemPrompt =
@@ -8389,7 +8445,12 @@ async function _callAIForTaskParse(text, hints = {}) {
 今日: ${todayStr}（${weekdayJa}）
 
 【フィールドルール】
-name: 依頼内容を「動詞＋目的語」で30字以内に要約。例「バナーデザイン制作（3案）」「ECサイト商品写真撮影10点」「LPコピーライティング修正」
+name: 以下のルールで40字以内のタスク名を作る。
+  ① 絶対にタスク名にしてはいけない内容: 挨拶・定型文（「お疲れ様」「お世話になっております」「よろしくお願いします」「ご確認のほど」「初めまして」「いつもお世話」など）
+  ② 「■」「◆」「●」「【】」で始まる行は重要な情報を示す。ただしその行が日付・時刻だけなら無視して次の行を見る。
+  ③ 店舗名・会社名・人名・イベント名・固有名詞（カタカナ・英語の名称）が含まれる行をタスク名の核にする。住所情報は省く。
+  ④ ユーザーが業務ジャンルを指定した場合: 「【ジャンル名】固有名詞」形式にする。例: workType=取材 → 「【取材】Leggero｜Effortless Body Studio」
+  ⑤ ジャンル未指定の場合: 「動詞＋目的語」で要約。例「バナーデザイン3案制作」「LP原稿執筆（2000字）」
 client: 送信者の会社名・人名。署名・「○○株式会社」・「○○より」から抽出。不明なら ""
 dueDate: YYYY-MM-DD形式に変換:
   今日/本日 → ${todayStr}
@@ -8427,7 +8488,12 @@ ${hints.note     ? `補足メモ: ${hints.note}` : ''}`.replace(/\n+/g, '\n').tr
 
 【例3】
 入力: 「山田さん、取材記事の原稿（2000字）を月末までにお願いできますか。ギャラは¥35,000でいかがでしょう。写真素材はこちらで用意します。」
-出力: {"name":"取材記事原稿執筆（2000字）","client":"","dueDate":"${thisMonthEnd}","amount":35000,"estimatedHours":0,"priority":"medium","workType":"執筆・ライティング","memo":"写真素材はクライアント提供。"}`;
+出力: {"name":"取材記事原稿執筆（2000字）","client":"","dueDate":"${thisMonthEnd}","amount":35000,"estimatedHours":0,"priority":"medium","workType":"執筆・ライティング","memo":"写真素材はクライアント提供。"}
+
+【例4（挨拶始まり・■パターン・ジャンル指定あり）】
+入力: 「お疲れ様です！\\n6/25にもう一件、ご相談させてください！\\n■6/25（木）11:00〜\\nLeggero（レジェロ）｜Effortless Body Studio（川崎市高津区溝口２丁目）\\nご確認のほどよろしくお願いします！」
+補足情報: 業務ジャンル=取材
+出力: {"name":"【取材】Leggero（レジェロ）｜Effortless Body Studio","client":"","dueDate":"${ex0625}","amount":0,"estimatedHours":0,"priority":"medium","workType":"取材","memo":"6/25（木）11:00〜。川崎市高津区溝口。"}`;
 
   const userMessage = `以下の文章からタスク情報を抽出してください:\n\n${text}`;
 
