@@ -8061,7 +8061,7 @@ function injectDashboardWidgets() {
     ideaDiv.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
         <h3 style="font-size:1.05rem;margin:0;">💡 ひらめきメモ</h3>
-        <button class="btn btn-secondary" style="font-size:0.8rem;padding:0.35rem 0.7rem;" onclick="switchTab('ideas')">全部見る →</button>
+        <button class="btn btn-secondary" style="font-size:0.8rem;padding:0.35rem 0.7rem;" onclick="switchTab('memo')">全部見る →</button>
       </div>
       <div id="dashboard-idea-widget"></div>`;
     grid.appendChild(ideaDiv);
