@@ -1294,8 +1294,39 @@
 
         <!-- STEP1: 貼り付け -->
         <div id="paste-step1">
-          <p style="font-size:0.85rem;color:var(--text-muted);margin:0 0 0.75rem;">LINEやメールの文章をそのままペーストしてください。AIが自動でタスク情報を抽出します。</p>
-          <textarea id="paste-modal-textarea" class="form-control" rows="7"
+
+          <!-- 補足ヒント（任意） -->
+          <div class="paste-hints">
+            <p class="paste-hints-label">📌 補足情報（任意）— 文章から読み取れない情報を入力するとより正確に解析できます</p>
+            <div class="paste-hints-row">
+              <div class="paste-hints-field">
+                <label for="paste-hint-worktype">業務ジャンル</label>
+                <select id="paste-hint-worktype" class="form-control">
+                  <option value="">自動判定</option>
+                  <option>取材</option>
+                  <option>執筆・ライティング</option>
+                  <option>撮影</option>
+                  <option>動画編集</option>
+                  <option>デザイン</option>
+                  <option>構成・編集</option>
+                  <option>Web制作</option>
+                  <option>打ち合わせ</option>
+                  <option>資料作成</option>
+                  <option>その他</option>
+                </select>
+              </div>
+              <div class="paste-hints-field">
+                <label for="paste-hint-duedate">締め切りの目安</label>
+                <input type="date" id="paste-hint-duedate" class="form-control">
+              </div>
+            </div>
+            <input type="text" id="paste-hint-note" class="form-control"
+              placeholder="補足メモ（例：急ぎ / 修正2回まで含む / 素材はもらえる）">
+          </div>
+
+          <!-- テキスト貼り付け -->
+          <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 0.5rem;">✉️ LINEやメールの文章をそのまま貼り付けてください</p>
+          <textarea id="paste-modal-textarea" class="form-control" rows="6"
             placeholder="例）&#10;お世話になっております。納期を6月30日でお願いできますか。金額は3万円でどうでしょうか。&#10;&#10;LINEやメールをそのまま貼り付けてOKです。"
             style="font-size:1rem;resize:none;width:100%;"></textarea>
           <div id="paste-modal-status" style="min-height:1.4em;font-size:0.82rem;color:var(--text-muted);margin-top:0.5rem;"></div>
@@ -1686,7 +1717,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=100"></script>
+  <script src="./app.js?v=102"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

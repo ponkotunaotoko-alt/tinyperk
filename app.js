@@ -8231,7 +8231,7 @@ pauseTaskTimer = function() {
 };
 
 // ─── ルールベースタスクパーサー（APIキー不要・完全無料） ─────────────────
-function parseTaskRuleBased(text) {
+function parseTaskRuleBased(text, hints = {}) {
   const today = new Date();
   const todayStr = getLocalDateStr();
 
@@ -8346,6 +8346,17 @@ function parseTaskRuleBased(text) {
   const memoLine = lines.find(l => l.includes('ください') || l.includes('お願い') || l.includes('確認'));
   if (memoLine && memoLine !== name) memo = memoLine.substring(0, 50);
 
+  // ── ユーザー補足ヒントで上書き ─────────────────────────────────────────
+  if (hints.workType) workType = hints.workType;
+  if (hints.dueDate)  dueDate  = hints.dueDate;
+  if (hints.note) {
+    if (!memo) memo = hints.note.substring(0, 50);
+    // 補足メモに「急ぎ」系キーワードがあれば優先度を上げる
+    if (!/(急ぎ|至急|ASAP|緊急|早急)/.test(text) && /(急ぎ|至急|ASAP|緊急|早急)/.test(hints.note)) {
+      priority = 'high';
+    }
+  }
+
   return { name, client: '', dueDate, amount, estimatedHours, priority, workType, memo };
 }
 
@@ -8353,30 +8364,72 @@ function parseTaskRuleBased(text) {
 const _CLAUDE_KEY_STORE  = 'tinyperk_claude_api_key';
 const _GEMINI_KEY_STORE  = 'tinyperk_gemini_api_key';
 
-async function _callAIForTaskParse(text) {
+async function _callAIForTaskParse(text, hints = {}) {
   const claudeKey = localStorage.getItem(_CLAUDE_KEY_STORE);
   const geminiKey = localStorage.getItem(_GEMINI_KEY_STORE);
 
+  // ── 日付計算ヘルパー ─────────────────────────────────────────────────
   const todayStr = getLocalDateStr();
-  const prompt = `あなたはタスク管理AIです。以下のLINEやメールの文章から、タスク登録に必要な情報を抽出してください。
-JSONのみを返してください（前後の説明や\`\`\`は不要）。
+  const _addDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return toLocalDateStr(d); };
+  const _monthEnd = (mo) => toLocalDateStr(new Date(new Date().getFullYear(), new Date().getMonth() + 1 + mo, 0));
+  const dow       = new Date().getDay(); // 0=日
+  const weekdayJa = ['日','月','火','水','木','金','土'][dow] + '曜日';
+  const tomorrow      = _addDays(1);
+  const dayAfter      = _addDays(2);
+  const thisFri       = _addDays((5 - dow + 7) % 7 || 7);   // 今週金曜
+  const nextMon       = _addDays((8 - dow)  % 7 || 7);      // 来週月曜
+  const nextFri       = _addDays((5 - dow + 7) % 7 + 7);    // 来週金曜
+  const thisMonthEnd  = _monthEnd(0);
+  const nextMonthEnd  = _monthEnd(1);
 
-今日の日付: ${todayStr}
+  // ── プロンプト（システム指示）─────────────────────────────────────────
+  const systemPrompt =
+`あなたはフリーランサーのタスク管理AIです。LINEやメールの文章からタスク情報を抽出し、JSONのみを返してください（説明文・コードブロック不要）。
 
-抽出フォーマット:
-{
-  "name": "タスク名（簡潔に20文字以内）",
-  "client": "クライアント名・会社名・人名（不明なら空文字）",
-  "dueDate": "YYYY-MM-DD形式（「今週中」「月末」等も今日の日付を基準に変換。不明なら空文字）",
-  "amount": 金額の数値（税別。「3万円」→30000。不明なら0）,
-  "estimatedHours": 作業時間の数値（不明なら0）,
-  "priority": "high"か"medium"か"low",
-  "workType": "業務カテゴリ（取材・執筆・撮影・デザイン・構成・編集・打ち合わせ等）",
-  "memo": "その他の重要情報（1-2文）"
-}
+今日: ${todayStr}（${weekdayJa}）
 
-文章:
-${text}`;
+【フィールドルール】
+name: 依頼内容を「動詞＋目的語」で30字以内に要約。例「バナーデザイン制作（3案）」「ECサイト商品写真撮影10点」「LPコピーライティング修正」
+client: 送信者の会社名・人名。署名・「○○株式会社」・「○○より」から抽出。不明なら ""
+dueDate: YYYY-MM-DD形式に変換:
+  今日/本日 → ${todayStr}
+  明日 → ${tomorrow}
+  明後日/あさって → ${dayAfter}
+  今週中/今週末/週内 → ${thisFri}（今週金曜）
+  来週/来週頭 → ${nextMon}（来週月曜）
+  来週中/来週末 → ${nextFri}（来週金曜）
+  今月末/月末 → ${thisMonthEnd}
+  来月末 → ${nextMonthEnd}
+  ○月○日 → 当年のYYYY-MM-DD（過去日付は翌年）
+  ○/○ → 当年のYYYY-MM-DD
+  不明 → ""
+amount: 税別金額（整数）。「3万円」→30000。税込表記は÷1.1して小数切捨て。¥・円記号も対応。不明→0
+estimatedHours: 作業時間（数値）。半日→4、丸1日→8、不明→0
+priority:
+  "high" → 急ぎ/至急/ASAP/緊急/早急、または締切が${tomorrow}以前（3日以内）
+  "low"  → 急がない/余裕あり/いつでも
+  "medium" → それ以外
+workType: 次の中から1つ選ぶ → 「取材」「執筆・ライティング」「撮影」「動画編集」「デザイン」「構成・編集」「Web制作」「打ち合わせ」「資料作成」「その他」
+memo: 修正条件・素材の有無・特記事項を1〜2文。重要情報がなければ ""
+${(hints.workType || hints.dueDate || hints.note) ? `
+【ユーザーが入力した補足情報（文章よりも優先して採用すること）】
+${hints.workType ? `業務ジャンル: ${hints.workType}` : ''}
+${hints.dueDate  ? `締め切りの目安: ${hints.dueDate}` : ''}
+${hints.note     ? `補足メモ: ${hints.note}` : ''}`.replace(/\n+/g, '\n').trim() : ''}
+
+【例1】
+入力: 「お世話になっております。広告部の田中です。来週末までにECサイトのTOPバナー3案のデザインをお願いしたいです。PC/SP両対応で。予算は税込44,000円です。急ぎではないです。」
+出力: {"name":"ECサイトTOPバナーデザイン3案","client":"広告部 田中","dueDate":"${nextFri}","amount":40000,"estimatedHours":0,"priority":"low","workType":"デザイン","memo":"PC・SP両対応。税込44,000円（税別40,000円）。"}
+
+【例2】
+入力: 「至急お願いします！明日の午前中に商品写真10点のリサイズと書き出しをお願いできますか。2万円でお願いしたいです。」
+出力: {"name":"商品写真リサイズ・書き出し（10点）","client":"","dueDate":"${tomorrow}","amount":20000,"estimatedHours":0,"priority":"high","workType":"撮影","memo":"明日午前中納品希望。商品写真10点のリサイズと書き出し。"}
+
+【例3】
+入力: 「山田さん、取材記事の原稿（2000字）を月末までにお願いできますか。ギャラは¥35,000でいかがでしょう。写真素材はこちらで用意します。」
+出力: {"name":"取材記事原稿執筆（2000字）","client":"","dueDate":"${thisMonthEnd}","amount":35000,"estimatedHours":0,"priority":"medium","workType":"執筆・ライティング","memo":"写真素材はクライアント提供。"}`;
+
+  const userMessage = `以下の文章からタスク情報を抽出してください:\n\n${text}`;
 
   // ── Gemini（無料・推奨） ──────────────────────────────────────────────
   if (geminiKey) {
@@ -8384,7 +8437,15 @@ ${text}`;
     const resp = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+        generationConfig: {
+          temperature: 0,
+          maxOutputTokens: 800,
+          responseMimeType: 'application/json'
+        }
+      })
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -8395,6 +8456,8 @@ ${text}`;
     }
     const data = await resp.json();
     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    // responseMimeType:json で直接パースを試みる、失敗時は正規表現でフォールバック
+    try { return JSON.parse(rawText); } catch (_) {}
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('Gemini解析結果を読み取れませんでした');
     return JSON.parse(jsonMatch[0]);
@@ -8412,8 +8475,10 @@ ${text}`;
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 400,
-        messages: [{ role: 'user', content: prompt }]
+        max_tokens: 800,
+        temperature: 0,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }]
       })
     });
     if (!resp.ok) {
@@ -8426,6 +8491,7 @@ ${text}`;
     }
     const data = await resp.json();
     const rawText = data.content?.[0]?.text || '';
+    try { return JSON.parse(rawText); } catch (_) {}
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('Claude解析結果を読み取れませんでした');
     return JSON.parse(jsonMatch[0]);
@@ -9199,6 +9265,14 @@ function openPasteCTA() {
   _pasteModalStep = 1;
   _pasteModalParsed = null;
 
+  // ヒント欄をリセット
+  const hintWorktype = document.getElementById('paste-hint-worktype');
+  const hintDuedate  = document.getElementById('paste-hint-duedate');
+  const hintNote     = document.getElementById('paste-hint-note');
+  if (hintWorktype) hintWorktype.value = '';
+  if (hintDuedate)  hintDuedate.value  = '';
+  if (hintNote)     hintNote.value     = '';
+
   const overlay = document.getElementById('paste-modal-overlay');
   if (!overlay) return;
 
@@ -9276,6 +9350,13 @@ async function handlePasteModalAction() {
     return;
   }
 
+  // ユーザー補足ヒントを収集
+  const hints = {
+    workType: (document.getElementById('paste-hint-worktype')?.value || '').trim(),
+    dueDate:  (document.getElementById('paste-hint-duedate')?.value  || '').trim(),
+    note:     (document.getElementById('paste-hint-note')?.value     || '').trim(),
+  };
+
   btn.disabled = true;
   const hasGemini = !!localStorage.getItem(_GEMINI_KEY_STORE);
   const hasClaude = !!localStorage.getItem(_CLAUDE_KEY_STORE);
@@ -9284,9 +9365,9 @@ async function handlePasteModalAction() {
 
   try {
     // AI → なければルールベース
-    let parsed = await _callAIForTaskParse(text);
+    let parsed = await _callAIForTaskParse(text, hints);
     const usedAI = parsed !== null;
-    if (!parsed) parsed = parseTaskRuleBased(text);
+    if (!parsed) parsed = parseTaskRuleBased(text, hints);
 
     _pasteModalParsed = parsed;
     const p = _pasteModalParsed;

@@ -6320,6 +6320,45 @@ body {
   transform: scale(1.01);
 }
 
+/* ===== 貼り付けモーダル — 補足ヒント欄 ===== */
+.paste-hints {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.75rem 0.6rem;
+  margin-bottom: 0.75rem;
+}
+.paste-hints-label {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  margin: 0 0 0.55rem;
+  line-height: 1.4;
+}
+.paste-hints-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.paste-hints-field label {
+  display: block;
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  margin-bottom: 0.2rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.paste-hints-field .form-control,
+.paste-hints > .form-control {
+  font-size: 0.82rem;
+  padding: 0.35rem 0.5rem;
+  height: auto;
+  min-height: 36px;
+}
+@media (max-width: 420px) {
+  .paste-hints-row { grid-template-columns: 1fr; }
+}
+
 /* ===== 感情コピー 稼働時間 ===== */
 .emotional-hours-copy {
   font-size: 0.78rem;
