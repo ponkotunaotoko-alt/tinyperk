@@ -260,8 +260,10 @@ h1, h2, h3, h4 {
 /* Header Area */
 .screen-header {
   display: flex;
+  flex-wrap: wrap; /* スマホで paste-cta-group が折り返せるように */
   justify-content: space-between;
   align-items: center;
+  gap: 0.6rem 0; /* 行間のみgap */
   position: sticky;
   top: 0;
   z-index: 40;
@@ -6279,23 +6281,38 @@ body {
 }
 
 /* ===== PASTE CTA ===== */
+/* wrapper: スマホでは縦並び、PCでは横並び */
+.paste-cta-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 100%;
+  flex: 1 1 100%; /* flex親(screen-header)内でフル幅を確保 */
+}
+@media (min-width: 769px) {
+  .paste-cta-group {
+    flex-direction: row;
+  }
+}
+
 .paste-cta-btn {
   width: 100%;
-  padding: 1rem 1.25rem;
+  padding: 0.9rem 1rem;
   background: linear-gradient(135deg, rgba(200,169,110,0.12), rgba(200,169,110,0.04));
   border: 2px dashed var(--primary);
   border-radius: var(--radius-md);
   color: var(--primary);
   font-family: var(--font-vintage);
-  font-size: 0.95rem;
-  letter-spacing: 0.08em;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.6rem;
-  margin-bottom: 1rem;
+  gap: 0.5rem;
   transition: all 0.28s var(--spring);
+  min-height: 48px; /* タップしやすいサイズ確保 */
+  -webkit-tap-highlight-color: transparent;
 }
 .paste-cta-btn:active,
 .paste-cta-btn:hover {
@@ -6715,6 +6732,7 @@ body {
 #opening-overlay {
   position: fixed;
   inset: 0;
+  overflow: hidden; /* キャンバスがはみ出ないようにクリップ */
   /* 重厚な油絵背景: 多層グラデーション */
   background:
     radial-gradient(ellipse 55% 40% at 50% 62%,  rgba(160,120,40,0.10) 0%, transparent 100%),
@@ -6734,13 +6752,13 @@ body {
 }
 @-webkit-keyframes opening-auto-exit {
   0%   { opacity:1; }
-  100% { opacity:0; pointer-events:none; visibility:hidden; }
+  100% { opacity:0; visibility:hidden; }
 }
 @keyframes opening-auto-exit {
   0%   { opacity:1; }
-  100% { opacity:0; pointer-events:none; visibility:hidden; }
+  100% { opacity:0; visibility:hidden; }
 }
-#opening-overlay.hidden { display: none; }
+#opening-overlay.hidden { display: none !important; pointer-events: none !important; }
 
 /* 星フィールド */
 #opening-stars {
@@ -6806,6 +6824,7 @@ body {
   display: block;
   left: 0;
   top: 0;
+  pointer-events: none; /* タッチ/クリックを下に通過させる */
   /* サイズはJSで設定 */
 }
 

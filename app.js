@@ -3547,6 +3547,8 @@ function closeReportModal() {
   overlay.classList.remove('active');
   setTimeout(() => { overlay.style.display = 'none'; }, 300);
   document.body.classList.remove('modal-open');
+  document.body.style.top = '';
+  if (state._scrollY) window.scrollTo(0, state._scrollY);
 }
 
 // HTML エスケープ（datalist用）
@@ -8378,7 +8380,7 @@ ${text}`;
 
   // ── Gemini（無料・推奨） ──────────────────────────────────────────────
   if (geminiKey) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
     const resp = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -8434,7 +8436,7 @@ ${text}`;
 }
 
 // ─── Gemini APIキー管理（無料・推奨） ────────────────────────────────────
-function saveGeminiApiKey() {
+async function saveGeminiApiKey() {
   const input    = document.getElementById('gemini-api-key-input');
   const statusEl = document.getElementById('gemini-api-key-status');
   if (!input) return;
@@ -8443,10 +8445,37 @@ function saveGeminiApiKey() {
     if (statusEl) { statusEl.textContent = 'キーを入力してください。'; statusEl.style.color = 'var(--danger)'; }
     return;
   }
+
+  // 接続テスト（保存前に有効か確認）
+  if (statusEl) { statusEl.textContent = '⏳ 接続テスト中…'; statusEl.style.color = 'var(--text-muted)'; }
+  try {
+    const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
+    const resp = await fetch(testUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: 'OK' }] }] })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      const msg = err?.error?.message || `HTTP ${resp.status}`;
+      if (statusEl) {
+        statusEl.textContent = `❌ キーが無効です: ${msg}`;
+        statusEl.style.color = 'var(--danger)';
+      }
+      return; // 保存しない
+    }
+  } catch (e) {
+    if (statusEl) {
+      statusEl.textContent = `❌ 接続失敗: ${e.message || 'ネットワークエラー'}`;
+      statusEl.style.color = 'var(--danger)';
+    }
+    return;
+  }
+
   localStorage.setItem(_GEMINI_KEY_STORE, key);
   input.value = '';
   if (statusEl) {
-    statusEl.textContent = `✅ 保存済み — ${_maskKey(key)}`;
+    statusEl.textContent = `✅ 保存済み・接続確認OK — ${_maskKey(key)}`;
     statusEl.style.color = 'var(--success)';
   }
 }
@@ -8565,7 +8594,7 @@ async function processBizCardImage(event) {
 
     // ── Gemini（無料・優先） ────────────────────────────────────────────
     if (geminiKey) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
       const resp = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -9732,11 +9761,17 @@ function initOpeningAnimation() {
 
   rafId = requestAnimationFrame(drawClock);
 
-  // フェードアウト完了後にdisplay:none
-  setTimeout(() => {
-    overlay.classList.add('hidden');
+  // iOS Safari では CSS animation の pointer-events が信頼できないため JS で明示的に制御
+  // 8.5s: アニメ開始と同時にpointer-eventsを切る
+  setTimeout(() => { overlay.style.pointerEvents = 'none'; }, 8500);
+
+  // animationend + setTimeout の二重保険で確実にdisplay:none
+  const hideOverlay = () => {
     cancelAnimationFrame(rafId);
-  }, 10600);
+    overlay.classList.add('hidden');
+  };
+  overlay.addEventListener('animationend', hideOverlay, { once: true });
+  setTimeout(hideOverlay, 11000); // 最終フォールバック(11s)
 }
 
 // ─── 2. 時間帯テーマ（ダッシュボード背景グラデ） ─────────────────────────
@@ -10055,7 +10090,7 @@ async function _callGeminiForReply(text, scene, key) {
   const prompt = `あなたはフリーランサーのアシスタントです。\n以下の会話に対して「${sceneGuide}」として適切な返信文を日本語で生成してください。\n\n条件:\n- 相手のトーン（ビジネス丁寧体 or カジュアル）に合わせる\n- 簡潔で誠実な文体\n- 署名・宛名は不要\n- 返信文のみを出力（前置きや説明は不要）\n\n会話内容:\n${text}`;
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${key}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
