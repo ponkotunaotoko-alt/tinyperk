@@ -789,15 +789,16 @@
         <div class="journal-timeline-section">
           <div class="journal-timeline-header">
             <h3 class="journal-timeline-title">🕐 時間割</h3>
-            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-          <span class="journal-timeline-hint">タスクをドラッグして配置</span>
-          <!-- タスククイックバー（タイムライン上部・モバイル用） -->
-          <div id="journal-timeline-quickbar" class="journal-timeline-quickbar" style="display:none;"></div>
-          <button class="btn btn-secondary tl-quick-btn" onclick="showAddSpecialSlotModal('break')">🍱 休憩</button>
-          <button class="btn btn-secondary tl-quick-btn" onclick="showAddSpecialSlotModal('travel')">🚗 移動</button>
-          <button class="btn btn-secondary tl-quick-btn" onclick="showFreeTimeModal()">📋 空き時間を共有</button>
-        </div>
+            <div class="tl-header-actions">
+              <span class="journal-timeline-hint">ドラッグして配置</span>
+              <button class="btn btn-secondary tl-quick-btn" onclick="showAddSpecialSlotModal('break')">🍱 休憩</button>
+              <button class="btn btn-secondary tl-quick-btn" onclick="showAddSpecialSlotModal('travel')">🚗 移動</button>
+              <button class="btn btn-secondary tl-quick-btn" onclick="showAddSpecialSlotModal('errand')">📅 所用</button>
+              <button class="btn btn-secondary tl-quick-btn" onclick="showFreeTimeModal()">📋 空き</button>
+            </div>
           </div>
+          <!-- タスククイックバー（タイムライン直上） -->
+          <div id="journal-timeline-quickbar" class="journal-timeline-quickbar" style="display:none;"></div>
           <div id="journal-timeline" class="journal-timeline">
             <!-- JS で描画 -->
           </div>
@@ -1774,7 +1775,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=109"></script>
+  <script src="./app.js?v=114"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

@@ -1267,9 +1267,7 @@ function setupEventListeners() {
   document.getElementById('btn-share-task').addEventListener('click', generateSingleTaskShareLink);
   document.getElementById('btn-share-client').addEventListener('click', generateClientShareLink);
 
-  // Clock In / Out
-  document.getElementById('btn-clock-in').addEventListener('click', clockIn);
-  document.getElementById('btn-clock-out').addEventListener('click', clockOut);
+  // Clock In / Out は index.html の onclick 属性で呼ぶ（二重登録を防ぐため addEventListener は使わない）
 
   // Mood Pickers (Dashboard widget)
   document.querySelectorAll('.mood-picker[data-type="before"] .mood-btn').forEach(btn => {
@@ -2332,6 +2330,19 @@ function renderWeeklyChart() {
 // ============================================================
 // JOURNAL TIMELINE (9:00-18:00, 1h blocks)
 // ============================================================
+function toggleJournalTaskPanel() {
+  const body = document.querySelector('.journal-task-body');
+  const btn  = document.querySelector('.journal-task-toggle');
+  const chev = document.querySelector('.journal-task-chevron');
+  if (!body) return;
+  const nowOpen = body.style.display !== 'none';
+  const next = !nowOpen;
+  body.style.display = next ? 'block' : 'none';
+  if (chev) chev.textContent = next ? '▲' : '▼';
+  if (btn)  btn.setAttribute('aria-expanded', next);
+  localStorage.setItem('journal-task-panel-open', next ? '1' : '0');
+}
+
 function renderJournalTimeline() {
   const el = document.getElementById('journal-timeline');
   if (!el) return;
@@ -2359,13 +2370,15 @@ function renderJournalTimeline() {
           ${todayTasks.map(t => `
             <button class="tl-quickbar-btn"
               onclick="showTimeslotPicker('${t.id}')"
+              draggable="true"
+              ondragstart="handleTaskDragStart(event,'${t.id}')"
               ontouchstart="tlTouchDragStart(event,'${t.id}')"
               ontouchmove="tlTouchDragMove(event)"
               ontouchend="tlTouchDragEnd(event)"
-              title="タップ→時間選択 / 長押しドラッグ→スロットに配置">
+              title="クリック→時間選択 / PCドラッグ→スロットに配置">
               <span class="tl-quickbar-dot" style="background:${statusColor[t.status]||'var(--text-muted)'}"></span>
               <span class="tl-quickbar-name">${escapeHtml(t.name.slice(0,14))}${t.name.length>14?'…':''}</span>
-              <span class="tl-quickbar-pin">👆</span>
+              <span class="tl-quickbar-pin">⠿</span>
             </button>
           `).join('')}
         </div>`;
@@ -2383,15 +2396,23 @@ function renderJournalTimeline() {
     // このスロットが別スロットに覆われている場合はスキップ
     if (slot._covered) return '';
 
-    // 休憩・移動などの特殊スロット
-    if (slot.type === 'break' || slot.type === 'travel') {
+    // 休憩・移動・所用などの特殊スロット
+    if (slot.type === 'break' || slot.type === 'travel' || slot.type === 'errand') {
       const span = slot.span || 1;
       const spanHeight = span > 1 ? `min-height:${span * TL_UNIT + (span - 1) * 6}px;` : '';
       const endHour = String(parseInt(h) + span).padStart(2, '0');
       const timeLabel = span > 1 ? `${h}:00–${endHour}:00` : `${h}:00`;
-      const icon = slot.type === 'break' ? '🍱' : '🚗';
-      const label = slot.label || (slot.type === 'break' ? '休憩' : '移動');
-      const colorClass = slot.type === 'break' ? 'tl-special-break' : 'tl-special-travel';
+      const iconMap = { break: '🍱', travel: '🚗', errand: slot.errandSub === 'private' ? '🏠' : '🤝' };
+      const labelMap = { break: '休憩', travel: '移動', errand: '所用' };
+      const icon = iconMap[slot.type] || '📅';
+      const label = slot.label || labelMap[slot.type] || slot.type;
+      const colorClass = slot.type === 'break' ? 'tl-special-break'
+                       : slot.type === 'travel' ? 'tl-special-travel'
+                       : 'tl-special-errand';
+      // MTG連携案件名
+      const dealName = (slot.errandSub === 'mtg' && slot.errandDealId)
+        ? (() => { const d = state.deals?.find(x => x.id === slot.errandDealId); return d ? `<span class="tl-errand-deal">🔗 ${escHtml(d.title)}</span>` : ''; })()
+        : '';
       const maxSpan = 18 - parseInt(h) + 1;
       return `
         <div class="tl-slot tl-slot-filled tl-slot-special ${colorClass}"
@@ -2409,7 +2430,10 @@ function renderJournalTimeline() {
           </div>
           <div class="tl-slot-special-body">
             <span class="tl-slot-special-icon">${icon}</span>
-            <span class="tl-slot-special-label">${label}</span>
+            <div class="tl-slot-special-label-wrap">
+              <span class="tl-slot-special-label">${label}</span>
+              ${dealName}
+            </div>
             <div class="tl-slot-special-actions">
               <button class="tl-slot-special-journal-btn" onclick="appendSpecialSlotToJournal('${date}','${h}')" title="日誌に追記">📝</button>
               <button class="tl-slot-remove" onclick="removeTimelineSlot('${date}','${h}')" title="削除">×</button>
@@ -2663,19 +2687,53 @@ function startSlotResize(e, date, hour) {
   }
 }
 
-// 休憩・移動スロット追加モーダル
+// 休憩・移動・所用スロット追加モーダル
 function showAddSpecialSlotModal(type) {
   document.getElementById('special-slot-modal')?.remove();
-  const icon = type === 'break' ? '🍱' : '🚗';
-  const name = type === 'break' ? '休憩' : '移動';
+  const meta = {
+    break:  { icon: '🍱', name: '休憩' },
+    travel: { icon: '🚗', name: '移動' },
+    errand: { icon: '📅', name: '所用' },
+  };
+  const { icon, name } = meta[type] || meta.break;
   const hours = Array.from({length: 10}, (_, i) => i + 9);
   const hourOptions = hours.map(h => `<option value="${h}">${String(h).padStart(2,'0')}:00</option>`).join('');
+
+  // 所用専用フィールド: 種別 + 案件連携
+  let errandFields = '';
+  if (type === 'errand') {
+    const activeDeals = (state.deals || []).filter(d => d.stage !== 'won' && d.stage !== 'lost');
+    const dealOptions = activeDeals.length
+      ? activeDeals.map(d => `<option value="${escHtml(d.id)}">${escHtml(d.title)}</option>`).join('')
+      : '<option value="">（案件なし）</option>';
+    errandFields = `
+        <div class="form-group">
+          <label class="form-label">種別</label>
+          <div style="display:flex;gap:1rem;">
+            <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+              <input type="radio" name="errand-sub" value="mtg" id="errand-sub-mtg" onchange="toggleErrandDealField()" checked>
+              <span>🤝 MTG</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+              <input type="radio" name="errand-sub" value="private" id="errand-sub-private" onchange="toggleErrandDealField()">
+              <span>🏠 私用</span>
+            </label>
+          </div>
+        </div>
+        <div class="form-group" id="errand-deal-field">
+          <label class="form-label">案件と連携 <span style="font-size:0.75rem;color:var(--text-muted);">（任意）見込みに反映</span></label>
+          <select id="errand-deal-id" class="form-control">
+            <option value="">連携しない</option>
+            ${dealOptions}
+          </select>
+        </div>`;
+  }
 
   const modal = document.createElement('div');
   modal.id = 'special-slot-modal';
   modal.className = 'modal-overlay active';
   modal.innerHTML = `
-    <div class="modal-box" style="max-width:320px;">
+    <div class="modal-box" style="max-width:340px;">
       <div class="modal-header">
         <h2 class="modal-title">${icon} ${name}を追加</h2>
         <button class="modal-close" onclick="document.getElementById('special-slot-modal').remove()">×</button>
@@ -2694,6 +2752,7 @@ function showAddSpecialSlotModal(type) {
             <option value="1.5">1時間30分</option>
           </select>
         </div>
+        ${errandFields}
         <div class="form-group">
           <label class="form-label">ラベル（任意）</label>
           <input type="text" id="ss-label" class="form-control" placeholder="${name}" value="${name}">
@@ -2707,13 +2766,27 @@ function showAddSpecialSlotModal(type) {
   document.body.appendChild(modal);
 }
 
+function toggleErrandDealField() {
+  const isMtg = document.getElementById('errand-sub-mtg')?.checked;
+  const field = document.getElementById('errand-deal-field');
+  if (field) field.style.display = isMtg ? '' : 'none';
+}
+
 function confirmAddSpecialSlot(type) {
   const hourVal = parseInt(document.getElementById('ss-hour').value);
   const spanVal = parseFloat(document.getElementById('ss-span').value);
-  const label = document.getElementById('ss-label').value.trim() || (type === 'break' ? '休憩' : '移動');
+  const defaultLabel = { break: '休憩', travel: '移動', errand: '所用' }[type] || type;
+  const label = document.getElementById('ss-label').value.trim() || defaultLabel;
   const hour = String(hourVal).padStart(2, '0');
   const span = Math.max(1, Math.round(spanVal));
   const date = state.journalDate;
+
+  // 所用の追加情報
+  let errandSub = null, errandDealId = null;
+  if (type === 'errand') {
+    errandSub = document.querySelector('input[name="errand-sub"]:checked')?.value || 'mtg';
+    errandDealId = errandSub === 'mtg' ? (document.getElementById('errand-deal-id')?.value || '') : '';
+  }
 
   if (!state.journalEntries[date]) state.journalEntries[date] = {};
   if (!state.journalEntries[date].timeline) state.journalEntries[date].timeline = {};
@@ -2724,7 +2797,7 @@ function confirmAddSpecialSlot(type) {
     if (timeline[h]._covered === hour) delete timeline[h];
   });
 
-  timeline[hour] = { type, label, span };
+  timeline[hour] = { type, label, span, ...(errandSub ? { errandSub, errandDealId } : {}) };
 
   for (let i = 1; i < span; i++) {
     const covH = String(hourVal + i).padStart(2, '0');
@@ -2734,6 +2807,17 @@ function confirmAddSpecialSlot(type) {
   }
 
   saveJournalToStorage();
+
+  // MTG + 案件連携 → lastContactを更新
+  if (type === 'errand' && errandSub === 'mtg' && errandDealId) {
+    const deal = state.deals.find(d => d.id === errandDealId);
+    if (deal) {
+      deal.lastContact = date;
+      saveDeals();
+      showToastSuccess(`📅 「${deal.title}」の最終コンタクト日を更新しました`);
+    }
+  }
+
   document.getElementById('special-slot-modal')?.remove();
   renderJournalTimeline();
 }
@@ -2744,8 +2828,13 @@ function appendSpecialSlotToJournal(date, hour) {
   const slot = timeline[hour];
   const span = slot.span || 1;
   const endH = String(parseInt(hour) + span).padStart(2, '0');
-  const icon = slot.type === 'break' ? '🍱' : '🚗';
-  const line = `${hour}:00〜${endH}:00 ${icon} ${slot.label}`;
+  const iconMap = { break: '🍱', travel: '🚗', errand: slot.errandSub === 'private' ? '🏠' : '🤝' };
+  const icon = iconMap[slot.type] || '📅';
+  let line = `${hour}:00〜${endH}:00 ${icon} ${slot.label}`;
+  if (slot.type === 'errand' && slot.errandSub === 'mtg' && slot.errandDealId) {
+    const deal = state.deals?.find(d => d.id === slot.errandDealId);
+    if (deal) line += `（案件: ${deal.title}）`;
+  }
 
   const ta = document.querySelector('#journal-screen textarea, .journal-write-textarea');
   if (!ta) return;
@@ -3320,18 +3409,30 @@ function renderJournal() {
 
     summaryEl.innerHTML = html;
 
-    // タスク一覧は時間割の下に表示
+    // タスク一覧は時間割の下に表示（PC: 折りたたみ式）
     const taskListEl = document.getElementById('journal-task-list');
     if (taskListEl) {
       const statusLabel = { 'not-started': 'PENDING', 'in-progress': 'IN PROGRESS', 'revision': 'REVISION', 'completed': 'DONE' };
       const statusColor = { 'not-started': 'var(--text-muted)', 'in-progress': 'var(--primary)', 'revision': '#f97316', 'completed': 'var(--success)' };
-      let tlHtml = '<div class="journal-task-table-section"><h3 class="journal-task-table-title">📋 今日のタスク</h3>';
+      // PC(≥768px)はデフォルト折りたたみ、スマホはデフォルト展開
+      const isPC = window.innerWidth >= 768;
+      const savedOpen = localStorage.getItem('journal-task-panel-open');
+      const isOpen = savedOpen !== null ? savedOpen === '1' : !isPC;
+      const chevron = isOpen ? '▲' : '▼';
+      let tlHtml = `
+        <div class="journal-task-table-section">
+          <button class="journal-task-toggle" onclick="toggleJournalTaskPanel()" aria-expanded="${isOpen}">
+            <span>📋 今日のタスク <span class="journal-task-count">${dayTasks.length}件</span></span>
+            <span class="journal-task-chevron">${chevron}</span>
+          </button>
+          <div class="journal-task-body" style="display:${isOpen ? 'block' : 'none'};">`;
       if (dayTasks.length > 0) {
         tlHtml += `<div class="journal-task-table">`;
         dayTasks.forEach(t => {
           const spent = fmtSeconds(t.spentSeconds);
           tlHtml += `
-            <div class="journal-task-row" onclick="openEditTaskModal('${t.id}')" title="クリックで編集">
+            <div class="journal-task-row" onclick="openEditTaskModal('${t.id}')" title="ドラッグして振り返りに追加 / クリックで編集"
+              draggable="true" ondragstart="handleTaskDragStart(event, '${t.id}')">
               <span class="journal-task-dot" style="background:${statusColor[t.status] || 'var(--text-muted)'}"></span>
               <span class="journal-task-name">${escapeHtml(t.name)}</span>
               <span class="journal-task-client">${escapeHtml(t.client)}</span>
@@ -3345,7 +3446,7 @@ function renderJournal() {
       } else {
         tlHtml += `<p class="journal-no-tasks">この日に紐づくタスクはありません</p>`;
       }
-      tlHtml += '</div>';
+      tlHtml += '</div></div>';
       taskListEl.innerHTML = tlHtml;
     }
   }
@@ -7600,6 +7701,7 @@ function exportExpensesCSV() {
 let _whisperPipeline  = null;
 let _whisperLoading   = false;
 let _mediaRecorder    = null;
+let _speechRec        = null;   // SpeechRecognition インスタンス追跡
 let _audioChunks      = [];
 
 /**
@@ -7669,7 +7771,15 @@ async function _transcribeBlob(blob, mimeType, progressBtn) {
 async function startWhisperRecord(textareaId, btnId, onResult) {
   const btn = document.getElementById(btnId);
 
-  // 録音中 → 停止して文字起こし開始
+  // SpeechRecognition 録音中 → 停止
+  if (_speechRec) {
+    try { _speechRec.stop(); } catch (_) {}
+    _speechRec = null;
+    if (btn) { btn.textContent = '🎤'; btn.classList.remove('recording'); btn.title = '音声入力'; }
+    return;
+  }
+
+  // MediaRecorder 録音中 → 停止して文字起こし開始
   if (_mediaRecorder && _mediaRecorder.state !== 'inactive') {
     _mediaRecorder.stop();
     return;
@@ -7680,12 +7790,23 @@ async function startWhisperRecord(textareaId, btnId, onResult) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SR) {
       const rec = new SR();
+      _speechRec = rec;
       rec.lang = 'ja-JP';
-      rec.continuous = false;
+      rec.continuous = true;       // ユーザーが手動停止するまで継続
       rec.interimResults = false;
-      if (btn) { btn.textContent = '🔴'; btn.title = '録音中 — タップで停止'; btn.classList.add('recording'); }
+      if (btn) { btn.textContent = '⏹'; btn.title = '録音中 — もう一度クリックで停止'; btn.classList.add('recording'); }
+
+      const resetBtn = () => {
+        _speechRec = null;
+        if (btn) { btn.textContent = '🎤'; btn.classList.remove('recording'); btn.title = '音声入力'; }
+      };
+
       rec.onresult = (e) => {
-        const text = Array.from(e.results).map(r => r[0].transcript).join('');
+        const text = Array.from(e.results)
+          .filter(r => r.isFinal)
+          .map(r => r[0].transcript)
+          .join('');
+        if (!text) return;
         if (onResult) {
           onResult(text);
         } else if (textareaId) {
@@ -7698,14 +7819,26 @@ async function startWhisperRecord(textareaId, btnId, onResult) {
           }
         }
       };
-      rec.onerror = (e) => showToastError('音声認識エラー: ' + e.error);
-      rec.onend = () => {
-        if (btn) { btn.textContent = '🎤'; btn.classList.remove('recording'); btn.title = '音声入力'; }
+      rec.onerror = (e) => {
+        // no-speech は無音が続いただけ — エラー表示しない
+        if (e.error !== 'no-speech') {
+          const msg = { 'not-allowed': 'マイクのアクセスが拒否されています。ブラウザ設定を確認してください。',
+                        'audio-capture': 'マイクが見つかりません。接続を確認してください。',
+                        'network': 'ネットワークエラーが発生しました。' }[e.error] || `音声認識エラー: ${e.error}`;
+          showToastError(msg);
+        }
+        resetBtn();
       };
-      rec.start();
+      rec.onend = () => { resetBtn(); };
+      try {
+        rec.start();
+      } catch (e) {
+        showToastError('音声認識を開始できませんでした。');
+        resetBtn();
+      }
       return;
     }
-    showToastError('このブラウザは音声入力に対応していません。');
+    showToastError('このブラウザは音声入力に対応していません。\nChrome / Safari をお試しください。');
     return;
   }
 

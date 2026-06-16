@@ -3225,6 +3225,16 @@ h1, h2, h3, h4 {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.tl-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 }
 
 .journal-timeline-title {
@@ -3826,6 +3836,28 @@ h1, h2, h3, h4 {
 .tl-special-travel {
   background: rgba(59, 130, 246, 0.08) !important;
   border-color: rgba(59, 130, 246, 0.35) !important;
+}
+
+.tl-special-errand {
+  background: rgba(168, 85, 247, 0.08) !important;
+  border-color: rgba(168, 85, 247, 0.35) !important;
+}
+
+.tl-slot-special-label-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.tl-errand-deal {
+  font-size: 0.72rem;
+  color: rgba(168, 85, 247, 0.85);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* リサイズハンドルを常時薄く表示 */
@@ -5294,9 +5326,46 @@ body.drawer-open { overflow: hidden; }
   background: var(--bg-card);
   border: var(--pop-border);
   border-radius: var(--radius-lg);
-  padding: 1rem 1.25rem;
+  padding: 0;
   box-shadow: var(--pop-shadow);
+  overflow: hidden;
 }
+.journal-task-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.25rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+  text-align: left;
+  transition: background 0.15s;
+  gap: 0.5rem;
+}
+.journal-task-toggle:hover { background: var(--bg-hover, rgba(0,0,0,0.04)); }
+.journal-task-count {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-sub, rgba(0,0,0,0.06));
+  border-radius: 99px;
+  padding: 0.1rem 0.55rem;
+  margin-left: 0.4rem;
+}
+.journal-task-chevron {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+.journal-task-body {
+  padding: 0 1.25rem 1rem;
+}
+/* 旧クラス（後方互換） */
 .journal-task-table-title {
   font-size: 0.95rem;
   font-weight: 700;
