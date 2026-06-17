@@ -34,6 +34,9 @@
   <!-- Stylesheet -->
   <link rel="stylesheet" href="./styles.css">
 
+  <!-- Leaflet (地図ピン留め機能) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+
   <!-- Google GIS Client Library -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -1104,10 +1107,13 @@
       <section id="contacts-screen" class="screen" aria-hidden="true" style="display:none;">
         <div class="screen-header">
           <h1 class="screen-title">👤 コンタクト</h1>
-          <button class="btn btn-primary" onclick="openContactModal()">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            追加
-          </button>
+          <div style="display:flex;gap:0.5rem;">
+            <button class="btn btn-secondary" onclick="openContactsMapModal()">🗺️ 地図で見る</button>
+            <button class="btn btn-primary" onclick="openContactModal()">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              追加
+            </button>
+          </div>
         </div>
         <div id="contacts-filters" class="tag-filter-row"></div>
         <div id="contacts-list" class="contacts-grid"></div>
@@ -1790,11 +1796,12 @@
 
   <!-- Main JavaScript File -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=115"></script>
+  <script src="./app.js?v=116"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

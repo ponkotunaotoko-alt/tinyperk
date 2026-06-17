@@ -2436,6 +2436,11 @@ function renderJournalTimeline() {
               ${dealName}
             </div>
             <div class="tl-slot-special-actions">
+              ${(slot.type === 'travel' || slot.type === 'errand') ? (
+                slot.location
+                  ? `<button class="tl-slot-pin-btn tl-slot-pin-set" onclick="openLocationPinModal('${date}','${h}')" title="${slot.location.label ? escHtml(slot.location.label) : '行き先を確認・編集'}">📍</button>`
+                  : `<button class="tl-slot-pin-btn" onclick="openLocationPinModal('${date}','${h}')" title="行き先をピン留め">📌</button>`
+              ) : ''}
               <button class="tl-slot-special-journal-btn" onclick="appendSpecialSlotToJournal('${date}','${h}')" title="日誌に追記">📝</button>
               <button class="tl-slot-remove" onclick="removeTimelineSlot('${date}','${h}')" title="削除">×</button>
             </div>
@@ -7305,6 +7310,7 @@ function renderContactList() {
           <div class="contact-name">${escHtml(c.name)}</div>
           ${c.company ? `<div class="contact-company">🏢 ${escHtml(c.company)}</div>` : ''}
           ${c.metAt ? `<div class="contact-meta">📍 ${escHtml(c.metAt)}</div>` : ''}
+          ${c.area ? `<div class="contact-meta">🗺️ ${escHtml(c.area)}</div>` : ''}
         </div>
         <div class="contact-right">
           ${c.relationship ? `<div class="contact-relationship">${escHtml(c.relationship)}</div>` : ''}
@@ -7384,6 +7390,10 @@ function openContactModal(id = null) {
           <label class="form-label">出会った場所・きっかけ</label>
           <input type="text" id="contact-met-at" class="form-control" placeholder="〇〇交流会、SNSなど" value="${escHtml(c?.metAt||'')}">
         </div>
+        <div class="form-group">
+          <label class="form-label">活動エリア <span style="font-size:0.8em;color:var(--text-muted)">（市区町村・地域名。地図表示に使用）</span></label>
+          <input type="text" id="contact-area" class="form-control" placeholder="渋谷区、大阪市など" value="${escHtml(c?.area||'')}">
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
           <div class="form-group">
             <label class="form-label">関係性</label>
@@ -7449,6 +7459,7 @@ function saveContact() {
     tag: document.getElementById('contact-tag').value,
     metDate: document.getElementById('contact-met-date').value,
     metAt: document.getElementById('contact-met-at').value.trim(),
+    area: document.getElementById('contact-area').value.trim(),
     relationship: document.getElementById('contact-relationship').value.trim(),
     meetCount: parseInt(document.getElementById('contact-meet-count').value) || 0,
     email: document.getElementById('contact-email').value.trim(),
@@ -7458,6 +7469,11 @@ function saveContact() {
     notes: document.getElementById('contact-notes').value.trim(),
     createdAt: id ? (state.contacts.find(c=>c.id===id)?.createdAt||getLocalDateStr()) : getLocalDateStr()
   };
+  // 活動エリアが変わっていなければ、地図用の座標キャッシュを保持（変わったら再取得させる）
+  if (id) {
+    const prev = state.contacts.find(c => c.id === id);
+    if (prev && prev.area === contact.area && prev.areaCoords) contact.areaCoords = prev.areaCoords;
+  }
   if (id) {
     const idx = state.contacts.findIndex(c => c.id === id);
     if (idx >= 0) state.contacts[idx] = contact;
@@ -7475,6 +7491,167 @@ function deleteContact(id) {
   saveContacts();
   closeContactModal();
   renderContacts();
+}
+
+// ============================================================
+// 🗺️ 地図機能（移動先ピン留め / コンタクト活動エリア表示）
+// 共通: Leaflet + OpenStreetMap（APIキー不要）
+// ============================================================
+
+// 活動エリア名 → おおよその緯度経度（Nominatim無料ジオコーディング）
+async function geocodeAreaText(query) {
+  if (!query) return null;
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch (e) { /* オフライン・APIエラー時は無視 */ }
+  return null;
+}
+
+function closeMapModal(modalId) {
+  const el = document.getElementById(modalId);
+  if (el) {
+    if (el._leafletMap) { try { el._leafletMap.remove(); } catch (e) {} }
+    el.remove();
+  }
+}
+
+// ── 移動・所用スロットの地図ピン留め ──
+function openLocationPinModal(date, hour) {
+  if (typeof L === 'undefined') { showToastSuccess('⚠️ 地図の読み込みに失敗しました。オンライン環境で再度お試しください'); return; }
+  document.getElementById('pin-map-modal')?.remove();
+  const slot = state.journalEntries?.[date]?.timeline?.[hour];
+  if (!slot) return;
+  const existing = slot.location || null;
+
+  const modal = document.createElement('div');
+  modal.id = 'pin-map-modal';
+  modal.className = 'modal-overlay active';
+  modal.innerHTML = `
+    <div class="modal-box" style="max-width:420px;">
+      <div class="modal-header">
+        <h2 class="modal-title">📍 行き先をピン留め</h2>
+        <button class="modal-close" onclick="closeMapModal('pin-map-modal')">×</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:0.75rem;">
+        <div style="font-size:0.8rem;color:var(--text-muted);">地図をタップしてピンを立ててください</div>
+        <div id="pin-map-canvas" style="width:100%;height:260px;border-radius:10px;overflow:hidden;border:1px solid var(--border);"></div>
+        <div class="form-group">
+          <label class="form-label">メモ（任意）</label>
+          <input type="text" id="pin-map-label" class="form-control" placeholder="例：A社オフィス" value="${existing ? escHtml(existing.label || '') : ''}">
+        </div>
+        ${existing ? `<button type="button" class="btn btn-secondary" style="align-self:flex-start;" onclick="openLocationInMaps(${existing.lat},${existing.lng},event)">🧭 Googleマップで開く</button>` : ''}
+      </div>
+      <div class="modal-footer" style="justify-content:space-between;">
+        ${existing ? `<button class="btn btn-danger" onclick="removeSlotLocation('${date}','${hour}')">ピンを削除</button>` : '<div></div>'}
+        <div style="display:flex;gap:0.75rem;">
+          <button class="btn btn-secondary" onclick="closeMapModal('pin-map-modal')">キャンセル</button>
+          <button class="btn btn-primary" onclick="saveSlotLocation('${date}','${hour}')">保存</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  setTimeout(() => {
+    const center = existing ? [existing.lat, existing.lng] : [35.681236, 139.767125]; // デフォルト: 東京駅
+    const map = L.map('pin-map-canvas').setView(center, existing ? 15 : 11);
+    modal._leafletMap = map;
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors', maxZoom: 19
+    }).addTo(map);
+    let marker = existing ? L.marker(center).addTo(map) : null;
+    modal._pinLatLng = existing ? { lat: existing.lat, lng: existing.lng } : null;
+    map.on('click', (e) => {
+      modal._pinLatLng = { lat: e.latlng.lat, lng: e.latlng.lng };
+      if (marker) marker.setLatLng(e.latlng); else marker = L.marker(e.latlng).addTo(map);
+    });
+  }, 50);
+}
+
+function saveSlotLocation(date, hour) {
+  const modal = document.getElementById('pin-map-modal');
+  const latLng = modal?._pinLatLng;
+  if (!latLng) { showToastSuccess('⚠️ 地図をタップしてピンを立ててください'); return; }
+  const label = document.getElementById('pin-map-label')?.value.trim() || '';
+  const slot = state.journalEntries?.[date]?.timeline?.[hour];
+  if (!slot) return;
+  slot.location = { lat: latLng.lat, lng: latLng.lng, label };
+  saveJournalToStorage();
+  closeMapModal('pin-map-modal');
+  renderJournalTimeline();
+  showToastSuccess('📍 行き先を保存しました');
+}
+
+function removeSlotLocation(date, hour) {
+  const slot = state.journalEntries?.[date]?.timeline?.[hour];
+  if (slot) delete slot.location;
+  saveJournalToStorage();
+  closeMapModal('pin-map-modal');
+  renderJournalTimeline();
+}
+
+function openLocationInMaps(lat, lng, event) {
+  if (event) event.stopPropagation();
+  window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank', 'noopener');
+}
+
+// ── コンタクト一覧の地図表示 ──
+async function openContactsMapModal() {
+  if (typeof L === 'undefined') { showToastSuccess('⚠️ 地図の読み込みに失敗しました。オンライン環境で再度お試しください'); return; }
+  document.getElementById('contacts-map-modal')?.remove();
+  const targets = state.contacts.filter(c => c.area && c.area.trim());
+
+  const modal = document.createElement('div');
+  modal.id = 'contacts-map-modal';
+  modal.className = 'modal-overlay active';
+  modal.innerHTML = `
+    <div class="modal-box" style="max-width:520px;">
+      <div class="modal-header">
+        <h2 class="modal-title">🗺️ コンタクトを地図で見る</h2>
+        <button class="modal-close" onclick="closeMapModal('contacts-map-modal')">×</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:0.5rem;">
+        ${targets.length ? '' : `<div class="empty-state"><div class="empty-state-body">コンタクトに「活動エリア」を登録すると、ここに地図表示されます</div></div>`}
+        <div id="contacts-map-status" style="font-size:0.78rem;color:var(--text-muted);"></div>
+        <div id="contacts-map-canvas" style="width:100%;height:360px;border-radius:10px;overflow:hidden;border:1px solid var(--border);${targets.length?'':'display:none;'}"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeMapModal('contacts-map-modal')">閉じる</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  if (!targets.length) return;
+
+  const statusEl = document.getElementById('contacts-map-status');
+  statusEl.textContent = '地図を読み込み中…';
+
+  const map = L.map('contacts-map-canvas').setView([35.681236, 139.767125], 6);
+  modal._leafletMap = map;
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors', maxZoom: 19
+  }).addTo(map);
+
+  const points = [];
+  let didCacheUpdate = false;
+  for (const c of targets) {
+    if (!document.getElementById('contacts-map-modal')) return; // モーダルが閉じられたら中断
+    let coords = c.areaCoords;
+    if (!coords) {
+      coords = await geocodeAreaText(c.area);
+      if (coords) { c.areaCoords = coords; didCacheUpdate = true; }
+      await new Promise(r => setTimeout(r, 1100)); // Nominatim利用ポリシー: 1req/秒以下
+    }
+    if (coords) {
+      const marker = L.marker([coords.lat, coords.lng]).addTo(map);
+      marker.bindPopup(`<strong>${escHtml(c.name)}</strong>${c.company ? `<br>${escHtml(c.company)}` : ''}<br>📍 ${escHtml(c.area)}`);
+      points.push([coords.lat, coords.lng]);
+    }
+  }
+  if (didCacheUpdate) saveContacts();
+  if (points.length) map.fitBounds(points, { padding: [30, 30], maxZoom: 13 });
+  statusEl.textContent = `${points.length}/${targets.length}件を表示中`;
 }
 
 // ============================================================
