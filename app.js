@@ -2502,7 +2502,7 @@ function renderJournalTimeline() {
           ${spanControls}
         </div>
         ${task ? `
-          <div class="tl-slot-task" style="border-left-color:${color}">
+          <div class="tl-slot-task tl-status-${task.status}" style="border-left-color:${color}">
             <div class="tl-slot-task-header">
               <span class="tl-slot-task-name">${escapeHtml(task.name)}</span>
               <span class="tl-slot-task-client">${escapeHtml(task.client)}</span>
@@ -2567,6 +2567,8 @@ function renderJournalTimeline() {
           <span class="tl-slot-placeholder">ここにタスクをドロップ</span>`}
       </div>`;
   }).join('');
+
+  renderPlanActualSummary(date);
 }
 
 // ── 予定 vs 実績まとめ（日誌末尾の自動集計） ──
@@ -2603,7 +2605,7 @@ function renderPlanActualSummary(date) {
       plannedTaskH += span;
       actualTaskH += actualH;
       taskCount++;
-      taskRows.push({ name: task ? task.name : (slot.label || 'タスク'), planned: span, actual: actualH });
+      taskRows.push({ name: task ? task.name : (slot.label || 'タスク'), planned: span, actual: actualH, status: task?.status || 'not-started' });
     }
   });
 
@@ -2639,10 +2641,12 @@ function renderPlanActualSummary(date) {
   }
 
   if (taskRows.length > 0) {
+    const statusLabel = { 'not-started': 'PENDING', 'in-progress': 'IN PROGRESS', 'revision': 'REVISION', 'completed': 'DONE' };
     html += `<div class="pa-task-list">` + taskRows.map(r => {
       const rowDiff = Math.round((r.actual - r.planned) * 10) / 10;
       const rowClass = rowDiff > 0 ? 'pa-diff-over' : rowDiff < 0 ? 'pa-diff-under' : '';
-      return `<div class="pa-task-row">
+      return `<div class="pa-task-row pa-status-${r.status}">
+        <span class="pa-task-status-dot pa-ss-${r.status}" title="${statusLabel[r.status]||''}"></span>
         <span class="pa-task-name">${escapeHtml(r.name.slice(0, 16))}${r.name.length > 16 ? '…' : ''}</span>
         <span class="pa-task-vals">予定${r.planned}h / 実績${r.actual}h</span>
         <span class="pa-task-diff ${rowClass}">${rowDiff > 0 ? '+' : ''}${rowDiff}h</span>
@@ -3041,6 +3045,7 @@ function saveTimelineActual(date, hour, value) {
   if (!state.journalEntries[date].timeline[hour]) state.journalEntries[date].timeline[hour] = {};
   state.journalEntries[date].timeline[hour].actualHours = parseFloat(value) || '';
   saveJournalToStorage();
+  renderPlanActualSummary(date);
 }
 
 function saveTimelineMemo(date, hour, value) {
@@ -4843,17 +4848,20 @@ function addManualBTRecord(type) {
   const now = Date.now();
   const record = { type, startEpoch: now - minutes * 60000, endEpoch: now, durationSec: minutes * 60, manual: true };
   state.journalEntries[date].btRecords.push(record);
+  syncBTRecordToTimeline(date, record);
   saveJournalToStorage();
 
   if (input) input.value = '';
   renderBTLog();
   renderBTManageList();
+  if (state.activeTab === 'journal') renderJournalTimeline();
   showToastSuccess(`${type === 'break' ? '🍱 休憩' : '🚗 移動'} ${minutes}分を追加しました`);
 }
 
 function removeBTRecordFromModal(index) {
   deleteBTRecord(index);
   renderBTManageList();
+  if (state.activeTab === 'journal') renderJournalTimeline();
 }
 
 function syncTimerToJournalTimeline(task) {
