@@ -320,6 +320,8 @@
                     <button id="btn-travel-toggle" class="btn-bt-inline travel" onclick="toggleBreakTravelTimer('travel')">開始</button>
                   </div>
                 </div>
+                <!-- 手動管理リンク -->
+                <a href="#" onclick="openBTManageModal();return false;" style="color: var(--primary); font-size: 0.8rem; font-weight: 700; text-decoration: underline; text-align: right; margin-top: 0.25rem;">休憩・移動を手動で追加・編集する</a>
                 <!-- アクティブタイマー行（計測中のみ表示） -->
                 <div id="bt-active-display" style="display:none;" class="log-row bt-active-inline">
                   <span id="bt-active-label" class="log-label"></span>
@@ -809,6 +811,11 @@
           <!-- JS で描画 -->
         </div>
 
+        <!-- 予定 vs 実績まとめ（自動集計） -->
+        <div id="journal-plan-actual" class="journal-plan-actual">
+          <!-- JS で描画 -->
+        </div>
+
         <!-- ジャーナル記入エリア -->
         <div class="report-card journal-write-card">
           <div class="journal-write-header">
@@ -1121,6 +1128,18 @@
         <div id="memo-goals-section" style="display:none;">
           <div id="goals-content"></div>
         </div>
+      </section>
+
+      <!-- EXPENSES SCREEN -->
+      <section id="expenses-screen" class="screen" aria-hidden="true" style="display:none;">
+        <div class="screen-header">
+          <h1 class="screen-title">💴 経費管理</h1>
+          <button class="btn btn-primary" onclick="openExpenseModal()">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            経費を追加
+          </button>
+        </div>
+        <div id="expenses-content"></div>
       </section>
 
     </main>
@@ -1775,7 +1794,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=114"></script>
+  <script src="./app.js?v=115"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

@@ -2771,6 +2771,125 @@ h1, h2, h3, h4 {
   box-shadow: var(--pop-shadow);
 }
 
+/* 稼働時間カード（PUNCH IN/OUTボタン付き）はカード崩れ防止のため全幅 */
+.journal-stat-card-wide {
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+}
+.journal-stat-card-wide .journal-stat-body {
+  flex: 1 1 auto;
+}
+.journal-stat-card-wide .journal-clock-btn {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+@media (max-width: 480px) {
+  .journal-stat-card-wide .journal-clock-btn {
+    margin-left: 0;
+    width: 100%;
+    text-align: center;
+    margin-top: 0.4rem;
+  }
+}
+
+/* ── 予定 vs 実績まとめ ── */
+.journal-plan-actual {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+}
+.pa-header {
+  font-size: 0.82rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+}
+.pa-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+.pa-row-main {
+  margin-bottom: 0.2rem;
+}
+.pa-label {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+.pa-val {
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+.pa-arrow {
+  color: var(--text-muted);
+}
+.pa-pct {
+  margin-left: auto;
+  font-weight: 700;
+  font-size: 0.78rem;
+  background: var(--primary-soft, rgba(99,102,241,0.12));
+  color: var(--primary);
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+.pa-diff-row {
+  font-weight: 700;
+  font-size: 0.78rem;
+  margin-bottom: 0.5rem;
+}
+.pa-diff-over { color: var(--danger, #ef4444); }
+.pa-diff-under { color: var(--success, #22c55e); }
+.pa-diff-even { color: var(--text-muted); }
+.pa-sub-row {
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+.pa-sub-item {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: var(--surface-2, rgba(0,0,0,0.04));
+  padding: 0.15rem 0.5rem;
+  border-radius: 8px;
+}
+.pa-sub-warn {
+  color: var(--danger, #ef4444);
+  font-weight: 700;
+}
+.pa-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.5rem;
+}
+.pa-task-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+}
+.pa-task-name {
+  font-weight: 700;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pa-task-vals {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.pa-task-diff {
+  flex-shrink: 0;
+  font-weight: 700;
+  min-width: 2.5em;
+  text-align: right;
+}
+
 .journal-stat-icon {
   font-size: 1.4rem;
   flex-shrink: 0;
@@ -3628,6 +3747,34 @@ h1, h2, h3, h4 {
 
 .bt-break-val { color: #22c55e; font-weight: 700; }
 .bt-travel-val { color: #3b82f6; font-weight: 700; }
+.bt-break-val.bt-break-warn { color: var(--danger, #ef4444) !important; }
+
+.bt-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.bt-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+}
+.bt-manage-row-label { flex: 1; }
+.bt-manage-row-del {
+  border: none;
+  background: none;
+  color: var(--danger, #ef4444);
+  font-size: 1rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0.1rem 0.3rem;
+}
 
 .btn-bt-inline {
   padding: 0.2rem 0.65rem;
@@ -3831,6 +3978,18 @@ h1, h2, h3, h4 {
 .tl-special-break {
   background: rgba(34, 197, 94, 0.08) !important;
   border-color: rgba(34, 197, 94, 0.35) !important;
+}
+
+/* 休憩が2時間以上続く場合は赤字で警告表示 */
+.tl-break-long {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border-color: rgba(239, 68, 68, 0.45) !important;
+}
+.tl-break-long .tl-slot-time,
+.tl-break-long .tl-slot-special-label,
+.tl-break-long .tl-slot-span-val {
+  color: var(--danger, #ef4444) !important;
+  font-weight: 700;
 }
 
 .tl-special-travel {
@@ -4584,6 +4743,38 @@ body.drawer-open { overflow: hidden; }
 .contact-followup { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; }
 .contact-followup.overdue { color: var(--danger); font-weight: 700; }
 .contact-followup.soon { color: var(--primary); font-weight: 600; }
+.contact-relationship {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-soft, rgba(99,102,241,0.12));
+  padding: 0.1rem 0.5rem;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.contact-meet-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.contact-meet-count {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.contact-meet-plus {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--surface-2, rgba(0,0,0,0.04));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.05rem 0.35rem;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.contact-meet-plus:active { transform: scale(0.94); }
 
 /* ---- GOALS ---- */
 .goals-grid {
@@ -6064,6 +6255,8 @@ body {
   border-radius: var(--radius-md);
   padding: 0.6rem 0.75rem;
   margin-bottom: 0.75rem;
+  max-height: 220px;
+  overflow-y: auto;
 }
 .tl-quickbar-label {
   font-family: var(--font-vintage);

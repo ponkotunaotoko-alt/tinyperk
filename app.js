@@ -2361,7 +2361,7 @@ function renderJournalTimeline() {
     ).sort((a, b) => {
       const order = { 'in-progress': 0, 'not-started': 1, 'revision': 2, 'completed': 3 };
       return (order[a.status] ?? 9) - (order[b.status] ?? 9);
-    }).slice(0, 10);
+    });
     const statusColor = { 'not-started': 'var(--text-muted)', 'in-progress': 'var(--primary)', 'revision': '#f97316', 'completed': 'var(--success)' };
     if (todayTasks.length > 0) {
       quickBarEl.innerHTML = `
@@ -2406,9 +2406,10 @@ function renderJournalTimeline() {
       const labelMap = { break: '休憩', travel: '移動', errand: '所用' };
       const icon = iconMap[slot.type] || '📅';
       const label = slot.label || labelMap[slot.type] || slot.type;
-      const colorClass = slot.type === 'break' ? 'tl-special-break'
+      const colorClass = (slot.type === 'break' ? 'tl-special-break'
                        : slot.type === 'travel' ? 'tl-special-travel'
-                       : 'tl-special-errand';
+                       : 'tl-special-errand')
+                       + (slot.type === 'break' && span >= 2 ? ' tl-break-long' : '');
       // MTG連携案件名
       const dealName = (slot.errandSub === 'mtg' && slot.errandDealId)
         ? (() => { const d = state.deals?.find(x => x.id === slot.errandDealId); return d ? `<span class="tl-errand-deal">🔗 ${escHtml(d.title)}</span>` : ''; })()
@@ -2566,6 +2567,90 @@ function renderJournalTimeline() {
           <span class="tl-slot-placeholder">ここにタスクをドロップ</span>`}
       </div>`;
   }).join('');
+}
+
+// ── 予定 vs 実績まとめ（日誌末尾の自動集計） ──
+function renderPlanActualSummary(date) {
+  const el = document.getElementById('journal-plan-actual');
+  if (!el) return;
+
+  const entry = state.journalEntries[date] || {};
+  const timeline = entry.timeline || {};
+
+  let plannedTaskH = 0;
+  let actualTaskH = 0;
+  let breakH = 0;
+  let travelH = 0;
+  let errandH = 0;
+  let taskCount = 0;
+  const taskRows = [];
+
+  Object.keys(timeline).forEach(h => {
+    const slot = timeline[h];
+    if (!slot || slot._covered) return;
+    const span = slot.span || 1;
+
+    if (slot.type === 'break') { breakH += span; return; }
+    if (slot.type === 'travel') { travelH += span; return; }
+    if (slot.type === 'errand') { errandH += span; return; }
+
+    if (slot.taskId) {
+      const task = state.tasks.find(t => t.id === slot.taskId);
+      const timerHours = task?.spentSeconds > 0 ? Math.round(task.spentSeconds / 3600 * 10) / 10 : null;
+      const actualH = slot.actualHours !== '' && slot.actualHours != null
+        ? Number(slot.actualHours)
+        : (timerHours || 0);
+      plannedTaskH += span;
+      actualTaskH += actualH;
+      taskCount++;
+      taskRows.push({ name: task ? task.name : (slot.label || 'タスク'), planned: span, actual: actualH });
+    }
+  });
+
+  // 何も記録がなければ非表示
+  if (taskCount === 0 && breakH === 0 && travelH === 0 && errandH === 0) {
+    el.innerHTML = '';
+    return;
+  }
+
+  const achievePct = plannedTaskH > 0 ? Math.round((actualTaskH / plannedTaskH) * 100) : null;
+  const diffH = Math.round((actualTaskH - plannedTaskH) * 10) / 10;
+  const diffLabel = diffH > 0 ? `+${diffH}h 超過` : diffH < 0 ? `${diffH}h 短縮` : '予定通り';
+  const diffClass = diffH > 0 ? 'pa-diff-over' : diffH < 0 ? 'pa-diff-under' : 'pa-diff-even';
+
+  let html = `
+    <div class="pa-header">📊 予定 vs 実績まとめ</div>
+    <div class="pa-row pa-row-main">
+      <span class="pa-label">タスク予定</span>
+      <span class="pa-val">${plannedTaskH}h</span>
+      <span class="pa-arrow">→</span>
+      <span class="pa-label">実績</span>
+      <span class="pa-val">${actualTaskH}h</span>
+      ${achievePct != null ? `<span class="pa-pct">達成率 ${achievePct}%</span>` : ''}
+    </div>
+    <div class="pa-row pa-diff-row ${diffClass}">${diffLabel}</div>`;
+
+  if (breakH > 0 || travelH > 0 || errandH > 0) {
+    html += `<div class="pa-row pa-sub-row">`;
+    if (breakH > 0) html += `<span class="pa-sub-item${breakH >= 2 ? ' pa-sub-warn' : ''}">🍱 休憩 ${breakH}h</span>`;
+    if (travelH > 0) html += `<span class="pa-sub-item">🚗 移動 ${travelH}h</span>`;
+    if (errandH > 0) html += `<span class="pa-sub-item">🤝 所用 ${errandH}h</span>`;
+    html += `</div>`;
+  }
+
+  if (taskRows.length > 0) {
+    html += `<div class="pa-task-list">` + taskRows.map(r => {
+      const rowDiff = Math.round((r.actual - r.planned) * 10) / 10;
+      const rowClass = rowDiff > 0 ? 'pa-diff-over' : rowDiff < 0 ? 'pa-diff-under' : '';
+      return `<div class="pa-task-row">
+        <span class="pa-task-name">${escapeHtml(r.name.slice(0, 16))}${r.name.length > 16 ? '…' : ''}</span>
+        <span class="pa-task-vals">予定${r.planned}h / 実績${r.actual}h</span>
+        <span class="pa-task-diff ${rowClass}">${rowDiff > 0 ? '+' : ''}${rowDiff}h</span>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+
+  el.innerHTML = html;
 }
 
 function handleTimelineDrop(e, hour) {
@@ -2746,10 +2831,14 @@ function showAddSpecialSlotModal(type) {
         <div class="form-group">
           <label class="form-label">時間</label>
           <select id="ss-span" class="form-control">
-            <option value="1">1時間</option>
-            <option value="2">2時間</option>
             <option value="0.5">30分</option>
+            <option value="1">1時間</option>
             <option value="1.5">1時間30分</option>
+            <option value="2">2時間</option>
+            <option value="3">3時間</option>
+            <option value="4">4時間</option>
+            <option value="5">5時間</option>
+            <option value="6">6時間</option>
           </select>
         </div>
         ${errandFields}
@@ -3361,7 +3450,7 @@ function renderJournal() {
       }
     }
     html += `
-      <div class="journal-stat-card">
+      <div class="journal-stat-card journal-stat-card-wide">
         <span class="journal-stat-icon">🕐</span>
         <div class="journal-stat-body">
           <span class="journal-stat-label">稼働時間</span>
@@ -3408,6 +3497,8 @@ function renderJournal() {
     html += '</div>';
 
     summaryEl.innerHTML = html;
+
+    renderPlanActualSummary(date);
 
     // タスク一覧は時間割の下に表示（PC: 折りたたみ式）
     const taskListEl = document.getElementById('journal-task-list');
@@ -4635,7 +4726,10 @@ function renderBTLog() {
 
   const breakEl = document.getElementById('dash-break-total');
   const travelEl = document.getElementById('dash-travel-total');
-  if (breakEl) breakEl.textContent = breakSecs > 0 ? fmtDur(breakSecs) : '--';
+  if (breakEl) {
+    breakEl.textContent = breakSecs > 0 ? fmtDur(breakSecs) : '--';
+    breakEl.classList.toggle('bt-break-warn', breakSecs >= 7200);
+  }
   if (travelEl) travelEl.textContent = travelSecs > 0 ? fmtDur(travelSecs) : '--';
 
   // 実稼働時間を再計算（退勤済みの場合のみ）
@@ -4668,6 +4762,98 @@ function deleteBTRecord(index) {
   state.journalEntries[date].btRecords.splice(index, 1);
   saveJournalToStorage();
   renderBTLog();
+}
+
+// ============================================================
+// 休憩・移動の手動管理（タイマーを使わず分単位で直接入力）
+// ============================================================
+
+function openBTManageModal() {
+  document.getElementById('bt-manage-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'bt-manage-modal';
+  modal.className = 'modal-overlay active';
+  modal.innerHTML = `
+    <div class="modal-box" style="max-width:380px;">
+      <div class="modal-header">
+        <h2 class="modal-title">🍱🚗 休憩・移動を手動管理</h2>
+        <button class="modal-close" onclick="document.getElementById('bt-manage-modal').remove()">×</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:1rem;">
+        <div class="form-group">
+          <label class="form-label">🍱 休憩を追加（分）</label>
+          <div style="display:flex;gap:0.5rem;">
+            <input type="number" id="bt-manual-break-min" class="form-control" placeholder="例：30" min="1" step="1" style="flex:1;">
+            <button class="btn btn-secondary" onclick="addManualBTRecord('break')">追加</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">🚗 移動を追加（分）</label>
+          <div style="display:flex;gap:0.5rem;">
+            <input type="number" id="bt-manual-travel-min" class="form-control" placeholder="例：20" min="1" step="1" style="flex:1;">
+            <button class="btn btn-secondary" onclick="addManualBTRecord('travel')">追加</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">本日の記録</label>
+          <div id="bt-manage-list" class="bt-manage-list"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="document.getElementById('bt-manage-modal').remove()">閉じる</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  renderBTManageList();
+}
+
+function renderBTManageList() {
+  const el = document.getElementById('bt-manage-list');
+  if (!el) return;
+  const date = getLocalDateStr();
+  const records = state.journalEntries[date]?.btRecords || [];
+  if (!records.length) {
+    el.innerHTML = `<div style="font-size:0.82rem;color:var(--text-muted);">まだ記録がありません</div>`;
+    return;
+  }
+  const fmtDur = s => {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return h > 0 ? `${h}時間${m > 0 ? m + '分' : ''}` : `${m}分`;
+  };
+  el.innerHTML = records.map((r, i) => `
+    <div class="bt-manage-row">
+      <span class="bt-manage-row-icon">${r.type === 'break' ? '🍱' : '🚗'}</span>
+      <span class="bt-manage-row-label">${r.type === 'break' ? '休憩' : '移動'} ${fmtDur(r.durationSec)}${r.manual ? '（手動）' : ''}</span>
+      <button class="bt-manage-row-del" onclick="removeBTRecordFromModal(${i})" title="削除">×</button>
+    </div>`).join('');
+}
+
+function addManualBTRecord(type) {
+  const input = document.getElementById(`bt-manual-${type}-min`);
+  const minutes = parseInt(input?.value, 10);
+  if (!minutes || minutes <= 0) {
+    showToastInfo('分数を入力してください。');
+    return;
+  }
+  const date = getLocalDateStr();
+  if (!state.journalEntries[date]) state.journalEntries[date] = {};
+  if (!state.journalEntries[date].btRecords) state.journalEntries[date].btRecords = [];
+
+  const now = Date.now();
+  const record = { type, startEpoch: now - minutes * 60000, endEpoch: now, durationSec: minutes * 60, manual: true };
+  state.journalEntries[date].btRecords.push(record);
+  saveJournalToStorage();
+
+  if (input) input.value = '';
+  renderBTLog();
+  renderBTManageList();
+  showToastSuccess(`${type === 'break' ? '🍱 休憩' : '🚗 移動'} ${minutes}分を追加しました`);
+}
+
+function removeBTRecordFromModal(index) {
+  deleteBTRecord(index);
+  renderBTManageList();
 }
 
 function syncTimerToJournalTimeline(task) {
@@ -7113,12 +7299,26 @@ function renderContactList() {
           ${c.metAt ? `<div class="contact-meta">📍 ${escHtml(c.metAt)}</div>` : ''}
         </div>
         <div class="contact-right">
+          ${c.relationship ? `<div class="contact-relationship">${escHtml(c.relationship)}</div>` : ''}
+          <div class="contact-meet-row" onclick="event.stopPropagation()">
+            <span class="contact-meet-count">🤝 ${c.meetCount || 0}回</span>
+            <button class="contact-meet-plus" onclick="incrementMeetCount('${c.id}', event)" title="会った回数を+1">＋1</button>
+          </div>
           ${tag && tag.key !== 'all' ? `<span class="contact-tag" style="background:${tag.color}22;color:${tag.color}">${tag.label}</span>` : ''}
           ${c.followUpDate ? `<div class="contact-followup ${overdue?'overdue':soon?'soon':''}">${overdue?'⚠️ ':soon?'⏰ ':'📅 '}${c.followUpDate.slice(5)}</div>` : ''}
           ${getClientRelationBadge(c.name)}
         </div>
       </div>`;
   }).join('');
+}
+
+function incrementMeetCount(id, event) {
+  if (event) event.stopPropagation();
+  const c = state.contacts.find(x => x.id === id);
+  if (!c) return;
+  c.meetCount = (c.meetCount || 0) + 1;
+  saveContacts();
+  renderContacts();
 }
 
 function addDays(dateStr, n) {
@@ -7178,6 +7378,16 @@ function openContactModal(id = null) {
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
           <div class="form-group">
+            <label class="form-label">関係性</label>
+            <input type="text" id="contact-relationship" class="form-control" placeholder="取引先、友人、紹介者など" value="${escHtml(c?.relationship||'')}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">会った回数</label>
+            <input type="number" id="contact-meet-count" class="form-control" min="0" step="1" value="${c?.meetCount||0}">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+          <div class="form-group">
             <label class="form-label">メール</label>
             <input type="email" id="contact-email" class="form-control" value="${escHtml(c?.email||'')}">
           </div>
@@ -7231,6 +7441,8 @@ function saveContact() {
     tag: document.getElementById('contact-tag').value,
     metDate: document.getElementById('contact-met-date').value,
     metAt: document.getElementById('contact-met-at').value.trim(),
+    relationship: document.getElementById('contact-relationship').value.trim(),
+    meetCount: parseInt(document.getElementById('contact-meet-count').value) || 0,
     email: document.getElementById('contact-email').value.trim(),
     phone: document.getElementById('contact-phone').value.trim(),
     followUpDate: document.getElementById('contact-followup').value,
