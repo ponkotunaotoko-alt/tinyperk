@@ -8437,7 +8437,15 @@ function renderIdeas() {
         <button class="btn idea-voice-btn" id="idea-voice-btn" onclick="toggleVoiceInput()" title="音声入力">
           🎤
         </button>
+        <button class="btn" id="idea-photo-btn" onclick="document.getElementById('idea-photo-input').click()" title="写真を添付">
+          📷
+        </button>
+        <input type="file" id="idea-photo-input" accept="image/*" style="display:none;" onchange="handleIdeaPhotoSelect(event)">
         <button class="btn btn-primary" onclick="addIdeaFromInput()">記録</button>
+      </div>
+      <div id="idea-photo-preview" style="display:none;margin-top:0.5rem;align-items:center;gap:0.5rem;" >
+        <img id="idea-photo-preview-img" src="" style="max-width:64px;max-height:64px;border-radius:8px;object-fit:cover;">
+        <button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.5rem;" onclick="clearIdeaPhotoPreview()">✕ 写真を外す</button>
       </div>
       <div id="voice-status" class="voice-status" style="display:none;">🔴 録音中... 話しかけてください</div>
     </div>
@@ -8476,19 +8484,39 @@ function renderIdeaRow(idea, rank) {
   const maxCount = Math.max(...state.ideas.map(i=>i.count||1));
   const pct = maxCount > 0 ? Math.round((idea.count||1)/maxCount*100) : 0;
   const heat = pct >= 80 ? '🔥🔥' : pct >= 50 ? '🔥' : pct >= 30 ? '✨' : '';
+  const isLoading = _ideaDraftLoading.has(idea.id);
+  const draftBtnLabel = isLoading ? '⏳ 生成中…' : (idea.blogDraft ? '✍️ 再生成' : '✍️ 記事化');
   return `<div class="idea-row">
     <div class="idea-rank">${rank < 3 ? ['🥇','🥈','🥉'][rank] : rank+1}</div>
     <div class="idea-content">
+      ${idea.photo ? `<img src="${idea.photo}" style="max-width:84px;max-height:84px;border-radius:8px;object-fit:cover;margin-bottom:0.4rem;display:block;">` : ''}
       <div class="idea-text">${escHtml(idea.text)} ${heat}</div>
       <div class="idea-meta">×${idea.count||1} 回 · ${idea.createdAt||''}</div>
+      ${idea.blogDraft ? renderIdeaBlogDraft(idea) : ''}
     </div>
     <div class="idea-actions">
       <div class="idea-bar-track"><div class="idea-bar-fill" style="width:${pct}%"></div></div>
-      <div style="display:flex;gap:0.5rem;margin-top:0.35rem;">
+      <div style="display:flex;gap:0.5rem;margin-top:0.35rem;flex-wrap:wrap;">
         <button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.5rem;" onclick="incrementIdea('${idea.id}')" title="もう一度思った">+1</button>
         <button class="btn btn-primary" style="font-size:0.75rem;padding:0.25rem 0.5rem;" onclick="promoteIdeaToDeal('${idea.id}')" title="案件にする">💼</button>
+        <button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.5rem;" ${isLoading?'disabled':''} onclick="generateBlogDraftFromIdea('${idea.id}')" title="AIでブログ記事の草稿を作る">${draftBtnLabel}</button>
         <button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.5rem;color:var(--danger)" onclick="deleteIdea('${idea.id}')">✕</button>
       </div>
+    </div>
+  </div>`;
+}
+
+function renderIdeaBlogDraft(idea) {
+  const d = idea.blogDraft;
+  if (!d) return '';
+  return `<div class="report-card" style="margin-top:0.6rem;padding:0.75rem;background:var(--bg-secondary, #f7f5f0);">
+    <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.4rem;">📝 ブログ草稿（${d.generatedAt||''}）</div>
+    <input type="text" class="form-input" id="draft-title-${idea.id}" value="${escHtml(d.title||'')}" style="font-weight:600;margin-bottom:0.4rem;" onchange="updateIdeaBlogDraftField('${idea.id}','title',this.value)">
+    <textarea class="form-input" id="draft-body-${idea.id}" rows="5" style="font-size:0.85rem;line-height:1.6;" onchange="updateIdeaBlogDraftField('${idea.id}','body',this.value)">${escHtml(d.body||'')}</textarea>
+    <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap;">
+      <button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.5rem;" onclick="copyIdeaBlogDraft('${idea.id}')">📋 コピー</button>
+      <button class="btn btn-primary" style="font-size:0.75rem;padding:0.25rem 0.5rem;" disabled title="近日対応：設定画面でWordPress連携を設定すると、ここからそのまま公開できるようになります">🌐 公開する（準備中）</button>
+      <button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.5rem;color:var(--danger)" onclick="deleteIdeaBlogDraft('${idea.id}')">草稿を削除</button>
     </div>
   </div>`;
 }
@@ -8532,16 +8560,42 @@ function escHtmlSvg(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// ── 気づきへの写真添付（記事化のネタとして使う・保存前のプレビューのみ） ──
+let _pendingIdeaPhoto = null; // { dataUrl, mediaType }
+
+function handleIdeaPhotoSelect(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _pendingIdeaPhoto = { dataUrl: e.target.result, mediaType: (file.type && file.type.startsWith('image/')) ? file.type : 'image/jpeg' };
+    const preview = document.getElementById('idea-photo-preview');
+    const img = document.getElementById('idea-photo-preview-img');
+    if (img) img.src = _pendingIdeaPhoto.dataUrl;
+    if (preview) preview.style.display = 'flex';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearIdeaPhotoPreview() {
+  _pendingIdeaPhoto = null;
+  const input = document.getElementById('idea-photo-input');
+  if (input) input.value = '';
+  const preview = document.getElementById('idea-photo-preview');
+  if (preview) preview.style.display = 'none';
+}
+
 function addIdeaFromInput() {
   const input = document.getElementById('idea-text-input');
   const text = input?.value?.trim();
   if (!text) return;
-  addIdea(text);
+  addIdea(text, _pendingIdeaPhoto?.dataUrl || null);
   input.value = '';
   input.focus();
+  clearIdeaPhotoPreview();
 }
 
-function addIdea(text) {
+function addIdea(text, photo) {
   if (!text) return;
   // Check for similar existing idea (simple: same text ignoring case/spaces)
   const normalised = text.toLowerCase().replace(/\s+/g,'');
@@ -8549,17 +8603,109 @@ function addIdea(text) {
   if (existing) {
     existing.count = (existing.count||1) + 1;
     existing.updatedAt = getLocalDateStr();
+    if (photo && !existing.photo) existing.photo = photo;
   } else {
     state.ideas.push({
       id: genId(),
       text,
       count: 1,
+      photo: photo || null,
+      blogDraft: null,
       createdAt: getLocalDateStr(),
       updatedAt: getLocalDateStr()
     });
   }
   saveIdeas();
   if (state.activeTab === 'ideas') renderIdeas();
+}
+
+// ── 気づき → AIブログ草稿生成（Phase1: 生成のみ・公開はPhase2で対応） ──
+const _ideaDraftLoading = new Set();
+
+async function generateBlogDraftFromIdea(id) {
+  const idea = state.ideas.find(i => i.id === id);
+  if (!idea || _ideaDraftLoading.has(id)) return;
+
+  const geminiKey = localStorage.getItem(_GEMINI_KEY_STORE);
+  if (!geminiKey) {
+    alert('ブログ草稿の生成にはGemini APIキー（無料）が必要です。設定画面で登録してください。');
+    return;
+  }
+
+  _ideaDraftLoading.add(id);
+  renderIdeas();
+
+  try {
+    const prompt = `以下は個人事業主が日々の気づき・メモとして記録した一文です。これを元に、本人の体験談として読めるブログ記事の草稿を作成してください。
+気づきメモ: 「${idea.text}」
+
+JSONのみを返してください（前後の説明不要）。
+フォーマット: {"title":"記事タイトル（20字程度・読みたくなる見出し）","body":"記事本文（300〜500字程度・親しみやすい一人称の文体・段落分けは\\nで表現）"}`;
+
+    const parts = [{ text: prompt }];
+    if (idea.photo) {
+      const m = idea.photo.match(/^data:([^;]+);base64,(.+)$/);
+      if (m) parts.unshift({ inline_data: { mime_type: m[1], data: m[2] } });
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts }] })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      const raw = err?.error?.message || '';
+      if (resp.status === 400 && raw.includes('API_KEY')) throw new Error('GeminiのAPIキーが無効です。設定画面で確認してください。');
+      if (resp.status === 429) throw new Error('Geminiの無料枠を超えました。しばらく待ってから再試行してください。');
+      throw new Error(`Gemini APIエラー (${resp.status})`);
+    }
+    const data = await resp.json();
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('草稿を解析できませんでした。もう一度試してください。');
+    const draft = JSON.parse(jsonMatch[0]);
+
+    idea.blogDraft = {
+      title: draft.title || '',
+      body: draft.body || '',
+      generatedAt: getLocalDateStr()
+    };
+    saveIdeas();
+  } catch (err) {
+    console.error('[BlogDraft]', err);
+    alert(`草稿の生成に失敗しました: ${err.message || '不明なエラー'}`);
+  } finally {
+    _ideaDraftLoading.delete(id);
+    renderIdeas();
+  }
+}
+
+function updateIdeaBlogDraftField(id, field, value) {
+  const idea = state.ideas.find(i => i.id === id);
+  if (!idea || !idea.blogDraft) return;
+  idea.blogDraft[field] = value;
+  saveIdeas();
+}
+
+function copyIdeaBlogDraft(id) {
+  const idea = state.ideas.find(i => i.id === id);
+  if (!idea || !idea.blogDraft) return;
+  const text = `${idea.blogDraft.title}\n\n${idea.blogDraft.body}`;
+  navigator.clipboard?.writeText(text).then(() => {
+    alert('コピーしました。お使いのブログ・HPの編集画面に貼り付けてください。');
+  }).catch(() => {
+    alert('コピーに失敗しました。');
+  });
+}
+
+function deleteIdeaBlogDraft(id) {
+  const idea = state.ideas.find(i => i.id === id);
+  if (!idea) return;
+  idea.blogDraft = null;
+  saveIdeas();
+  renderIdeas();
 }
 
 function incrementIdea(id) {
