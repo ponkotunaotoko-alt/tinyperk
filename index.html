@@ -604,6 +604,10 @@
             <span class="report-card-title">合計請求金額 (税込)</span>
             <div id="report-total-amount" class="report-card-value amount">￥0</div>
           </div>
+          <div class="report-card">
+            <span class="report-card-title">🌴 休日数 (月間)</span>
+            <div id="report-total-holidays" class="report-card-value" style="color: var(--secondary);">0 日</div>
+          </div>
         </div>
 
 
@@ -784,6 +788,11 @@
             <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
           </button>
         </div>
+
+        <div style="display:flex;justify-content:center;margin-top:-0.25rem;margin-bottom:0.75rem;">
+          <button id="journal-holiday-btn" class="journal-holiday-chip" onclick="toggleJournalHoliday()">🌴 休日にする</button>
+        </div>
+        <div id="journal-holiday-banner" style="display:none;"></div>
 
         <!-- その日の作業サマリー -->
         <div id="journal-work-summary" class="journal-work-summary">
@@ -1802,7 +1811,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=118"></script>
+  <script src="./app.js?v=119"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

@@ -2747,6 +2747,42 @@ h1, h2, h3, h4 {
   color: #fff;
 }
 
+.journal-holiday-chip {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 0.25rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.journal-holiday-chip:hover {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.journal-holiday-chip.is-holiday {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border-color: #f59e0b;
+}
+
+.journal-holiday-banner {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #b45309;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
 /* 作業サマリー */
 .journal-work-summary {
   display: flex;

@@ -1970,6 +1970,20 @@ function renderDashboardJournalCard(todayStr) {
   }
 }
 
+// 休日トグル（日誌）
+function toggleJournalHoliday() {
+  const date = state.journalDate || getLocalDateStr();
+  if (!state.journalEntries[date]) state.journalEntries[date] = {};
+  state.journalEntries[date].isHoliday = !state.journalEntries[date].isHoliday;
+  saveJournalToStorage();
+  renderJournal();
+  showTrayToast(state.journalEntries[date].isHoliday ? '🌴 休日に設定しました' : '休日設定を解除しました');
+}
+
+function isHolidayDate(d) {
+  return !!state.journalEntries[d]?.isHoliday;
+}
+
 function saveDashboardJournalEntry(dateStr) {
   const textarea = document.getElementById('dash-journal-text');
   if (!textarea) return;
@@ -3488,6 +3502,24 @@ function renderJournal() {
   const nextBtn = document.getElementById('journal-next-day');
   if (nextBtn) nextBtn.disabled = false;
 
+  // ── 休日トグル表示 ──
+  const isHoliday = isHolidayDate(date);
+  const holidayBtn = document.getElementById('journal-holiday-btn');
+  if (holidayBtn) {
+    holidayBtn.textContent = isHoliday ? '🌴 休日（タップで解除）' : '🌴 休日にする';
+    holidayBtn.classList.toggle('is-holiday', isHoliday);
+  }
+  const holidayBanner = document.getElementById('journal-holiday-banner');
+  if (holidayBanner) {
+    if (isHoliday) {
+      holidayBanner.className = 'journal-holiday-banner';
+      holidayBanner.style.display = 'block';
+      holidayBanner.textContent = '🌴 この日は休日として記録されています';
+    } else {
+      holidayBanner.style.display = 'none';
+    }
+  }
+
   // ── 作業サマリー ──
   const summaryEl = document.getElementById('journal-work-summary');
   if (summaryEl) {
@@ -3632,7 +3664,7 @@ function renderJournal() {
   const countEl = document.getElementById('journal-entry-count');
   if (histList) {
     const entries = Object.entries(state.journalEntries)
-      .filter(([d, e]) => e.text && e.text.trim())
+      .filter(([d, e]) => (e.text && e.text.trim()) || e.isHoliday)
       .sort(([a], [b]) => b.localeCompare(a)); // 新しい順
 
     if (countEl) countEl.textContent = `${entries.length}件の記録`;
@@ -3642,7 +3674,7 @@ function renderJournal() {
     } else {
       histList.innerHTML = entries.map(([d, e]) => {
         const isActive = d === date;
-        const preview = e.text.length > 80 ? e.text.slice(0, 80) + '…' : e.text;
+        const preview = e.text && e.text.trim() ? (e.text.length > 80 ? e.text.slice(0, 80) + '…' : e.text) : (e.isHoliday ? '🌴 休日' : '');
         // その日のタスク数
         const taskCount = state.tasks.filter(t => t.dueDate === d || t.completedAt === d).length;
         // ジャーナルドット for calendar
@@ -3651,6 +3683,7 @@ function renderJournal() {
           <div class="journal-history-item ${isActive ? 'active' : ''}" onclick="jumpToJournalDate('${d}')">
             <div class="journal-history-date">
               ${journalDateLabel(d)}
+              ${e.isHoliday ? `<span class="journal-history-badge" style="background:rgba(245,158,11,0.15);color:#f59e0b;">🌴 休日</span>` : ''}
               ${taskCount > 0 ? `<span class="journal-history-badge">${taskCount}件</span>` : ''}
             </div>
             <p class="journal-history-preview">${escapeHtml(preview)}</p>
@@ -5879,9 +5912,15 @@ function renderInvoiceReport() {
   const totalAmount = Math.round(completedTasks.reduce((sum, t) => sum + (t.amount || 0) * 1.1, 0));
   const taskCount = completedTasks.length;
 
+  // 4. 月間休日数
+  const totalHolidays = Object.entries(state.journalEntries || {})
+    .filter(([d, e]) => d.startsWith(selectedMonth) && e.isHoliday).length;
+
   // Render KPI values
   animateCounter(document.getElementById('report-total-count'), taskCount);
   animateCounter(document.getElementById('report-total-amount'), totalAmount, true);
+  const holidaysEl = document.getElementById('report-total-holidays');
+  if (holidaysEl) holidaysEl.textContent = `${totalHolidays} 日`;
   
   // Show Combined Total Hours
   const hoursEl = document.getElementById('report-total-hours');
@@ -9728,12 +9767,14 @@ function renderWeeklyReport() {
     const rev = tasks
       .filter(t => t.status === 'completed' && t.completedAt === ds)
       .reduce((s,t) => s + (t.amount||0)*1.1, 0);
-    return { ds, hrs, done, rev, tasks: dayTasks, clockIn: tc?.clockIn||'', clockOut: tc?.clockOut||'' };
+    const isHoliday = isHolidayDate(ds);
+    return { ds, hrs, done, rev, isHoliday, tasks: dayTasks, clockIn: tc?.clockIn||'', clockOut: tc?.clockOut||'' };
   });
 
   const totalHrs  = dayData.reduce((s,d) => s + d.hrs, 0);
   const totalDone = dayData.reduce((s,d) => s + d.done, 0);
   const totalRev  = dayData.reduce((s,d) => s + d.rev, 0);
+  const totalHolidays = dayData.filter(d => d.isHoliday).length;
   const workDays  = dayData.filter(d => d.hrs > 0).length;
   const fmt = v => new Intl.NumberFormat('ja-JP',{style:'currency',currency:'JPY'}).format(Math.round(v));
 
@@ -9745,6 +9786,7 @@ function renderWeeklyReport() {
       { label: '稼働日数',   val: `${workDays}日`,             color: 'var(--secondary)' },
       { label: '完了タスク', val: `${totalDone}件`,            color: 'var(--success)' },
       { label: '週売上',     val: fmt(totalRev),               color: 'var(--primary)' },
+      { label: '休日',       val: `${totalHolidays}日`,        color: '#f59e0b' },
     ];
     statRow.innerHTML = stats.map(s => `
       <div class="report-card" style="text-align:center;padding:1rem;">
