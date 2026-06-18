@@ -866,7 +866,8 @@
             <div id="sync-logged-in" style="display:none;align-items:center;gap:1rem;">
               <span id="sync-user-email" style="color:var(--text-muted);font-size:0.9rem;"></span>
               <button class="btn btn-secondary" onclick="authLogout()">ログアウト</button>
-              <button class="btn btn-primary" onclick="forceSyncNow()">今すぐ同期</button>
+              <button class="btn btn-primary" onclick="forceSyncNow()" title="このデバイスのデータをクラウドに送る">今すぐ同期</button>
+              <button class="btn btn-secondary" id="btn-force-pull" onclick="forcePullNow()" title="他デバイスの最新データをこのデバイスに取り込む">☁️ 最新を取得</button>
             </div>
           </div>
         </div>
@@ -1801,7 +1802,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=116"></script>
+  <script src="./app.js?v=118"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

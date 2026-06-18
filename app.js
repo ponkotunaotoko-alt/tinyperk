@@ -101,6 +101,30 @@ function updateSidebarUser(user) {
   if (syncEmail && user) syncEmail.textContent = user.email;
 }
 
+let _forcePullInProgress = false;
+async function forcePullNow() {
+  if (_forcePullInProgress) return;
+  _forcePullInProgress = true;
+  const btn = document.getElementById('btn-force-pull');
+  if (btn) btn.disabled = true;
+  showSyncStatus('クラウドから取得中...', 10000);
+  try {
+    const sb = getSupabase();
+    const { data } = sb ? await sb.auth.getUser() : { data: null };
+    if (!data?.user) { showSyncStatus('❌ ログインされていません'); return; }
+    await syncFromSupabase(data.user.id);
+    renderApp();
+    showSyncStatus('✅ 最新データを取得しました');
+  } catch(e) {
+    console.error('[TINYPERK] forcePullNow error:', e);
+    showSyncStatus('❌ 取得失敗');
+    showToastError('クラウドからの取得に失敗しました: ' + (e.message || '不明なエラー'));
+  } finally {
+    _forcePullInProgress = false;
+    if (btn) btn.disabled = false;
+  }
+}
+
 let _forceSyncInProgress = false;
 async function forceSyncNow() {
   if (_forceSyncInProgress) return;
@@ -155,6 +179,16 @@ async function syncFromSupabase(userId) {
       state.clientTemplates = data.client_templates;
       saveClientTemplatesToStorage();
     }
+    if (data.extra_data && typeof data.extra_data === 'object') {
+      const ex = data.extra_data;
+      if (Array.isArray(ex.contacts))     { state.contacts = ex.contacts; saveContacts(); }
+      if (Array.isArray(ex.deals))        { state.deals = ex.deals; saveDeals(); }
+      if (Array.isArray(ex.expenses))     { state.expenses = ex.expenses; saveExpenses(); }
+      if (Array.isArray(ex.ideas))        { state.ideas = ex.ideas; saveIdeas(); }
+      if (Array.isArray(ex.learningLogs)) { state.learningLogs = ex.learningLogs; saveLearningLogs(); }
+      if (Array.isArray(ex.projects))     { state.projects = ex.projects; saveProjectsToStorage(); }
+      if (ex.goals && typeof ex.goals === 'object') { state.goals = ex.goals; saveGoals(); }
+    }
     showSyncStatus('☁️ データを同期しました');
   } catch(e) {
     console.error('[SYNC] syncFromSupabase error:', e);
@@ -180,7 +214,16 @@ async function syncToSupabase() {
       timecards: state.timecards,
       journal_entries: state.journalEntries,
       business_info: state.businessInfo,
-      client_templates: state.clientTemplates
+      client_templates: state.clientTemplates,
+      extra_data: {
+        contacts: state.contacts,
+        deals: state.deals,
+        expenses: state.expenses,
+        ideas: state.ideas,
+        learningLogs: state.learningLogs,
+        projects: state.projects,
+        goals: state.goals
+      }
     };
 
     const { error } = await sb.from('user_data').upsert(payload, { onConflict: 'user_id' });
@@ -623,6 +666,14 @@ document.addEventListener('DOMContentLoaded', () => {
         updateSidebarUser(null);
       }
     });
+    // 他端末での更新を取り込むため、アプリに復帰した（タブ/PWAがフォアグラウンドに戻った）タイミングで
+    // クラウドから最新データを自動取得する（例: スマホで編集→PCに切り替えた直後など）
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      _sb.auth.getUser().then(({ data }) => {
+        if (data?.user) syncFromSupabase(data.user.id).then(() => renderApp());
+      });
+    });
   }
 });
 
@@ -800,6 +851,7 @@ function saveClientTemplatesToStorage() {
 function saveJournalToStorage() {
   try { localStorage.setItem('journalEntries', JSON.stringify(state.journalEntries)); }
   catch(e) { console.error('[TINYPERK] saveJournalToStorage error:', e); }
+  scheduleSyncToSupabase();
 }
 
 function saveTasksToStorage() {
@@ -811,6 +863,7 @@ function saveTasksToStorage() {
 function saveProjectsToStorage() {
   try { localStorage.setItem('projects', JSON.stringify(state.projects)); }
   catch(e) { console.error('[TINYPERK] saveProjectsToStorage error:', e); }
+  scheduleSyncToSupabase();
 }
 
 function saveTimecardsToStorage() {
@@ -7010,12 +7063,12 @@ function bulkSyncTasksToGoogle() {
 // ============================================================
 
 // ---- Storage helpers ----
-function saveDeals()    { try { localStorage.setItem('deals',    JSON.stringify(state.deals));    } catch(e){} }
-function saveContacts() { try { localStorage.setItem('contacts', JSON.stringify(state.contacts)); } catch(e){} }
-function saveGoals()    { try { localStorage.setItem('goals',    JSON.stringify(state.goals));    } catch(e){} }
-function saveLearningLogs() { try { localStorage.setItem('learningLogs', JSON.stringify(state.learningLogs)); } catch(e){} }
-function saveExpenses() { try { localStorage.setItem('expenses', JSON.stringify(state.expenses)); } catch(e){} }
-function saveIdeas()    { try { localStorage.setItem('ideas',    JSON.stringify(state.ideas));    } catch(e){} }
+function saveDeals()    { try { localStorage.setItem('deals',    JSON.stringify(state.deals));    } catch(e){} scheduleSyncToSupabase(); }
+function saveContacts() { try { localStorage.setItem('contacts', JSON.stringify(state.contacts)); } catch(e){} scheduleSyncToSupabase(); }
+function saveGoals()    { try { localStorage.setItem('goals',    JSON.stringify(state.goals));    } catch(e){} scheduleSyncToSupabase(); }
+function saveLearningLogs() { try { localStorage.setItem('learningLogs', JSON.stringify(state.learningLogs)); } catch(e){} scheduleSyncToSupabase(); }
+function saveExpenses() { try { localStorage.setItem('expenses', JSON.stringify(state.expenses)); } catch(e){} scheduleSyncToSupabase(); }
+function saveIdeas()    { try { localStorage.setItem('ideas',    JSON.stringify(state.ideas));    } catch(e){} scheduleSyncToSupabase(); }
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 
