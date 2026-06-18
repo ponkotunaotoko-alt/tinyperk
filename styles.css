@@ -7157,8 +7157,9 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0;
-  -webkit-animation: opening-auto-exit 2s ease-in-out 8.5s forwards;
-  animation: opening-auto-exit 2s ease-in-out 8.5s forwards;
+  cursor: pointer;
+  -webkit-animation: opening-auto-exit 2.5s ease-in-out 11s forwards;
+  animation: opening-auto-exit 2.5s ease-in-out 11s forwards;
 }
 @-webkit-keyframes opening-auto-exit {
   0%   { opacity:1; }

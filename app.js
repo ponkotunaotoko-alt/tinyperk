@@ -1670,10 +1670,10 @@ function renderWeeklySummary() {
   const totalHours = hoursPerDay.reduce((s, h) => s + h, 0);
   const maxHours = Math.max(...hoursPerDay, 1);
 
-  // 今週完了タスクの金額
+  // 今週完了タスクの金額（税抜き）
   const weeklyAmount = state.tasks
     .filter(t => t.status === 'completed' && weekDays.includes(t.completedAt))
-    .reduce((s, t) => s + (t.amount || 0) * 1.1, 0);
+    .reduce((s, t) => s + (t.amount || 0), 0);
 
   // 表示更新
   const rangeEl = document.getElementById('weekly-summary-range');
@@ -1707,7 +1707,7 @@ function renderWeeklySummary() {
       // 月曜始まり: i=5が土, i=6が日
       const color = isToday ? 'var(--primary)' : (i === 6 ? 'var(--danger)' : i === 5 ? 'var(--secondary)' : 'var(--border-color)');
       const barColor = isToday ? 'var(--primary)' : (h > 0 ? 'var(--text-muted)' : 'var(--border-color)');
-      return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:2px;">
+      return `<div onclick="goToJournalDate('${weekDays[i]}')" title="${weekDays[i]}の日誌を開く" style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:2px;cursor:pointer;">
         <div style="font-size:0.65rem;color:${isToday ? 'var(--primary)' : 'var(--text-muted)'};font-weight:${isToday?'700':'400'};">${h > 0 ? h.toFixed(1) : ''}</div>
         <div style="width:100%;background:${barColor};border-radius:4px 4px 0 0;height:${Math.max(pct, h > 0 ? 8 : 2)}%;transition:height 0.4s ease;opacity:${isToday?'1':'0.65'};"></div>
       </div>`;
@@ -1844,7 +1844,7 @@ function renderDashboardWeekQuick() {
   }, 0);
   const weekRevenue = tasks
     .filter(t => t.status === 'completed' && weekDays.includes(t.completedAt))
-    .reduce((s, t) => s + (t.amount || 0) * 1.1, 0);
+    .reduce((s, t) => s + (t.amount || 0), 0);
 
   // クライアント別タスク数
   const clientMap = {};
@@ -2023,7 +2023,7 @@ function renderTaskProgressChart() {
   const now = new Date();
   const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const thisMonthCompleted = state.tasks.filter(t => t.status === 'completed' && t.completedAt && t.completedAt.startsWith(ym));
-  const thisMonthRevenue = Math.round(thisMonthCompleted.reduce((s, t) => s + (t.amount || 0) * 1.1, 0));
+  const thisMonthRevenue = Math.round(thisMonthCompleted.reduce((s, t) => s + (t.amount || 0), 0));
   const thisMonthHours = state.timecards.filter(tc => tc.date.startsWith(ym)).reduce((s, tc) => s + (tc.totalHours || 0), 0);
 
   let emoji = '📊', title = '今月の状況', lines = [];
@@ -2037,7 +2037,7 @@ function renderTaskProgressChart() {
   } else {
     lines = [
       `✅ 今月完了: <strong>${thisMonthCompleted.length}件</strong>`,
-      `💰 今月売上(税込): <strong>${new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(thisMonthRevenue)}</strong>`,
+      `💰 今月売上(税抜): <strong>${new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(thisMonthRevenue)}</strong>`,
       `⏱️ 今月稼働: <strong>${thisMonthHours.toFixed(1)}時間</strong>`,
       inProgress > 0 ? `🔄 進行中: <strong>${inProgress}件</strong>` : ''
     ].filter(Boolean);
@@ -3799,6 +3799,12 @@ function jumpToJournalDate(dateStr) {
   // スクロールトップ
   const screen = document.getElementById('journal-screen');
   if (screen) screen.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// 他タブ（ダッシュボード・週次レポート等）から指定日の日誌へ遷移
+function goToJournalDate(dateStr) {
+  switchTab('journal');
+  jumpToJournalDate(dateStr);
 }
 
 // Show report modal when task is completed
@@ -5727,6 +5733,10 @@ function renderInvoicePreview(selectedMonth, selectedClient) {
   const withholding = document.getElementById('invoice-withholding')?.checked;
   const withholdingAmt = withholding ? Math.round(subtotal * 0.1021) : 0;
   const netTotal = total - withholdingAmt;
+  // クライアントによって税込/税抜の希望が異なるため切替可能（デフォルト: 税抜き）
+  const taxExclMode = document.getElementById('invoice-tax-excl')?.checked ?? true;
+  const mainAmountLabel = `ご請求金額（${taxExclMode ? '税抜' : '税込'}${withholding ? '・源泉控除後' : ''}）`;
+  const mainAmount = taxExclMode ? (subtotal - withholdingAmt) : netTotal;
 
   // Client name for invoice
   const clientName = selectedClient !== 'all' ? selectedClient : (completedTasks[0]?.client || 'ご担当者');
@@ -5767,8 +5777,8 @@ function renderInvoicePreview(selectedMonth, selectedClient) {
 
       <!-- 合計 -->
       <div style="background:#f5f5f5; border:1px solid #ccc; padding:1rem 1.5rem; margin-bottom:1.5rem; border-radius:4px;">
-        <span style="font-size:0.9rem;">ご請求金額（税込${withholding ? '・源泉控除後' : ''}）</span>
-        <span style="font-size:2rem; font-weight:900; margin-left:1rem; color:#1a1a2e;">¥${new Intl.NumberFormat('ja-JP').format(netTotal)}</span>
+        <span style="font-size:0.9rem;">${mainAmountLabel}</span>
+        <span style="font-size:2rem; font-weight:900; margin-left:1rem; color:#1a1a2e;">¥${new Intl.NumberFormat('ja-JP').format(mainAmount)}</span>
       </div>
 
       <!-- 明細テーブル -->
@@ -5791,13 +5801,15 @@ function renderInvoicePreview(selectedMonth, selectedClient) {
             <td colspan="5" style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right; font-weight:700;">小計</td>
             <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">¥${new Intl.NumberFormat('ja-JP').format(subtotal)}</td>
           </tr>
+          ${taxExclMode ? '' : `
           <tr>
             <td colspan="5" style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">消費税（10%）</td>
             <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">¥${new Intl.NumberFormat('ja-JP').format(tax)}</td>
           </tr>
+          `}
           <tr style="background:#f0f0f0; font-weight:700;">
-            <td colspan="5" style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">合計（税込）</td>
-            <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">¥${new Intl.NumberFormat('ja-JP').format(total)}</td>
+            <td colspan="5" style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">合計（${taxExclMode ? '税抜' : '税込'}）</td>
+            <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">¥${new Intl.NumberFormat('ja-JP').format(taxExclMode ? subtotal : total)}</td>
           </tr>
           ${withholding ? `
           <tr>
@@ -5806,7 +5818,7 @@ function renderInvoicePreview(selectedMonth, selectedClient) {
           </tr>
           <tr style="background:#fff3e0; font-weight:900; font-size:1.05em;">
             <td colspan="5" style="padding:0.5rem 0.75rem; border:2px solid #e67e22; text-align:right;">差引ご請求金額</td>
-            <td style="padding:0.5rem 0.75rem; border:2px solid #e67e22; text-align:right; color:#d35400;">¥${new Intl.NumberFormat('ja-JP').format(netTotal)}</td>
+            <td style="padding:0.5rem 0.75rem; border:2px solid #e67e22; text-align:right; color:#d35400;">¥${new Intl.NumberFormat('ja-JP').format(mainAmount)}</td>
           </tr>
           ` : ''}
         </tfoot>
@@ -5908,9 +5920,17 @@ function renderInvoiceReport() {
 
   // Combined Total
   const combinedTotalHours = timecardHours + stopwatchHours;
-  // 税込金額 = 税別単価 × 1.1（消費税10%）
-  const totalAmount = Math.round(completedTasks.reduce((sum, t) => sum + (t.amount || 0) * 1.1, 0));
+  // 完了売上（税抜・確定分）
+  const totalAmount = Math.round(completedTasks.reduce((sum, t) => sum + (t.amount || 0), 0));
   const taskCount = completedTasks.length;
+
+  // 見込み売上（税抜・未完了分）— 対象月に期日があり、まだ完了していないタスク
+  const forecastTasks = state.tasks.filter(task => {
+    if (task.status === 'completed') return false;
+    if (selectedClient !== 'all' && task.client !== selectedClient) return false;
+    return (task.dueDate || '').startsWith(selectedMonth);
+  });
+  const totalForecast = Math.round(forecastTasks.reduce((sum, t) => sum + (t.amount || 0), 0));
 
   // 4. 月間休日数
   const totalHolidays = Object.entries(state.journalEntries || {})
@@ -5919,6 +5939,8 @@ function renderInvoiceReport() {
   // Render KPI values
   animateCounter(document.getElementById('report-total-count'), taskCount);
   animateCounter(document.getElementById('report-total-amount'), totalAmount, true);
+  const forecastEl = document.getElementById('report-total-forecast');
+  if (forecastEl) forecastEl.textContent = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(totalForecast);
   const holidaysEl = document.getElementById('report-total-holidays');
   if (holidaysEl) holidaysEl.textContent = `${totalHolidays} 日`;
   
@@ -5972,7 +5994,6 @@ function renderInvoiceReport() {
 
   completedTasks.forEach(task => {
     const taxExcl = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(task.amount || 0);
-    const taxIncl = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(Math.round((task.amount || 0) * 1.1));
     const stopwatchMeta = task.spentSeconds ? `<br><small style="color: var(--secondary); font-weight:700;">⏱️ ${formatSecondsToHHMMSS(task.spentSeconds)} 計測</small>` : '';
 
     const tr = document.createElement('tr');
@@ -5985,8 +6006,8 @@ function renderInvoiceReport() {
       <td style="padding: 1rem 0.5rem; color: var(--text-muted);">${escapeHTML(task.client)}</td>
       <td style="padding: 1rem 0.5rem; color: var(--text-muted);">${task.completedAt}</td>
       <td style="padding: 1rem 0.5rem; text-align: right; font-weight: 700; color: var(--secondary);">
-        ${taxIncl}
-        <br><small style="color: var(--text-muted); font-weight:400;">(税別: ${taxExcl})</small>
+        ${taxExcl}
+        <br><small style="color: var(--text-muted); font-weight:400;">（税抜）</small>
       </td>
     `;
     tableBody.appendChild(tr);
@@ -6015,9 +6036,9 @@ function renderPaymentTracker() {
     { key: 'paid', label: '✅ 入金済み', color: '#16a34a', tasks: billable.filter(t => t.paymentStatus === 'paid') }
   ];
 
-  const totalUnpaid = groups[0].tasks.reduce((s,t)=>s+(t.amount||0)*1.1,0);
-  const totalInvoiced = groups[1].tasks.reduce((s,t)=>s+(t.amount||0)*1.1,0);
-  const totalPaid = groups[2].tasks.reduce((s,t)=>s+(t.amount||0)*1.1,0);
+  const totalUnpaid = groups[0].tasks.reduce((s,t)=>s+(t.amount||0),0);
+  const totalInvoiced = groups[1].tasks.reduce((s,t)=>s+(t.amount||0),0);
+  const totalPaid = groups[2].tasks.reduce((s,t)=>s+(t.amount||0),0);
 
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-bottom:1.25rem;">
@@ -6036,12 +6057,12 @@ function renderPaymentTracker() {
     </div>
     ${groups.map(g => g.tasks.length === 0 ? '' : `
       <div style="margin-bottom:1rem;">
-        <div style="font-size:0.82rem;font-weight:700;color:${g.color};margin-bottom:0.5rem;">${g.label} (${g.tasks.length}件 / ${fmt(g.tasks.reduce((s,t)=>s+(t.amount||0)*1.1,0))})</div>
+        <div style="font-size:0.82rem;font-weight:700;color:${g.color};margin-bottom:0.5rem;">${g.label} (${g.tasks.length}件 / ${fmt(g.tasks.reduce((s,t)=>s+(t.amount||0),0))})</div>
         ${g.tasks.slice(0,8).map(t => `
           <div style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0;border-bottom:1px solid var(--border-light);">
             <div style="flex:1;font-size:0.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHTML(t.name)}</div>
             <div style="font-size:0.8rem;color:var(--text-muted);white-space:nowrap;">${t.client||''}</div>
-            <div style="font-size:0.82rem;font-weight:700;white-space:nowrap;">${fmt((t.amount||0)*1.1)}</div>
+            <div style="font-size:0.82rem;font-weight:700;white-space:nowrap;">${fmt(t.amount||0)}</div>
             <select onchange="setPaymentStatus('${t.id}',this.value)" style="font-size:0.75rem;padding:0.2rem 0.35rem;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-primary);cursor:pointer;">
               <option value="" ${!t.paymentStatus?'selected':''}>未請求</option>
               <option value="invoiced" ${t.paymentStatus==='invoiced'?'selected':''}>請求済み</option>
@@ -6095,6 +6116,9 @@ function renderEstimatePreview(clientName, validDays = 30) {
   const tax = Math.round(subtotal * 0.1);
   const total = subtotal + tax;
   const displayClient = clientName || '（クライアント名を入力）';
+  // クライアントによって税込/税抜の希望が異なるため切替可能（デフォルト: 税抜き）
+  const taxExclMode = document.getElementById('estimate-tax-excl')?.checked ?? true;
+  const mainAmount = taxExclMode ? subtotal : total;
 
   const rows = estimateTasks.length > 0 ? estimateTasks.map((t, i) => `
     <tr>
@@ -6129,8 +6153,8 @@ function renderEstimatePreview(clientName, validDays = 30) {
       </div>
 
       <div style="background:#f5f5f5; border:1px solid #ccc; padding:1rem 1.5rem; margin-bottom:1.5rem; border-radius:4px;">
-        <span style="font-size:0.9rem;">御見積金額（税込）</span>
-        <span style="font-size:2rem; font-weight:900; margin-left:1rem; color:#1a1a2e;">¥${new Intl.NumberFormat('ja-JP').format(total)}</span>
+        <span style="font-size:0.9rem;">御見積金額（${taxExclMode ? '税抜' : '税込'}）</span>
+        <span style="font-size:2rem; font-weight:900; margin-left:1rem; color:#1a1a2e;">¥${new Intl.NumberFormat('ja-JP').format(mainAmount)}</span>
       </div>
 
       <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:1.5rem;">
@@ -6150,13 +6174,15 @@ function renderEstimatePreview(clientName, validDays = 30) {
             <td colspan="5" style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right; font-weight:700;">小計</td>
             <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">¥${new Intl.NumberFormat('ja-JP').format(subtotal)}</td>
           </tr>
+          ${taxExclMode ? '' : `
           <tr>
             <td colspan="5" style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">消費税（10%）</td>
             <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">¥${new Intl.NumberFormat('ja-JP').format(tax)}</td>
           </tr>
+          `}
           <tr style="background:#f0f0f0; font-weight:700;">
-            <td colspan="5" style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">合計（税込）</td>
-            <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">¥${new Intl.NumberFormat('ja-JP').format(total)}</td>
+            <td colspan="5" style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">合計（${taxExclMode ? '税抜' : '税込'}）</td>
+            <td style="padding:0.5rem 0.75rem; border:1px solid #ccc; text-align:right;">¥${new Intl.NumberFormat('ja-JP').format(mainAmount)}</td>
           </tr>
         </tfoot>
       </table>
@@ -6270,7 +6296,7 @@ function renderWorkTypeRevenue(tasks) {
                 <span style="font-size:0.8rem;color:var(--text-muted);">${g.count}件</span>
                 ${avgH !== null ? `<span style="font-size:0.8rem;color:var(--primary);">⏱ 平均 ${avgH}h</span>` : ''}
                 ${hourlyRate ? `<span style="font-size:0.8rem;color:var(--secondary);">時給 ${fmt(hourlyRate)}</span>` : ''}
-                <span style="font-size:0.95rem;font-weight:700;color:var(--text-main);">${fmt(g.revenue * 1.1)}</span>
+                <span style="font-size:0.95rem;font-weight:700;color:var(--text-main);">${fmt(g.revenue)}</span>
                 <span style="font-size:0.78rem;background:var(--primary-glow);color:var(--primary);padding:2px 8px;border-radius:10px;">${sharePct}%</span>
               </div>
             </div>
@@ -6281,7 +6307,7 @@ function renderWorkTypeRevenue(tasks) {
       }).join('')}
     </div>
     <div style="text-align:right;font-size:0.8rem;color:var(--text-muted);margin-top:0.75rem;">
-      合計: ${fmt(totalRev * 1.1)}（税込）
+      合計: ${fmt(totalRev)}（税抜）
     </div>`;
 }
 
@@ -6517,7 +6543,7 @@ function renderClientBreakdown(completedTasks, selectedMonth) {
 
   chart.innerHTML = clients.map(([name, data]) => {
     const barPct = Math.max(4, (data.amount / maxAmount) * 100);
-    const amountStr = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(Math.round(data.amount * 1.1));
+    const amountStr = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(Math.round(data.amount));
     const hoursStr = data.hours > 0 ? `${data.hours.toFixed(1)}h` : `${data.count}件`;
     return `
       <div class="client-bar-row">
@@ -9766,7 +9792,7 @@ function renderWeeklyReport() {
     const hrs = tc?.totalHours || 0;
     const rev = tasks
       .filter(t => t.status === 'completed' && t.completedAt === ds)
-      .reduce((s,t) => s + (t.amount||0)*1.1, 0);
+      .reduce((s,t) => s + (t.amount||0), 0);
     const isHoliday = isHolidayDate(ds);
     return { ds, hrs, done, rev, isHoliday, tasks: dayTasks, clockIn: tc?.clockIn||'', clockOut: tc?.clockOut||'' };
   });
@@ -9807,7 +9833,7 @@ function renderWeeklyReport() {
       const pct = Math.max((d.hrs / maxHrs) * 100, d.hrs > 0 ? 6 : 2);
       const isToday = d.ds === todayStr;
       const color = isToday ? 'var(--primary)' : (i===0||i===6 ? 'var(--danger)' : 'var(--text-muted)');
-      return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:2px;">
+      return `<div onclick="goToJournalDate('${d.ds}')" title="${d.ds}の日誌を開く" style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:2px;cursor:pointer;">
         <div style="font-size:0.65rem;color:${isToday?'var(--primary)':'var(--text-muted)'};">${d.hrs>0?d.hrs.toFixed(1):''}</div>
         <div style="width:100%;background:${color};border-radius:2px 2px 0 0;height:${pct}%;opacity:${isToday?1:0.65};transition:height 0.4s;"></div>
       </div>`;
@@ -9816,7 +9842,7 @@ function renderWeeklyReport() {
   if (labelEl) {
     labelEl.innerHTML = dayData.map((d, i) => {
       const isToday = d.ds === todayStr;
-      return `<div style="text-align:center;font-size:0.7rem;font-family:var(--font-vintage);color:${isToday?'var(--primary)':i===0||i===6?'var(--danger)':'var(--text-muted)'};">${dayNames[i]}</div>`;
+      return `<div onclick="goToJournalDate('${d.ds}')" title="${d.ds}の日誌を開く" style="text-align:center;font-size:0.7rem;font-family:var(--font-vintage);color:${isToday?'var(--primary)':i===0||i===6?'var(--danger)':'var(--text-muted)'};cursor:pointer;">${dayNames[i]}</div>`;
     }).join('');
   }
 
@@ -9829,7 +9855,7 @@ function renderWeeklyReport() {
       <tbody>${dayData.map((d,i) => {
         const isToday = d.ds === todayStr;
         const bg = isToday ? 'background:rgba(200,169,110,0.08);' : '';
-        return `<tr style="${bg}">
+        return `<tr onclick="goToJournalDate('${d.ds}')" title="${d.ds}の日誌を開く" style="${bg}cursor:pointer;">
           <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);font-size:0.85rem;font-weight:${isToday?'700':'400'};">${d.ds.slice(5).replace('-','/')}</td>
           <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);color:${i===0||i===6?'var(--danger)':'var(--text-secondary)'};font-family:var(--font-vintage);">${dayNames[i]}</td>
           <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border-color);font-family:var(--font-vintage);color:var(--text-muted);">${d.clockIn||'—'}</td>
@@ -10639,7 +10665,7 @@ function initOpeningAnimation() {
     if (!startTime) startTime = ts;
     const elapsed = (ts - startTime) / 1000; // 秒
 
-    if (elapsed > 9.5) { cancelAnimationFrame(rafId); return; }
+    if (elapsed > 13.2) { cancelAnimationFrame(rafId); return; }
 
     const ctx = clkCanvas.getContext('2d');
     ctx.clearRect(0, 0, CW, CH);
@@ -10658,21 +10684,50 @@ function initOpeningAnimation() {
     ctx.rotate(swayAngle);
     ctx.translate(-cx, -PIVOT_Y);
 
-    // ── チェーン（固定点から時計上端まで） ──
+    // ── チェーン（固定点から時計上端まで・金属質感のリアルなリンク） ──
     const chainBotY = cy - R * 0.97;
     const linkCount = 15;
+    const linkW = SIZE * 0.017; // リンク楕円の半径(横)
+    const linkH = SIZE * 0.030; // リンク楕円の半径(縦) — 連結部で重なるよう少し大きめ
+    const linkGap = (chainBotY - PIVOT_Y) / linkCount;
     for (let i = 0; i <= linkCount; i++) {
-      const t  = i / linkCount;
-      const ly = PIVOT_Y + (chainBotY - PIVOT_Y) * t;
-      const alpha = 0.55 + 0.25 * (1 - t);
+      const ly = PIVOT_Y + linkGap * i;
+      const t = i / linkCount;
+      const fade = 0.5 + 0.4 * (1 - t); // 上ほどわずかに薄く・奥行き感
+      const vertical = i % 2 === 0;
       ctx.save();
       ctx.translate(cx, ly);
-      ctx.rotate((i % 2) * Math.PI / 2);
+      ctx.rotate(vertical ? 0 : Math.PI / 2);
+
+      // 落ち影（厚み・奥行きの表現）
+      ctx.save();
+      ctx.translate(SIZE * 0.0035, SIZE * 0.005);
       ctx.beginPath();
-      ctx.ellipse(0, 0, SIZE * 0.014, SIZE * 0.025, 0, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(200,169,110,${alpha})`;
-      ctx.lineWidth = SIZE * 0.011;
+      ctx.ellipse(0, 0, linkW, linkH, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(0,0,0,${0.4 * fade})`;
+      ctx.lineWidth = SIZE * 0.013;
       ctx.stroke();
+      ctx.restore();
+
+      // 金属本体（左上ハイライト→右下シャドウのグラデーション）
+      const grad = ctx.createLinearGradient(-linkW, -linkH, linkW, linkH);
+      grad.addColorStop(0,    `rgba(255,240,200,${0.95 * fade})`);
+      grad.addColorStop(0.32, `rgba(218,182,114,${0.88 * fade})`);
+      grad.addColorStop(0.62, `rgba(146,104,50,${0.86 * fade})`);
+      grad.addColorStop(1,    `rgba(64,42,16,${0.92 * fade})`);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, linkW, linkH, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = SIZE * 0.0105;
+      ctx.stroke();
+
+      // 表面の光沢ライン（磨かれた金属のハイライト）
+      ctx.beginPath();
+      ctx.ellipse(0, 0, linkW * 0.78, linkH * 0.78, 0, -Math.PI * 0.85, -Math.PI * 0.15);
+      ctx.strokeStyle = `rgba(255,248,225,${0.55 * fade})`;
+      ctx.lineWidth = SIZE * 0.0032;
+      ctx.stroke();
+
       ctx.restore();
     }
 
@@ -10869,17 +10924,22 @@ function initOpeningAnimation() {
 
   rafId = requestAnimationFrame(drawClock);
 
-  // iOS Safari では CSS animation の pointer-events が信頼できないため JS で明示的に制御
-  // 8.5s: アニメ開始と同時にpointer-eventsを切る
-  setTimeout(() => { overlay.style.pointerEvents = 'none'; }, 8500);
-
   // animationend + setTimeout の二重保険で確実にdisplay:none
   const hideOverlay = () => {
     cancelAnimationFrame(rafId);
     overlay.classList.add('hidden');
   };
   overlay.addEventListener('animationend', hideOverlay, { once: true });
-  setTimeout(hideOverlay, 11000); // 最終フォールバック(11s)
+  setTimeout(hideOverlay, 14000); // 最終フォールバック
+
+  // iOS Safari では CSS animation の pointer-events が信頼できないため JS で明示的に制御
+  // フェード開始と同時にpointer-eventsを切る（フェード開始前まではタップでスキップ可能にする）
+  setTimeout(() => { overlay.style.pointerEvents = 'none'; }, 11000);
+
+  // タップ/クリックでオープニングをスキップできるように
+  const skipOpening = () => hideOverlay();
+  overlay.addEventListener('click', skipOpening, { once: true, passive: true });
+  overlay.addEventListener('touchend', skipOpening, { once: true, passive: true });
 }
 
 // ─── 2. 時間帯テーマ（ダッシュボード背景グラデ） ─────────────────────────
