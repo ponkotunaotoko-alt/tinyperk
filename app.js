@@ -1575,6 +1575,7 @@ function switchTab(tab) {
     populateWorkSettingsForm();
     loadClaudeApiKeyStatus();
     loadGeminiApiKeyStatus();
+    loadWordPressConfigStatus();
   } else if (tab === 'tasks') {
     renderTaskList();
   } else if (tab === 'journal') {
@@ -8615,15 +8616,21 @@ function renderIdeaRow(idea, rank) {
 function renderIdeaBlogDraft(idea) {
   const d = idea.blogDraft;
   if (!d) return '';
+  const wpReady = isWordPressConfigured();
+  const isPublishing = _ideaPublishLoading.has(idea.id);
+  const pub = idea.publishedPost;
+  const publishBtnLabel = isPublishing ? '⏳ 投稿中…' : (pub ? '🌐 下書きを更新' : '🌐 公開する');
   return `<div class="report-card" style="margin-top:0.6rem;padding:0.75rem;background:var(--bg-secondary, #f7f5f0);">
     <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.4rem;">📝 ブログ草稿（${d.generatedAt||''}）</div>
     <input type="text" class="form-input" id="draft-title-${idea.id}" value="${escHtml(d.title||'')}" style="font-weight:600;margin-bottom:0.4rem;" onchange="updateIdeaBlogDraftField('${idea.id}','title',this.value)">
     <textarea class="form-input" id="draft-body-${idea.id}" rows="5" style="font-size:0.85rem;line-height:1.6;" onchange="updateIdeaBlogDraftField('${idea.id}','body',this.value)">${escHtml(d.body||'')}</textarea>
     <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap;">
       <button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.5rem;" onclick="copyIdeaBlogDraft('${idea.id}')">📋 コピー</button>
-      <button class="btn btn-primary" style="font-size:0.75rem;padding:0.25rem 0.5rem;" disabled title="近日対応：設定画面でWordPress連携を設定すると、ここからそのまま公開できるようになります">🌐 公開する（準備中）</button>
+      <button class="btn btn-primary" style="font-size:0.75rem;padding:0.25rem 0.5rem;" ${isPublishing?'disabled':''} onclick="publishIdeaToWordPress('${idea.id}')" title="${wpReady?'WordPressに下書きとして投稿します（公開操作はWordPress側で行います）':'未設定の場合はクリック後に設定画面へ移動できます'}">${publishBtnLabel}</button>
       <button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.5rem;color:var(--danger)" onclick="deleteIdeaBlogDraft('${idea.id}')">草稿を削除</button>
     </div>
+    ${!wpReady ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.4rem;">※ 設定画面でWordPress連携（サイトURL・アプリケーションパスワード）を登録すると、ここから下書き投稿できます。</div>` : ''}
+    ${pub ? `<div style="font-size:0.78rem;color:var(--success, #4ade80);margin-top:0.5rem;">✅ ${pub.publishedAt} に下書き投稿済み（status: ${pub.status}） — <a href="${escHtml(pub.editLink||pub.link||'#')}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">WordPressで確認・本公開する →</a></div>` : ''}
   </div>`;
 }
 
@@ -9849,6 +9856,156 @@ function loadClaudeApiKeyStatus() {
 function _maskKey(key) {
   if (key.length <= 12) return '****';
   return key.slice(0, 10) + '…' + key.slice(-4);
+}
+
+// ─── WordPress連携（ブログ自動投稿 Phase2） ────────────────────────────
+const _WP_SITE_STORE  = 'tinyperk_wp_site_url';
+const _WP_USER_STORE  = 'tinyperk_wp_username';
+const _WP_APPPW_STORE = 'tinyperk_wp_app_password';
+
+function getWordPressConfig() {
+  return {
+    siteUrl: (localStorage.getItem(_WP_SITE_STORE) || '').trim().replace(/\/+$/, ''),
+    username: (localStorage.getItem(_WP_USER_STORE) || '').trim(),
+    appPassword: (localStorage.getItem(_WP_APPPW_STORE) || '').trim()
+  };
+}
+
+function isWordPressConfigured() {
+  const c = getWordPressConfig();
+  return !!(c.siteUrl && c.username && c.appPassword);
+}
+
+async function saveWordPressConfig() {
+  const siteInput = document.getElementById('wp-site-url-input');
+  const userInput  = document.getElementById('wp-username-input');
+  const pwInput    = document.getElementById('wp-app-password-input');
+  const statusEl   = document.getElementById('wp-config-status');
+  if (!siteInput || !userInput || !pwInput) return;
+
+  let siteUrl = siteInput.value.trim().replace(/\/+$/, '');
+  const username = userInput.value.trim();
+  const appPassword = pwInput.value.trim();
+
+  if (!siteUrl || !username || !appPassword) {
+    if (statusEl) { statusEl.textContent = 'サイトURL・ユーザー名・アプリケーションパスワードをすべて入力してください。'; statusEl.style.color = 'var(--danger)'; }
+    return;
+  }
+  if (!/^https?:\/\//i.test(siteUrl)) siteUrl = `https://${siteUrl}`;
+
+  if (statusEl) { statusEl.textContent = '⏳ 接続テスト中…'; statusEl.style.color = 'var(--text-muted)'; }
+  try {
+    const auth = btoa(unescape(encodeURIComponent(`${username}:${appPassword}`)));
+    const resp = await fetch(`${siteUrl}/wp-json/wp/v2/users/me`, {
+      headers: { 'Authorization': `Basic ${auth}` }
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.message || `HTTP ${resp.status}`);
+    }
+    const me = await resp.json();
+    localStorage.setItem(_WP_SITE_STORE, siteUrl);
+    localStorage.setItem(_WP_USER_STORE, username);
+    localStorage.setItem(_WP_APPPW_STORE, appPassword);
+    pwInput.value = '';
+    if (statusEl) {
+      statusEl.textContent = `✅ 接続確認OK — ${me.name || username} としてログイン中`;
+      statusEl.style.color = 'var(--success)';
+    }
+    if (state.activeTab === 'memo' || state.activeTab === 'ideas') renderIdeas();
+  } catch (e) {
+    if (statusEl) {
+      statusEl.textContent = `❌ 接続失敗: ${e.message || 'サイトURL・ユーザー名・アプリケーションパスワードを確認してください'}（CORSが原因の場合、WordPress側でREST APIへの外部アクセス許可が必要です）`;
+      statusEl.style.color = 'var(--danger)';
+    }
+  }
+}
+
+function clearWordPressConfig() {
+  localStorage.removeItem(_WP_SITE_STORE);
+  localStorage.removeItem(_WP_USER_STORE);
+  localStorage.removeItem(_WP_APPPW_STORE);
+  const siteInput = document.getElementById('wp-site-url-input');
+  const userInput  = document.getElementById('wp-username-input');
+  const pwInput    = document.getElementById('wp-app-password-input');
+  const statusEl   = document.getElementById('wp-config-status');
+  if (siteInput) siteInput.value = '';
+  if (userInput) userInput.value = '';
+  if (pwInput) pwInput.value = '';
+  if (statusEl) { statusEl.textContent = '削除しました。'; statusEl.style.color = 'var(--text-muted)'; }
+  if (state.activeTab === 'memo' || state.activeTab === 'ideas') renderIdeas();
+}
+
+function loadWordPressConfigStatus() {
+  const statusEl = document.getElementById('wp-config-status');
+  const siteInput = document.getElementById('wp-site-url-input');
+  const userInput = document.getElementById('wp-username-input');
+  if (!statusEl) return;
+  const c = getWordPressConfig();
+  if (c.siteUrl && c.username && c.appPassword) {
+    if (siteInput) siteInput.value = c.siteUrl;
+    if (userInput) userInput.value = c.username;
+    statusEl.textContent = `✅ 登録済み — ${c.siteUrl}`;
+    statusEl.style.color = 'var(--success)';
+  } else {
+    statusEl.textContent = '未登録。登録すると「気づき」から下書き投稿できます。';
+    statusEl.style.color = 'var(--text-muted)';
+  }
+}
+
+// 気づきのブログ草稿をWordPressに下書き投稿（既存投稿があれば更新）
+const _ideaPublishLoading = new Set();
+
+async function publishIdeaToWordPress(id) {
+  const idea = state.ideas.find(i => i.id === id);
+  if (!idea || !idea.blogDraft || _ideaPublishLoading.has(id)) return;
+
+  if (!isWordPressConfigured()) {
+    const go = confirm('WordPress連携が未設定です。設定画面で登録しますか？');
+    if (go) switchTab('settings');
+    return;
+  }
+
+  const { siteUrl, username, appPassword } = getWordPressConfig();
+  const titleEl = document.getElementById(`draft-title-${id}`);
+  const bodyEl  = document.getElementById(`draft-body-${id}`);
+  const title = (titleEl ? titleEl.value : idea.blogDraft.title) || '';
+  const body  = (bodyEl ? bodyEl.value : idea.blogDraft.body) || '';
+
+  _ideaPublishLoading.add(id);
+  renderIdeas();
+  try {
+    const auth = btoa(unescape(encodeURIComponent(`${username}:${appPassword}`)));
+    const existingId = idea.publishedPost?.id;
+    const endpoint = existingId
+      ? `${siteUrl}/wp-json/wp/v2/posts/${existingId}`
+      : `${siteUrl}/wp-json/wp/v2/posts`;
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${auth}` },
+      body: JSON.stringify({ title, content: body, status: 'draft' })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.message || `HTTP ${resp.status}`);
+    }
+    const post = await resp.json();
+    idea.publishedPost = {
+      id: post.id,
+      link: post.link || '',
+      editLink: `${siteUrl}/wp-admin/post.php?post=${post.id}&action=edit`,
+      publishedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      status: 'draft'
+    };
+    saveIdeas();
+    showTrayToast(existingId ? '🌐 WordPressの下書きを更新しました' : '🌐 WordPressに下書きとして投稿しました');
+  } catch (e) {
+    console.error('[WP Publish]', e);
+    alert(`WordPressへの投稿に失敗しました: ${e.message || '不明なエラー'}`);
+  } finally {
+    _ideaPublishLoading.delete(id);
+    renderIdeas();
+  }
 }
 
 // ─── 名刺OCR ─────────────────────────────────────────────────────────

@@ -1089,6 +1089,27 @@
           </p>
         </div>
 
+        <!-- ブログ連携（WordPress自動投稿） -->
+        <div class="settings-section">
+          <h3 class="settings-title">🌐 ブログ連携（WordPress）</h3>
+          <div style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:0.9rem;">
+            <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:0.6rem;">
+              「気づき」タブで生成したブログ草稿を、WordPressに<strong>下書き</strong>として直接投稿できます。投稿後は内容確認・本公開はWordPress側で行ってください（誤って即時公開されることはありません）。<br>
+              ユーザー名・アプリケーションパスワードは、WordPress管理画面の「ユーザー」→「プロフィール」→「アプリケーションパスワード」から発行できます（通常のログインパスワードとは別物です）。
+            </p>
+            <div style="display:flex;flex-direction:column;gap:0.6rem;">
+              <input type="text" id="wp-site-url-input" class="form-input" placeholder="https://example.com（サイトのURL）" autocomplete="off">
+              <input type="text" id="wp-username-input" class="form-input" placeholder="WordPressユーザー名" autocomplete="off">
+              <input type="password" id="wp-app-password-input" class="form-input" placeholder="アプリケーションパスワード" autocomplete="off">
+              <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+                <button class="btn btn-primary" onclick="saveWordPressConfig()">保存・接続テスト</button>
+                <button class="btn btn-secondary" onclick="clearWordPressConfig()">削除</button>
+              </div>
+            </div>
+            <div id="wp-config-status" style="font-size:0.82rem;margin-top:0.5rem;color:var(--text-muted)"></div>
+          </div>
+        </div>
+
         <div class="settings-section">
           <h3 class="settings-title">Google Cloud OAuth ID設定手順（初心者向け）</h3>
           <ol style="margin-left: 1.5rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.95rem;">
@@ -1829,7 +1850,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=123"></script>
+  <script src="./app.js?v=125"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

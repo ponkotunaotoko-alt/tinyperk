@@ -3455,6 +3455,27 @@ h1, h2, h3, h4 {
   }
 }
 
+/* iPhone幅: 予定の操作ボタンが小さすぎてタップしにくいため当たり判定を拡大 */
+@media (max-width: 480px) {
+  .tl-slot-span-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 0.85rem;
+  }
+  .tl-slot-span-controls {
+    gap: 0.3rem;
+  }
+  .tl-slot-pin-btn {
+    min-width: 2.4rem;
+    min-height: 2.4rem;
+    font-size: 1rem;
+  }
+  .tl-slot-remove {
+    min-width: 2.2rem;
+    min-height: 2.2rem;
+  }
+}
+
 .tl-slot {
   display: grid;
   grid-template-columns: 64px 1fr;
