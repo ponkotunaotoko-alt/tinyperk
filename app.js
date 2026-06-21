@@ -2413,7 +2413,7 @@ function toggleJournalTaskPanel() {
 
 // ── タイムライン: 30分刻み + 2トラック(並行スケジュール)共通ヘルパー ──
 const TL_DAY_START_MIN = 9 * 60;   // 09:00
-const TL_DAY_END_MIN   = 19 * 60;  // 19:00（最終スロット開始 18:30）
+const TL_DAY_END_MIN   = 22 * 60;  // 22:00（最終スロット開始 21:30）
 const TL_STEP_MIN      = 30;       // 1スロット = 30分
 const TL_UNIT_PX        = 46;      // 1スロットあたりの高さ(px)
 
@@ -2534,7 +2534,8 @@ function renderJournalTimeline() {
     }
   }
 
-  function renderTlCell(key) {
+  // ── 1列目: 予定（スケジュール枠・状態・メモ） ──
+  function renderTlPlanCell(key) {
     const slot = timeline[key] || {};
 
     // このスロットが別スロットに覆われている場合はスキップ
@@ -2595,16 +2596,8 @@ function renderJournalTimeline() {
     }
 
     const task = slot.taskId ? state.tasks.find(t => t.id === slot.taskId) : null;
-    const isActiveTimer = task && state.activeTimerTaskId === task.id && !!state.timerStartEpoch;
     const span = slot.span || 1;
     const spanHeight = span > 1 ? `min-height:${span * TL_UNIT_PX + (span - 1) * 6}px;` : '';
-
-    const timerHours = task?.spentSeconds > 0
-      ? Math.round(task.spentSeconds / 3600 * 10) / 10
-      : null;
-    const actualH = slot.actualHours !== '' && slot.actualHours != null
-      ? slot.actualHours
-      : (timerHours || '');
     const estH = task?.estimatedHours || 0;
 
     const statusColor = {
@@ -2615,18 +2608,8 @@ function renderJournalTimeline() {
     };
     const color = task ? (statusColor[task.status] || 'var(--primary)') : '';
 
-    // 時間レンジ表示
+    // 時間レンジ表示（手動でスパンを調整した結果がそのまま予定として保存・表示される）
     const timeLabel = tlRangeLabel(key, span);
-
-    let progressBar = '';
-    if (estH > 0 && actualH !== '') {
-      const pct = Math.min(Math.round((Number(actualH) / estH) * 100), 100);
-      const barColor = pct >= 100 ? 'var(--success)' : pct >= 60 ? 'var(--primary)' : 'var(--primary)';
-      progressBar = `
-        <div class="tl-slot-progress-wrap">
-          <div class="tl-slot-progress-bar" style="width:${pct}%; background:${barColor};"></div>
-        </div>`;
-    }
 
     // スパン調整ボタン（タスクあり時のみ）
     const maxSpan = tlMaxSpan(key);
@@ -2654,27 +2637,12 @@ function renderJournalTimeline() {
               <span class="tl-slot-task-name">${escapeHtml(task.name)}</span>
               <span class="tl-slot-task-client">${escapeHtml(task.client)}</span>
             </div>
-            ${progressBar}
             <div class="tl-slot-hours">
               ${estH ? `
                 <div class="tl-slot-time-block tl-slot-est-block">
                   <span class="tl-slot-time-label">想定</span>
                   <span class="tl-slot-time-val">${estH}h</span>
                 </div>` : ''}
-              ${timerHours ? `
-                <div class="tl-slot-time-block tl-slot-timer-block">
-                  <span class="tl-slot-time-label">⏱計測</span>
-                  <span class="tl-slot-time-val">${timerHours}h</span>
-                </div>` : ''}
-              <div class="tl-slot-time-block tl-slot-actual-block">
-                <span class="tl-slot-time-label">実績</span>
-                <input type="number" class="tl-slot-actual-input" min="0" max="24" step="0.5"
-                  value="${actualH}"
-                  placeholder="—"
-                  onchange="saveTimelineActual('${date}', '${key}', this.value)"
-                  onclick="event.stopPropagation()">
-                <span class="tl-slot-time-label">h</span>
-              </div>
               <button class="tl-slot-remove" onclick="removeTimelineSlot('${date}', '${key}')" title="削除">×</button>
             </div>
             <div class="tl-slot-status-row">
@@ -2698,15 +2666,6 @@ function renderJournalTimeline() {
                 onclick="event.stopPropagation();startWhisperRecord('tl-memo-${key}','tl-voice-${key}')"
                 title="音声入力">🎤</button>
             </div>
-            <div class="tl-slot-sw-row">
-              <button class="tl-slot-sw-btn${isActiveTimer ? ' running' : ''}"
-                id="tl-sw-btn-${key}"
-                onclick="event.stopPropagation();toggleTimelineTimer('${date}','${key}')"
-                title="${isActiveTimer ? '停止 → 実績時間に反映' : '計測開始'}">
-                ${isActiveTimer ? '⏸' : '▶'}
-                <span class="tl-sw-disp">${isActiveTimer ? formatSecondsToHHMMSS(task.spentSeconds||0) : '計測'}</span>
-              </button>
-            </div>
             <div class="tl-resize-handle" onpointerdown="startSlotResize(event,'${date}','${key}')">
               <div class="tl-resize-handle-icon"></div>
             </div>
@@ -2715,15 +2674,107 @@ function renderJournalTimeline() {
       </div>`;
   }
 
+  // ── 2列目: 実績（同じ枠の実績時間・計測・進捗） ──
+  function renderTlActualCell(key) {
+    const slot = timeline[key] || {};
+    if (slot._covered) return '';
+
+    const span = slot.span || 1;
+    const spanHeight = span > 1 ? `min-height:${span * TL_UNIT_PX + (span - 1) * 6}px;` : '';
+    const timeLabel = tlRangeLabel(key, span);
+
+    // 休憩・移動・所用は実績概念を持たないため、行の高さを揃えるための簡易表示のみ
+    if (slot.type === 'break' || slot.type === 'travel' || slot.type === 'errand') {
+      const iconMap = { break: '🍱', travel: '🚗', errand: slot.errandSub === 'private' ? '🏠' : '🤝' };
+      const labelMap = { break: '休憩', travel: '移動', errand: '所用' };
+      const icon = iconMap[slot.type] || '📅';
+      const label = slot.label || labelMap[slot.type] || slot.type;
+      return `
+        <div class="tl-slot tl-actual-cell tl-actual-special" data-hour="${key}" style="${spanHeight}">
+          <div class="tl-slot-time-col"><span class="tl-slot-time">${timeLabel}</span></div>
+          <div class="tl-actual-special-body">${icon} ${escapeHtml(label)}</div>
+        </div>`;
+    }
+
+    const task = slot.taskId ? state.tasks.find(t => t.id === slot.taskId) : null;
+    if (!task) {
+      return `
+        <div class="tl-slot tl-actual-cell tl-actual-empty" data-hour="${key}" style="${spanHeight}"
+          ondragover="event.preventDefault();" ondrop="handleTimelineDrop(event, '${key}')">
+          <div class="tl-slot-time-col"><span class="tl-slot-time">${timeLabel}</span></div>
+          <span class="tl-slot-placeholder">—</span>
+        </div>`;
+    }
+
+    const isActiveTimer = state.activeTimerTaskId === task.id && !!state.timerStartEpoch;
+    const timerHours = task.spentSeconds > 0 ? Math.round(task.spentSeconds / 3600 * 10) / 10 : null;
+    const actualH = slot.actualHours !== '' && slot.actualHours != null
+      ? slot.actualHours
+      : (timerHours || '');
+    const estH = task.estimatedHours || 0;
+
+    let progressBar = '';
+    if (estH > 0 && actualH !== '') {
+      const pct = Math.min(Math.round((Number(actualH) / estH) * 100), 100);
+      const barColor = pct >= 100 ? 'var(--success)' : pct >= 60 ? 'var(--primary)' : 'var(--primary)';
+      progressBar = `
+        <div class="tl-slot-progress-wrap">
+          <div class="tl-slot-progress-bar" style="width:${pct}%; background:${barColor};"></div>
+        </div>`;
+    }
+
+    return `
+      <div class="tl-slot tl-actual-cell tl-slot-filled" data-hour="${key}" data-span="${span}" style="${spanHeight}"
+        ondragover="event.preventDefault(); this.classList.add('tl-slot-drag-over');"
+        ondragleave="this.classList.remove('tl-slot-drag-over');"
+        ondrop="handleTimelineDrop(event, '${key}')">
+        <div class="tl-slot-time-col"><span class="tl-slot-time">${timeLabel}</span></div>
+        <div class="tl-slot-actual-body">
+          <div class="tl-slot-task-header">
+            <span class="tl-slot-task-name">${escapeHtml(task.name)}</span>
+          </div>
+          ${progressBar}
+          <div class="tl-slot-hours">
+            ${timerHours ? `
+              <div class="tl-slot-time-block tl-slot-timer-block">
+                <span class="tl-slot-time-label">⏱計測</span>
+                <span class="tl-slot-time-val">${timerHours}h</span>
+              </div>` : ''}
+            <div class="tl-slot-time-block tl-slot-actual-block">
+              <span class="tl-slot-time-label">実績</span>
+              <input type="number" class="tl-slot-actual-input" min="0" max="24" step="0.5"
+                value="${actualH}"
+                placeholder="—"
+                onchange="saveTimelineActual('${date}', '${key}', this.value)"
+                onclick="event.stopPropagation()">
+              <span class="tl-slot-time-label">h</span>
+            </div>
+          </div>
+          <div class="tl-slot-sw-row">
+            <button class="tl-slot-sw-btn${isActiveTimer ? ' running' : ''}"
+              id="tl-sw-btn-${key}"
+              onclick="event.stopPropagation();toggleTimelineTimer('${date}','${key}')"
+              title="${isActiveTimer ? '停止 → 実績時間に反映' : '計測開始'}">
+              ${isActiveTimer ? '⏸' : '▶'}
+              <span class="tl-sw-disp">${isActiveTimer ? formatSecondsToHHMMSS(task.spentSeconds||0) : '計測'}</span>
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }
+
   const slotKeys = tlSlotsList();
-  const trackAHtml = slotKeys.map(renderTlCell).join('');
-  const trackBHtml = slotKeys.map(k => renderTlCell(k + 'b')).join('');
+  const trackAHtml = slotKeys.map(renderTlPlanCell).join('');
+  const trackBHtml = slotKeys.map(renderTlActualCell).join('');
 
   el.innerHTML = `
     <div class="tl-tracks-wrap">
-      <div class="tl-track tl-track-a">${trackAHtml}</div>
+      <div class="tl-track tl-track-a">
+        <div class="tl-track-a-label">📋 予定</div>
+        ${trackAHtml}
+      </div>
       <div class="tl-track tl-track-b">
-        <div class="tl-track-b-label">＋ 並行スケジュール（同じ時間帯にもう1件入れる）</div>
+        <div class="tl-track-b-label">📊 実績</div>
         ${trackBHtml}
       </div>
     </div>`;
@@ -2991,17 +3042,6 @@ function showAddSpecialSlotModal(type) {
           <select id="ss-hour" class="form-control">${hourOptions}</select>
         </div>
         <div class="form-group">
-          <label class="form-label">列</label>
-          <div style="display:flex;gap:1rem;">
-            <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
-              <input type="radio" name="ss-track" value="a" checked><span>メイン</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
-              <input type="radio" name="ss-track" value="b"><span>並行（2列目）</span>
-            </label>
-          </div>
-        </div>
-        <div class="form-group">
           <label class="form-label">時間</label>
           <select id="ss-span" class="form-control">
             <option value="0.5">30分</option>
@@ -3035,9 +3075,7 @@ function toggleErrandDealField() {
 }
 
 function confirmAddSpecialSlot(type) {
-  const baseKey = document.getElementById('ss-hour').value;
-  const track = document.querySelector('input[name="ss-track"]:checked')?.value || 'a';
-  const hour = track === 'b' ? baseKey + 'b' : baseKey;
+  const hour = document.getElementById('ss-hour').value;
   const spanVal = parseFloat(document.getElementById('ss-span').value);
   const defaultLabel = { break: '休憩', travel: '移動', errand: '所用' }[type] || type;
   const label = document.getElementById('ss-label').value.trim() || defaultLabel;
@@ -3534,13 +3572,9 @@ function showTimeslotPicker(taskId) {
   const box = document.createElement('div');
   box.className = 'timeslot-picker-box';
   box.innerHTML = `
-    <div class="timeslot-picker-title">📌 ${escapeHtml(task.name)}<br><small>時間割に追加する時間を選択（メイン列）</small></div>
+    <div class="timeslot-picker-title">📌 ${escapeHtml(task.name)}<br><small>時間割に追加する時間を選択</small></div>
     <div class="timeslot-picker-grid">
       ${slots.map(renderBtn).join('')}
-    </div>
-    <div class="timeslot-picker-title" style="margin-top:0.75rem;"><small>並行スケジュール（2列目）に追加する場合</small></div>
-    <div class="timeslot-picker-grid">
-      ${slots.map(k => renderBtn(k + 'b')).join('')}
     </div>
     <button class="btn btn-secondary" style="width:100%;margin-top:0.75rem;" onclick="document.getElementById('timeslot-picker-overlay').remove()">キャンセル</button>
   `;

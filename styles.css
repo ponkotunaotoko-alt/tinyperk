@@ -3441,12 +3441,44 @@ h1, h2, h3, h4 {
   gap: 0.35rem;
 }
 
+.tl-track-a-label,
 .tl-track-b-label {
   font-size: 0.72rem;
+  font-weight: 700;
   color: var(--text-muted);
   padding: 0.15rem 0.25rem 0.35rem;
   border-bottom: 1px dashed var(--border-color);
   margin-bottom: 0.15rem;
+}
+
+.tl-track-b-label {
+  color: var(--success);
+}
+
+/* 2列目: 実績セル — 入力UIのみのシンプル表示 */
+.tl-actual-cell {
+  background: var(--bg-secondary);
+}
+
+.tl-actual-empty .tl-slot-placeholder {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.tl-actual-special {
+  opacity: 0.55;
+}
+
+.tl-actual-special-body {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  align-self: center;
+}
+
+.tl-slot-actual-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
 @media (max-width: 720px) {
