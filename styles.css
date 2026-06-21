@@ -3506,6 +3506,22 @@ h1, h2, h3, h4 {
     min-width: 2.2rem;
     min-height: 2.2rem;
   }
+  /* スマホ：ステータスボタン・メモ操作のタップ領域を拡大（タップ無反応バグ対策） */
+  .tl-slot-status-row {
+    gap: 0.4rem;
+  }
+  .tl-slot-status-btn {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.72rem;
+    min-height: 2.2rem;
+  }
+  .tl-slot-memo-voice-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .tl-slot-memo {
+    min-height: 38px;
+  }
 }
 
 .tl-slot {
@@ -3622,6 +3638,8 @@ h1, h2, h3, h4 {
   gap: 0.75rem;
   flex-wrap: wrap;
   margin-top: 0.15rem;
+  position: relative;
+  z-index: 1;
 }
 
 .tl-slot-task-header {
@@ -3711,6 +3729,7 @@ h1, h2, h3, h4 {
   padding: 0.1rem 0.4rem;
   border-radius: 4px;
   transition: color 0.15s, background 0.15s;
+  touch-action: manipulation;
 }
 
 .tl-slot-remove:hover {
@@ -3730,6 +3749,8 @@ h1, h2, h3, h4 {
   flex-wrap: wrap;
   gap: 0.25rem;
   padding: 0.35rem 0.5rem 0;
+  position: relative;
+  z-index: 1;
 }
 
 .tl-slot-status-btn {
@@ -3742,6 +3763,7 @@ h1, h2, h3, h4 {
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
+  touch-action: manipulation;
 }
 .tl-slot-status-btn:hover { opacity: 0.8; }
 .tl-slot-status-btn.active.tl-ss-not-started  { background:#e5e7eb; color:#374151; border-color:#d1d5db; }
@@ -3754,6 +3776,8 @@ h1, h2, h3, h4 {
   align-items: flex-start;
   gap: 0.3rem;
   padding: 0.35rem 0.5rem 0.4rem;
+  position: relative;
+  z-index: 1;
 }
 
 .tl-slot-memo {
@@ -3770,6 +3794,7 @@ h1, h2, h3, h4 {
   overflow: hidden;
   transition: border-color 0.15s;
   font-family: inherit;
+  touch-action: manipulation;
 }
 .tl-slot-memo:focus {
   outline: none;
@@ -3791,6 +3816,7 @@ h1, h2, h3, h4 {
   justify-content: center;
   transition: all 0.15s;
   padding: 0;
+  touch-action: manipulation;
 }
 .tl-slot-memo-voice-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
 .tl-slot-memo-voice-btn.recording {
@@ -4204,6 +4230,7 @@ h1, h2, h3, h4 {
 
 .tl-slot-task {
   position: relative;
+  padding-bottom: 16px; /* リサイズハンドルが下部コンテンツ(メモ等)に重なってタップを奪わないようにする */
 }
 
 .tl-resize-handle {
