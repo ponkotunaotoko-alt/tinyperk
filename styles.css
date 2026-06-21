@@ -3426,6 +3426,35 @@ h1, h2, h3, h4 {
   gap: 0.35rem;
 }
 
+.tl-tracks-wrap {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.tl-track {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tl-track-b-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding: 0.15rem 0.25rem 0.35rem;
+  border-bottom: 1px dashed var(--border-color);
+  margin-bottom: 0.15rem;
+}
+
+@media (max-width: 720px) {
+  .tl-tracks-wrap {
+    flex-direction: column;
+  }
+}
+
 .tl-slot {
   display: grid;
   grid-template-columns: 64px 1fr;

@@ -2410,14 +2410,92 @@ function toggleJournalTaskPanel() {
   localStorage.setItem('journal-task-panel-open', next ? '1' : '0');
 }
 
+// ── タイムライン: 30分刻み + 2トラック(並行スケジュール)共通ヘルパー ──
+const TL_DAY_START_MIN = 9 * 60;   // 09:00
+const TL_DAY_END_MIN   = 19 * 60;  // 19:00（最終スロット開始 18:30）
+const TL_STEP_MIN      = 30;       // 1スロット = 30分
+const TL_UNIT_PX        = 46;      // 1スロットあたりの高さ(px)
+
+function tlMinToHHMM(min) {
+  const h = Math.floor(min / 60), m = min % 60;
+  return String(h).padStart(2, '0') + String(m).padStart(2, '0');
+}
+function tlParseKey(key) {
+  const m = /^(\d{4})(b)?$/.exec(String(key));
+  if (!m) return { hhmm: String(key), track: 'a', min: NaN };
+  const hh = parseInt(m[1].slice(0, 2), 10), mm = parseInt(m[1].slice(2, 4), 10);
+  return { hhmm: m[1], track: m[2] ? 'b' : 'a', min: hh * 60 + mm };
+}
+function tlKeyFor(min, track) {
+  return tlMinToHHMM(min) + (track === 'b' ? 'b' : '');
+}
+function tlTimeLabel(key) {
+  const { min } = tlParseKey(key);
+  if (Number.isNaN(min)) return String(key);
+  const h = Math.floor(min / 60), m = min % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+function tlSlotsList() {
+  const out = [];
+  for (let m = TL_DAY_START_MIN; m < TL_DAY_END_MIN; m += TL_STEP_MIN) out.push(tlMinToHHMM(m));
+  return out;
+}
+function tlMaxSpan(key) {
+  const { min } = tlParseKey(key);
+  if (Number.isNaN(min)) return 1;
+  return Math.max(1, Math.round((TL_DAY_END_MIN - min) / TL_STEP_MIN));
+}
+function tlAddSteps(key, n) {
+  const { min, track } = tlParseKey(key);
+  return tlKeyFor(min + n * TL_STEP_MIN, track);
+}
+function tlRangeLabel(key, span) {
+  const startLabel = tlTimeLabel(key);
+  if (!span || span <= 1) return startLabel;
+  return `${startLabel}–${tlTimeLabel(tlAddSteps(key, span))}`;
+}
+function tlSpanLabel(span) {
+  const totalMin = (span || 1) * TL_STEP_MIN;
+  const h = Math.floor(totalMin / 60), m = totalMin % 60;
+  if (h === 0) return `${m}分`;
+  if (m === 0) return `${h}時間`;
+  return `${h}時間${m}分`;
+}
+
+// 旧データ（1時間刻み・キー="09".."18"）を30分刻みキー（"0900"等）に移行
+function migrateTimelineToHalfHour(date) {
+  const entry = state.journalEntries[date];
+  if (!entry || !entry.timeline) return;
+  const tl = entry.timeline;
+  const hasOld = Object.keys(tl).some(k => /^\d{2}$/.test(k));
+  if (!hasOld) return;
+  const migrated = {};
+  Object.keys(tl).forEach(k => {
+    const slot = tl[k] || {};
+    if (/^\d{2}$/.test(k)) {
+      const newKey = k + '00';
+      const newSlot = { ...slot };
+      if (typeof newSlot.span === 'number') newSlot.span = Math.max(1, Math.round(newSlot.span * 2));
+      if (typeof newSlot._covered === 'string' && /^\d{2}$/.test(newSlot._covered)) {
+        newSlot._covered = newSlot._covered + '00';
+      }
+      migrated[newKey] = newSlot;
+    } else {
+      migrated[k] = slot;
+    }
+  });
+  entry.timeline = migrated;
+  saveJournalToStorage();
+}
+
 function renderJournalTimeline() {
   const el = document.getElementById('journal-timeline');
   if (!el) return;
 
   const date = state.journalDate;
+  migrateTimelineToHalfHour(date);
   const entry = state.journalEntries[date] || {};
   const timeline = entry.timeline || {};
-  const hours = Array.from({ length: 10 }, (_, i) => String(i + 9).padStart(2, '0'));
 
   // ── タイムライン上部: タスクを追加するクイックバー ──
   const quickBarEl = document.getElementById('journal-timeline-quickbar');
@@ -2455,10 +2533,8 @@ function renderJournalTimeline() {
     }
   }
 
-  const TL_UNIT = 64; // px per 1h slot
-
-  el.innerHTML = hours.map(h => {
-    const slot = timeline[h] || {};
+  function renderTlCell(key) {
+    const slot = timeline[key] || {};
 
     // このスロットが別スロットに覆われている場合はスキップ
     if (slot._covered) return '';
@@ -2466,9 +2542,8 @@ function renderJournalTimeline() {
     // 休憩・移動・所用などの特殊スロット
     if (slot.type === 'break' || slot.type === 'travel' || slot.type === 'errand') {
       const span = slot.span || 1;
-      const spanHeight = span > 1 ? `min-height:${span * TL_UNIT + (span - 1) * 6}px;` : '';
-      const endHour = String(parseInt(h) + span).padStart(2, '0');
-      const timeLabel = span > 1 ? `${h}:00–${endHour}:00` : `${h}:00`;
+      const spanHeight = span > 1 ? `min-height:${span * TL_UNIT_PX + (span - 1) * 6}px;` : '';
+      const timeLabel = tlRangeLabel(key, span);
       const iconMap = { break: '🍱', travel: '🚗', errand: slot.errandSub === 'private' ? '🏠' : '🤝' };
       const labelMap = { break: '休憩', travel: '移動', errand: '所用' };
       const icon = iconMap[slot.type] || '📅';
@@ -2476,24 +2551,24 @@ function renderJournalTimeline() {
       const colorClass = (slot.type === 'break' ? 'tl-special-break'
                        : slot.type === 'travel' ? 'tl-special-travel'
                        : 'tl-special-errand')
-                       + (slot.type === 'break' && span >= 2 ? ' tl-break-long' : '');
+                       + (slot.type === 'break' && span >= 4 ? ' tl-break-long' : '');
       // MTG連携案件名
       const dealName = (slot.errandSub === 'mtg' && slot.errandDealId)
         ? (() => { const d = state.deals?.find(x => x.id === slot.errandDealId); return d ? `<span class="tl-errand-deal">🔗 ${escHtml(d.title)}</span>` : ''; })()
         : '';
-      const maxSpan = 18 - parseInt(h) + 1;
+      const maxSpan = tlMaxSpan(key);
       return `
         <div class="tl-slot tl-slot-filled tl-slot-special ${colorClass}"
-          data-hour="${h}" data-span="${span}" style="${spanHeight}"
+          data-hour="${key}" data-span="${span}" style="${spanHeight}"
           ondragover="event.preventDefault(); this.classList.add('tl-slot-drag-over');"
           ondragleave="this.classList.remove('tl-slot-drag-over');"
-          ondrop="handleTimelineDrop(event, '${h}')">
+          ondrop="handleTimelineDrop(event, '${key}')">
           <div class="tl-slot-time-col">
             <span class="tl-slot-time">${timeLabel}</span>
             <div class="tl-slot-span-controls">
-              <button class="tl-slot-span-btn" onclick="adjustSlotSpan('${date}','${h}',-1)" ${span<=1?'disabled':''}>−</button>
-              <span class="tl-slot-span-val">${span}h</span>
-              <button class="tl-slot-span-btn" onclick="adjustSlotSpan('${date}','${h}',1)" ${span>=maxSpan?'disabled':''}>＋</button>
+              <button class="tl-slot-span-btn" onclick="adjustSlotSpan('${date}','${key}',-1)" ${span<=1?'disabled':''}>−</button>
+              <span class="tl-slot-span-val">${tlSpanLabel(span)}</span>
+              <button class="tl-slot-span-btn" onclick="adjustSlotSpan('${date}','${key}',1)" ${span>=maxSpan?'disabled':''}>＋</button>
             </div>
           </div>
           <div class="tl-slot-special-body">
@@ -2505,14 +2580,14 @@ function renderJournalTimeline() {
             <div class="tl-slot-special-actions">
               ${(slot.type === 'travel' || slot.type === 'errand') ? (
                 slot.location
-                  ? `<button class="tl-slot-pin-btn tl-slot-pin-set" onclick="openLocationPinModal('${date}','${h}')" title="${slot.location.label ? escHtml(slot.location.label) : '行き先を確認・編集'}">📍</button>`
-                  : `<button class="tl-slot-pin-btn" onclick="openLocationPinModal('${date}','${h}')" title="行き先をピン留め">📌</button>`
+                  ? `<button class="tl-slot-pin-btn tl-slot-pin-set" onclick="openLocationPinModal('${date}','${key}')" title="${slot.location.label ? escHtml(slot.location.label) : '行き先を確認・編集'}">📍</button>`
+                  : `<button class="tl-slot-pin-btn" onclick="openLocationPinModal('${date}','${key}')" title="行き先をピン留め">📌</button>`
               ) : ''}
-              <button class="tl-slot-special-journal-btn" onclick="appendSpecialSlotToJournal('${date}','${h}')" title="日誌に追記">📝</button>
-              <button class="tl-slot-remove" onclick="removeTimelineSlot('${date}','${h}')" title="削除">×</button>
+              <button class="tl-slot-special-journal-btn" onclick="appendSpecialSlotToJournal('${date}','${key}')" title="日誌に追記">📝</button>
+              <button class="tl-slot-remove" onclick="removeTimelineSlot('${date}','${key}')" title="削除">×</button>
             </div>
           </div>
-          <div class="tl-resize-handle" onpointerdown="startSlotResize(event,'${date}','${h}')">
+          <div class="tl-resize-handle" onpointerdown="startSlotResize(event,'${date}','${key}')">
             <div class="tl-resize-handle-icon"></div>
           </div>
         </div>`;
@@ -2521,7 +2596,7 @@ function renderJournalTimeline() {
     const task = slot.taskId ? state.tasks.find(t => t.id === slot.taskId) : null;
     const isActiveTimer = task && state.activeTimerTaskId === task.id && !!state.timerStartEpoch;
     const span = slot.span || 1;
-    const spanHeight = span > 1 ? `min-height:${span * TL_UNIT + (span - 1) * 6}px;` : '';
+    const spanHeight = span > 1 ? `min-height:${span * TL_UNIT_PX + (span - 1) * 6}px;` : '';
 
     const timerHours = task?.spentSeconds > 0
       ? Math.round(task.spentSeconds / 3600 * 10) / 10
@@ -2540,8 +2615,7 @@ function renderJournalTimeline() {
     const color = task ? (statusColor[task.status] || 'var(--primary)') : '';
 
     // 時間レンジ表示
-    const endHour = String(parseInt(h) + span).padStart(2, '0');
-    const timeLabel = span > 1 ? `${h}:00–${endHour}:00` : `${h}:00`;
+    const timeLabel = tlRangeLabel(key, span);
 
     let progressBar = '';
     if (estH > 0 && actualH !== '') {
@@ -2554,21 +2628,21 @@ function renderJournalTimeline() {
     }
 
     // スパン調整ボタン（タスクあり時のみ）
-    const maxSpan = 18 - parseInt(h) + 1;
+    const maxSpan = tlMaxSpan(key);
     const spanControls = task ? `
       <div class="tl-slot-span-controls">
-        <button class="tl-slot-span-btn" onclick="adjustSlotSpan('${date}','${h}',-1)" title="-1h" ${span <= 1 ? 'disabled' : ''}>−</button>
-        <span class="tl-slot-span-val">${span}h</span>
-        <button class="tl-slot-span-btn" onclick="adjustSlotSpan('${date}','${h}',1)" title="+1h" ${span >= maxSpan ? 'disabled' : ''}>＋</button>
+        <button class="tl-slot-span-btn" onclick="adjustSlotSpan('${date}','${key}',-1)" title="-30分" ${span <= 1 ? 'disabled' : ''}>−</button>
+        <span class="tl-slot-span-val">${tlSpanLabel(span)}</span>
+        <button class="tl-slot-span-btn" onclick="adjustSlotSpan('${date}','${key}',1)" title="+30分" ${span >= maxSpan ? 'disabled' : ''}>＋</button>
       </div>` : '';
 
     return `
       <div class="tl-slot ${task ? 'tl-slot-filled' : 'tl-slot-empty'}"
-        data-hour="${h}" data-span="${span}"
+        data-hour="${key}" data-span="${span}"
         style="${spanHeight}"
         ondragover="event.preventDefault(); this.classList.add('tl-slot-drag-over');"
         ondragleave="this.classList.remove('tl-slot-drag-over');"
-        ondrop="handleTimelineDrop(event, '${h}')">
+        ondrop="handleTimelineDrop(event, '${key}')">
         <div class="tl-slot-time-col">
           <span class="tl-slot-time">${timeLabel}</span>
           ${spanControls}
@@ -2596,11 +2670,11 @@ function renderJournalTimeline() {
                 <input type="number" class="tl-slot-actual-input" min="0" max="24" step="0.5"
                   value="${actualH}"
                   placeholder="—"
-                  onchange="saveTimelineActual('${date}', '${h}', this.value)"
+                  onchange="saveTimelineActual('${date}', '${key}', this.value)"
                   onclick="event.stopPropagation()">
                 <span class="tl-slot-time-label">h</span>
               </div>
-              <button class="tl-slot-remove" onclick="removeTimelineSlot('${date}', '${h}')" title="削除">×</button>
+              <button class="tl-slot-remove" onclick="removeTimelineSlot('${date}', '${key}')" title="削除">×</button>
             </div>
             <div class="tl-slot-status-row">
               ${[
@@ -2610,35 +2684,48 @@ function renderJournalTimeline() {
                 {s:'completed',    lbl:'DONE'}
               ].map(({s,lbl}) =>
                 `<button class="tl-slot-status-btn tl-ss-${s}${task.status===s?' active':''}"
-                  onclick="event.stopPropagation();updateTaskStatusFromTimeline('${date}','${h}','${s}')">${lbl}</button>`
+                  onclick="event.stopPropagation();updateTaskStatusFromTimeline('${date}','${key}','${s}')">${lbl}</button>`
               ).join('')}
             </div>
             <div class="tl-slot-memo-row">
-              <textarea id="tl-memo-${h}" class="tl-slot-memo" rows="1"
+              <textarea id="tl-memo-${key}" class="tl-slot-memo" rows="1"
                 placeholder="作業メモ…"
-                onchange="saveTimelineMemo('${date}','${h}',this.value)"
+                onchange="saveTimelineMemo('${date}','${key}',this.value)"
                 oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
                 onclick="event.stopPropagation()">${escapeHtml(slot.memo||'')}</textarea>
-              <button class="tl-slot-memo-voice-btn" id="tl-voice-${h}"
-                onclick="event.stopPropagation();startWhisperRecord('tl-memo-${h}','tl-voice-${h}')"
+              <button class="tl-slot-memo-voice-btn" id="tl-voice-${key}"
+                onclick="event.stopPropagation();startWhisperRecord('tl-memo-${key}','tl-voice-${key}')"
                 title="音声入力">🎤</button>
             </div>
             <div class="tl-slot-sw-row">
               <button class="tl-slot-sw-btn${isActiveTimer ? ' running' : ''}"
-                id="tl-sw-btn-${h}"
-                onclick="event.stopPropagation();toggleTimelineTimer('${date}','${h}')"
+                id="tl-sw-btn-${key}"
+                onclick="event.stopPropagation();toggleTimelineTimer('${date}','${key}')"
                 title="${isActiveTimer ? '停止 → 実績時間に反映' : '計測開始'}">
                 ${isActiveTimer ? '⏸' : '▶'}
                 <span class="tl-sw-disp">${isActiveTimer ? formatSecondsToHHMMSS(task.spentSeconds||0) : '計測'}</span>
               </button>
             </div>
-            <div class="tl-resize-handle" onpointerdown="startSlotResize(event,'${date}','${h}')">
+            <div class="tl-resize-handle" onpointerdown="startSlotResize(event,'${date}','${key}')">
               <div class="tl-resize-handle-icon"></div>
             </div>
           </div>` : `
           <span class="tl-slot-placeholder">ここにタスクをドロップ</span>`}
       </div>`;
-  }).join('');
+  }
+
+  const slotKeys = tlSlotsList();
+  const trackAHtml = slotKeys.map(renderTlCell).join('');
+  const trackBHtml = slotKeys.map(k => renderTlCell(k + 'b')).join('');
+
+  el.innerHTML = `
+    <div class="tl-tracks-wrap">
+      <div class="tl-track tl-track-a">${trackAHtml}</div>
+      <div class="tl-track tl-track-b">
+        <div class="tl-track-b-label">＋ 並行スケジュール（同じ時間帯にもう1件入れる）</div>
+        ${trackBHtml}
+      </div>
+    </div>`;
 
   renderPlanActualSummary(date);
 }
@@ -2663,10 +2750,11 @@ function renderPlanActualSummary(date) {
     const slot = timeline[h];
     if (!slot || slot._covered) return;
     const span = slot.span || 1;
+    const spanHours = Math.round(span * (TL_STEP_MIN / 60) * 100) / 100;
 
-    if (slot.type === 'break') { breakH += span; return; }
-    if (slot.type === 'travel') { travelH += span; return; }
-    if (slot.type === 'errand') { errandH += span; return; }
+    if (slot.type === 'break') { breakH += spanHours; return; }
+    if (slot.type === 'travel') { travelH += spanHours; return; }
+    if (slot.type === 'errand') { errandH += spanHours; return; }
 
     if (slot.taskId) {
       const task = state.tasks.find(t => t.id === slot.taskId);
@@ -2674,10 +2762,10 @@ function renderPlanActualSummary(date) {
       const actualH = slot.actualHours !== '' && slot.actualHours != null
         ? Number(slot.actualHours)
         : (timerHours || 0);
-      plannedTaskH += span;
+      plannedTaskH += spanHours;
       actualTaskH += actualH;
       taskCount++;
-      taskRows.push({ name: task ? task.name : (slot.label || 'タスク'), planned: span, actual: actualH, status: task?.status || 'not-started' });
+      taskRows.push({ name: task ? task.name : (slot.label || 'タスク'), planned: spanHours, actual: actualH, status: task?.status || 'not-started' });
     }
   });
 
@@ -2752,16 +2840,16 @@ function handleTimelineDrop(e, hour) {
     }
   });
 
-  // 想定時間からスパンを自動設定（未設定なら1h）
-  const span = Math.max(1, Math.min(Math.round(task.estimatedHours || 1), 18 - parseInt(hour) + 1));
+  // 想定時間からスパンを自動設定（30分単位・未設定なら30分）
+  const wantSpan = Math.max(1, Math.round((task.estimatedHours || 0.5) * 2));
+  const span = Math.min(wantSpan, tlMaxSpan(hour));
 
   // メインスロット
   timeline[hour] = { taskId, actualHours: '', span };
 
   // カバーされるスロットをマーク
   for (let i = 1; i < span; i++) {
-    const coveredH = String(parseInt(hour) + i).padStart(2, '0');
-    timeline[coveredH] = { _covered: hour };
+    timeline[tlAddSteps(hour, i)] = { _covered: hour };
   }
 
   saveJournalToStorage();
@@ -2772,7 +2860,7 @@ function adjustSlotSpanTo(date, hour, newSpan) {
   const timeline = state.journalEntries[date]?.timeline;
   if (!timeline || !timeline[hour]?.taskId) return;
   const slot = timeline[hour];
-  const maxSpan = 18 - parseInt(hour) + 1;
+  const maxSpan = tlMaxSpan(hour);
   newSpan = Math.max(1, Math.min(newSpan, maxSpan));
 
   // 既存coverを削除
@@ -2784,7 +2872,7 @@ function adjustSlotSpanTo(date, hour, newSpan) {
 
   // 新しいcoverをマーク
   for (let i = 1; i < newSpan; i++) {
-    const coveredH = String(parseInt(hour) + i).padStart(2, '0');
+    const coveredH = tlAddSteps(hour, i);
     if (!timeline[coveredH]?.taskId) {
       timeline[coveredH] = { _covered: hour };
     }
@@ -2804,11 +2892,12 @@ function adjustSlotSpan(date, hour, delta) {
 function startSlotResize(e, date, hour) {
   e.preventDefault();
   e.stopPropagation();
-  const TL_UNIT = 70;
+  const TL_UNIT = TL_UNIT_PX + 6;
   const startY = e.clientY;
   const slot = state.journalEntries[date]?.timeline?.[hour];
   if (!slot) return;
   const startSpan = slot.span || 1;
+  const maxSpan = tlMaxSpan(hour);
   let previewSpan = startSpan;
 
   const handle = e.currentTarget;
@@ -2824,18 +2913,15 @@ function startSlotResize(e, date, hour) {
 
   function onMove(ev) {
     const delta = ev.clientY - startY;
-    const newSpan = Math.max(1, Math.min(startSpan + Math.round(delta / TL_UNIT), 18 - parseInt(hour) + 1));
+    const newSpan = Math.max(1, Math.min(startSpan + Math.round(delta / TL_UNIT), maxSpan));
     if (newSpan === previewSpan) return;
     previewSpan = newSpan;
     if (slotEl) {
-      slotEl.style.minHeight = newSpan > 1 ? `${newSpan * 64 + (newSpan - 1) * 6}px` : '';
+      slotEl.style.minHeight = newSpan > 1 ? `${newSpan * TL_UNIT_PX + (newSpan - 1) * 6}px` : '';
       const spanVal = slotEl.querySelector('.tl-slot-span-val');
-      if (spanVal) spanVal.textContent = `${newSpan}h`;
+      if (spanVal) spanVal.textContent = tlSpanLabel(newSpan);
       const timeEl = slotEl.querySelector('.tl-slot-time');
-      if (timeEl) {
-        const endH = String(parseInt(hour) + newSpan).padStart(2, '0');
-        timeEl.textContent = newSpan > 1 ? `${hour}:00–${endH}:00` : `${hour}:00`;
-      }
+      if (timeEl) timeEl.textContent = tlRangeLabel(hour, newSpan);
     }
   }
 
@@ -2857,8 +2943,7 @@ function showAddSpecialSlotModal(type) {
     errand: { icon: '📅', name: '所用' },
   };
   const { icon, name } = meta[type] || meta.break;
-  const hours = Array.from({length: 10}, (_, i) => i + 9);
-  const hourOptions = hours.map(h => `<option value="${h}">${String(h).padStart(2,'0')}:00</option>`).join('');
+  const hourOptions = tlSlotsList().map(k => `<option value="${k}">${tlTimeLabel(k)}</option>`).join('');
 
   // 所用専用フィールド: 種別 + 案件連携
   let errandFields = '';
@@ -2905,6 +2990,17 @@ function showAddSpecialSlotModal(type) {
           <select id="ss-hour" class="form-control">${hourOptions}</select>
         </div>
         <div class="form-group">
+          <label class="form-label">列</label>
+          <div style="display:flex;gap:1rem;">
+            <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+              <input type="radio" name="ss-track" value="a" checked><span>メイン</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+              <input type="radio" name="ss-track" value="b"><span>並行（2列目）</span>
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
           <label class="form-label">時間</label>
           <select id="ss-span" class="form-control">
             <option value="0.5">30分</option>
@@ -2938,12 +3034,13 @@ function toggleErrandDealField() {
 }
 
 function confirmAddSpecialSlot(type) {
-  const hourVal = parseInt(document.getElementById('ss-hour').value);
+  const baseKey = document.getElementById('ss-hour').value;
+  const track = document.querySelector('input[name="ss-track"]:checked')?.value || 'a';
+  const hour = track === 'b' ? baseKey + 'b' : baseKey;
   const spanVal = parseFloat(document.getElementById('ss-span').value);
   const defaultLabel = { break: '休憩', travel: '移動', errand: '所用' }[type] || type;
   const label = document.getElementById('ss-label').value.trim() || defaultLabel;
-  const hour = String(hourVal).padStart(2, '0');
-  const span = Math.max(1, Math.round(spanVal));
+  const span = Math.max(1, Math.round(spanVal * 2));
   const date = state.journalDate;
 
   // 所用の追加情報
@@ -2962,10 +3059,11 @@ function confirmAddSpecialSlot(type) {
     if (timeline[h]._covered === hour) delete timeline[h];
   });
 
-  timeline[hour] = { type, label, span, ...(errandSub ? { errandSub, errandDealId } : {}) };
+  const finalSpan = Math.min(span, tlMaxSpan(hour));
+  timeline[hour] = { type, label, span: finalSpan, ...(errandSub ? { errandSub, errandDealId } : {}) };
 
-  for (let i = 1; i < span; i++) {
-    const covH = String(hourVal + i).padStart(2, '0');
+  for (let i = 1; i < finalSpan; i++) {
+    const covH = tlAddSteps(hour, i);
     if (!timeline[covH]?.taskId && !timeline[covH]?.type) {
       timeline[covH] = { _covered: hour };
     }
@@ -2992,10 +3090,9 @@ function appendSpecialSlotToJournal(date, hour) {
   if (!timeline?.[hour]) return;
   const slot = timeline[hour];
   const span = slot.span || 1;
-  const endH = String(parseInt(hour) + span).padStart(2, '0');
   const iconMap = { break: '🍱', travel: '🚗', errand: slot.errandSub === 'private' ? '🏠' : '🤝' };
   const icon = iconMap[slot.type] || '📅';
-  let line = `${hour}:00〜${endH}:00 ${icon} ${slot.label}`;
+  let line = `${tlRangeLabel(hour, span)} ${icon} ${slot.label}`;
   if (slot.type === 'errand' && slot.errandSub === 'mtg' && slot.errandDealId) {
     const deal = state.deals?.find(d => d.id === slot.errandDealId);
     if (deal) line += `（案件: ${deal.title}）`;
@@ -3052,44 +3149,46 @@ function generateFreeTimeText(date, includeBusy) {
   const dow = ['日','月','火','水','木','金','土'][d.getDay()];
   const dateStr = `${d.getMonth()+1}/${d.getDate()}(${dow})`;
 
-  // 占有時間を収集
-  const busyHours = new Set();
-  Object.entries(timeline).forEach(([h, slot]) => {
-    if (slot.taskId) {
+  // 占有時間を収集（メイン・並行どちらかが埋まっていれば占有とみなす）
+  const busySlotMins = new Set();
+  Object.entries(timeline).forEach(([k, slot]) => {
+    if (!slot) return;
+    if (slot.taskId || slot.type) {
       const span = slot.span || 1;
-      for (let i = 0; i < span; i++) busyHours.add(parseInt(h) + i);
+      const { min } = tlParseKey(k);
+      if (!Number.isNaN(min)) {
+        for (let i = 0; i < span; i++) busySlotMins.add(min + i * TL_STEP_MIN);
+      }
     }
-    if (slot._covered) busyHours.add(parseInt(h));
   });
 
   // 空き時間をレンジに変換
   const freeRanges = [];
   let start = null;
-  for (let h = 9; h <= 18; h++) {
-    const busy = busyHours.has(h);
-    if (!busy && start === null) start = h;
-    if (busy && start !== null) { freeRanges.push({ start, end: h }); start = null; }
+  for (let m = TL_DAY_START_MIN; m < TL_DAY_END_MIN; m += TL_STEP_MIN) {
+    const busy = busySlotMins.has(m);
+    if (!busy && start === null) start = m;
+    if (busy && start !== null) { freeRanges.push({ start, end: m }); start = null; }
   }
-  if (start !== null) freeRanges.push({ start, end: 18 });
+  if (start !== null) freeRanges.push({ start, end: TL_DAY_END_MIN });
 
-  const pad = n => String(n).padStart(2, '0');
   const lines = [`【${dateStr} 空き時間】`, ''];
   if (freeRanges.length === 0) {
     lines.push('空き時間はありません');
   } else {
-    freeRanges.forEach(r => lines.push(`・${pad(r.start)}:00 〜 ${pad(r.end)}:00`));
+    freeRanges.forEach(r => lines.push(`・${tlTimeLabel(tlMinToHHMM(r.start))} 〜 ${tlTimeLabel(tlMinToHHMM(r.end))}`));
   }
 
   if (includeBusy) {
     const busySlots = Object.entries(timeline)
-      .filter(([, s]) => s.taskId)
-      .sort(([a], [b]) => a.localeCompare(b));
+      .filter(([, s]) => s && s.taskId)
+      .sort(([a], [b]) => tlParseKey(a).min - tlParseKey(b).min);
     if (busySlots.length > 0) {
       lines.push('', '【予定あり】');
-      busySlots.forEach(([h, slot]) => {
+      busySlots.forEach(([k, slot]) => {
         const task = state.tasks.find(t => t.id === slot.taskId);
         const span = slot.span || 1;
-        lines.push(`・${h}:00〜${pad(parseInt(h)+span)}:00 ${task?.name || ''}`);
+        lines.push(`・${tlRangeLabel(k, span)} ${task?.name || ''}`);
       });
     }
   }
@@ -3411,30 +3510,36 @@ function showTimeslotPicker(taskId) {
   const existing = document.getElementById('timeslot-picker-overlay');
   if (existing) existing.remove();
 
-  const hours = Array.from({ length: 10 }, (_, i) => String(i + 9).padStart(2, '0'));
   const date = state.journalDate;
   const timeline = state.journalEntries[date]?.timeline || {};
+  const slots = tlSlotsList();
 
   const overlay = document.createElement('div');
   overlay.id = 'timeslot-picker-overlay';
   overlay.className = 'timeslot-picker-overlay';
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
+  const renderBtn = (key) => {
+    const slot = timeline[key];
+    const occupied = slot && !slot._covered && (slot.taskId || slot.type);
+    const occupiedName = occupied ? (slot.taskId ? (state.tasks.find(t => t.id === slot.taskId)?.name || '') : (slot.label || '')) : '';
+    return `<button class="timeslot-picker-btn${occupied ? ' occupied' : ''}"
+      onclick="assignTaskToTimeslot('${taskId}','${key}');document.getElementById('timeslot-picker-overlay').remove();">
+      <span class="timeslot-hour">${tlTimeLabel(key)}</span>
+      ${occupied ? `<span class="timeslot-occupied-label">${escapeHtml(occupiedName.slice(0,8))}…</span>` : ''}
+    </button>`;
+  };
+
   const box = document.createElement('div');
   box.className = 'timeslot-picker-box';
   box.innerHTML = `
-    <div class="timeslot-picker-title">📌 ${escapeHtml(task.name)}<br><small>時間割に追加する時間を選択</small></div>
+    <div class="timeslot-picker-title">📌 ${escapeHtml(task.name)}<br><small>時間割に追加する時間を選択（メイン列）</small></div>
     <div class="timeslot-picker-grid">
-      ${hours.map(h => {
-        const slot = timeline[h];
-        const occupied = slot && !slot._covered && slot.taskId;
-        const occupiedName = occupied ? (state.tasks.find(t => t.id === slot.taskId)?.name || '') : '';
-        return `<button class="timeslot-picker-btn${occupied ? ' occupied' : ''}"
-          onclick="assignTaskToTimeslot('${taskId}','${h}');document.getElementById('timeslot-picker-overlay').remove();">
-          <span class="timeslot-hour">${h}:00</span>
-          ${occupied ? `<span class="timeslot-occupied-label">${escapeHtml(occupiedName.slice(0,8))}…</span>` : ''}
-        </button>`;
-      }).join('')}
+      ${slots.map(renderBtn).join('')}
+    </div>
+    <div class="timeslot-picker-title" style="margin-top:0.75rem;"><small>並行スケジュール（2列目）に追加する場合</small></div>
+    <div class="timeslot-picker-grid">
+      ${slots.map(k => renderBtn(k + 'b')).join('')}
     </div>
     <button class="btn btn-secondary" style="width:100%;margin-top:0.75rem;" onclick="document.getElementById('timeslot-picker-overlay').remove()">キャンセル</button>
   `;
@@ -3451,26 +3556,25 @@ function assignTaskToTimeslot(taskId, hour) {
   const timeline = state.journalEntries[date].timeline;
 
   // 既存の同タスクスロットを削除
-  Object.keys(timeline).forEach(h => {
-    if (timeline[h].taskId === taskId) {
-      const span = timeline[h].span || 1;
+  Object.keys(timeline).forEach(k => {
+    if (timeline[k].taskId === taskId) {
+      const span = timeline[k].span || 1;
       for (let i = 0; i < span; i++) {
-        const covered = String(parseInt(h) + i).padStart(2, '0');
-        delete timeline[covered];
+        delete timeline[tlAddSteps(k, i)];
       }
     }
   });
 
-  const span = Math.max(1, Math.min(Math.round(task.estimatedHours || 1), 18 - parseInt(hour) + 1));
+  const wantSpan = Math.max(1, Math.round((task.estimatedHours || 0.5) * 2));
+  const span = Math.min(wantSpan, tlMaxSpan(hour));
   timeline[hour] = { taskId, actualHours: '', span };
   for (let i = 1; i < span; i++) {
-    const coveredH = String(parseInt(hour) + i).padStart(2, '0');
-    timeline[coveredH] = { _covered: hour };
+    timeline[tlAddSteps(hour, i)] = { _covered: hour };
   }
 
   saveJournalToStorage();
   renderJournalTimeline();
-  showMotivatorToast(`${hour}:00 に追加しました`, '📌');
+  showMotivatorToast(`${tlTimeLabel(hour)} に追加しました`, '📌');
 }
 
 // ============================================================
@@ -4782,12 +4886,14 @@ function stopBreakTravelTimer() {
 }
 
 function syncBTRecordToTimeline(date, record) {
+  migrateTimelineToHalfHour(date);
   const startDate = new Date(record.startEpoch);
-  const startHour = startDate.getHours();
-  if (startHour < 9 || startHour > 18) return;
+  const startMin = startDate.getHours() * 60 + startDate.getMinutes();
+  const roundedMin = Math.round(startMin / TL_STEP_MIN) * TL_STEP_MIN;
+  if (roundedMin < TL_DAY_START_MIN || roundedMin >= TL_DAY_END_MIN) return;
 
-  const hour = String(startHour).padStart(2, '0');
-  const span = Math.max(1, Math.round(record.durationSec / 3600));
+  const hour = tlMinToHHMM(roundedMin);
+  const span = Math.max(1, Math.min(Math.round(record.durationSec / 60 / TL_STEP_MIN), tlMaxSpan(hour)));
   const label = record.type === 'break' ? '休憩' : '移動';
 
   if (!state.journalEntries[date]) state.journalEntries[date] = {};
@@ -4801,7 +4907,7 @@ function syncBTRecordToTimeline(date, record) {
 
   timeline[hour] = { type: record.type, label, span };
   for (let i = 1; i < span; i++) {
-    const covH = String(startHour + i).padStart(2, '0');
+    const covH = tlAddSteps(hour, i);
     if (!timeline[covH]?.taskId && !timeline[covH]?.type) {
       timeline[covH] = { _covered: hour };
     }
