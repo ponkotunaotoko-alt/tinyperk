@@ -3592,7 +3592,9 @@ function assignTaskToProject(taskId, projId) {
 // タッチ対応: タップで時間割にタスクを追加
 // ============================================================
 function showTimeslotPicker(taskId) {
-  const task = state.tasks.find(t => t.id === taskId);
+  // taskIdはonclick属性経由で必ず文字列として渡ってくるため、
+  // 旧データ等でtask.idが数値型の場合に一致しなくなることがある→文字列化して比較する
+  const task = state.tasks.find(t => String(t.id) === String(taskId));
   if (!task) return;
 
   // 既存ピッカーを削除
@@ -3633,8 +3635,11 @@ function showTimeslotPicker(taskId) {
 }
 
 function assignTaskToTimeslot(taskId, hour) {
-  const task = state.tasks.find(t => t.id === taskId);
+  // taskIdはonclick属性経由で必ず文字列として渡ってくるため、
+  // 旧データ等でtask.idが数値型の場合に一致しなくなることがある→文字列化して比較する
+  const task = state.tasks.find(t => String(t.id) === String(taskId));
   if (!task) return;
+  taskId = task.id;
   const date = state.journalDate;
   if (!state.journalEntries[date]) state.journalEntries[date] = {};
   if (!state.journalEntries[date].timeline) state.journalEntries[date].timeline = {};
@@ -10853,7 +10858,7 @@ async function handlePasteModalAction() {
     const memo     = document.getElementById('pp-memo')?.value.trim()       || '';
 
     const newTask = {
-      id:             Date.now(),
+      id:             Date.now().toString(),
       name,
       client,
       dueDate,
