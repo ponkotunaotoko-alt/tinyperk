@@ -248,6 +248,27 @@ function scheduleSyncToSupabase() {
   _syncTimer = setTimeout(syncToSupabase, 2000);
 }
 
+// 打刻・休憩/移動・日誌画面を開いたタイミングで、他端末での操作をすぐ取り込む。
+// （visibilitychangeだけでは、アプリを閉じずに同じ画面を見ている場合などに反映が遅れることがあるため）
+let _refreshFromCloudInProgress = false;
+async function refreshActiveScreenFromCloud(renderFn) {
+  const sb = getSupabase();
+  if (!sb) return;
+  if (_refreshFromCloudInProgress) return;
+  _refreshFromCloudInProgress = true;
+  try {
+    const { data: authData } = await sb.auth.getUser();
+    if (authData?.user) {
+      await syncFromSupabase(authData.user.id);
+      if (typeof renderFn === 'function') renderFn();
+    }
+  } catch (e) {
+    console.warn('[SYNC] refreshActiveScreenFromCloud error:', e);
+  } finally {
+    _refreshFromCloudInProgress = false;
+  }
+}
+
 // ===================== END SUPABASE SYNC =====================
 
 // TINYPERK - Task & Invoice Manager v2.0
@@ -1561,6 +1582,7 @@ function switchTab(tab) {
 
   if (tab === 'dashboard') {
     renderDashboard();
+    refreshActiveScreenFromCloud(renderDashboard);
   } else if (tab === 'calendar') {
     renderCalendar();
     renderSelectedDayTasks();
@@ -1580,6 +1602,7 @@ function switchTab(tab) {
     renderTaskList();
   } else if (tab === 'journal') {
     renderJournal();
+    refreshActiveScreenFromCloud(renderJournal);
   } else if (tab === 'deals') {
     renderDeals();
   } else if (tab === 'contacts') {
@@ -2092,6 +2115,9 @@ function clockIn() {
   saveTimecardsToStorage();
   renderDashboard();
   showMotivatorToast('おはようございます！今日も無理せず頑張りましょう。', '☀️');
+
+  // 他端末（スマホ等）にすぐ反映されるよう、デバウンスを待たず即時にクラウド同期する
+  syncToSupabase();
 }
 
 function clockOut() {
@@ -2118,9 +2144,12 @@ function clockOut() {
 
   saveTimecardsToStorage();
   renderDashboard();
-  
+
   const randomMsg = MOTIVATION_MESSAGES[Math.floor(Math.random() * MOTIVATION_MESSAGES.length)];
   showMotivatorToast(randomMsg, '🎉');
+
+  // 他端末（スマホ等）にすぐ反映されるよう、デバウンスを待たず即時にクラウド同期する
+  syncToSupabase();
 }
 
 function clockInFromJournal() {
@@ -2445,6 +2474,20 @@ function tlMaxSpan(key) {
   const { min } = tlParseKey(key);
   if (Number.isNaN(min)) return 1;
   return Math.max(1, Math.round((TL_DAY_END_MIN - min) / TL_STEP_MIN));
+}
+// 想定時間からのスパン自動設定が、その後ろに既に入っている別の予定（タスク／休憩・移動等）を
+// 上書き消去してしまわないよう、次に何か入っているスロットの手前までにスパンを制限する。
+// ※呼び出し側で「今回動かしているタスク自身の古いスロット」は事前に削除しておくこと。
+function tlMaxSpanAvailable(timeline, key) {
+  const dayMax = tlMaxSpan(key);
+  for (let i = 1; i < dayMax; i++) {
+    const k = tlAddSteps(key, i);
+    const slot = timeline[k];
+    if (slot && (slot.taskId || slot.type || slot._covered)) {
+      return i;
+    }
+  }
+  return dayMax;
 }
 function tlAddSteps(key, n) {
   const { min, track } = tlParseKey(key);
@@ -2884,17 +2927,21 @@ function handleTimelineDrop(e, hour) {
   const timeline = state.journalEntries[date].timeline;
 
   // 既存の同タスクのスロット・coverを削除
+  // （Object.keysの順序に依存すると、メインスロットを先に消した後にcoverを判定できず
+  //   coverだけ残ってゴーストスロット化するバグがあったため、span分をまとめて削除する）
   Object.keys(timeline).forEach(h => {
-    if (timeline[h].taskId === taskId || timeline[h]._covered) {
-      const src = timeline[h]._covered;
-      if (src && timeline[src]?.taskId === taskId) delete timeline[h];
-      else if (timeline[h].taskId === taskId) delete timeline[h];
+    if (timeline[h].taskId === taskId) {
+      const span = timeline[h].span || 1;
+      for (let i = 0; i < span; i++) {
+        delete timeline[tlAddSteps(h, i)];
+      }
     }
   });
 
   // 想定時間からスパンを自動設定（30分単位・未設定なら30分）
+  // ※すでに後ろに別の予定が入っている場合は、それを上書き消去しないようそこまでに制限する
   const wantSpan = Math.max(1, Math.round((task.estimatedHours || 0.5) * 2));
-  const span = Math.min(wantSpan, tlMaxSpan(hour));
+  const span = Math.min(wantSpan, tlMaxSpanAvailable(timeline, hour));
 
   // メインスロット
   timeline[hour] = { taskId, actualHours: '', span };
@@ -2912,20 +2959,22 @@ function adjustSlotSpanTo(date, hour, newSpan) {
   const timeline = state.journalEntries[date]?.timeline;
   if (!timeline || !timeline[hour]?.taskId) return;
   const slot = timeline[hour];
-  const maxSpan = tlMaxSpan(hour);
-  newSpan = Math.max(1, Math.min(newSpan, maxSpan));
 
-  // 既存coverを削除
+  // 既存coverを削除（自分自身の古いカバー分のみ）
   Object.keys(timeline).forEach(h => {
     if (timeline[h]._covered === hour) delete timeline[h];
   });
+
+  // ※すでに後ろに別の予定が入っている場合は、それを上書き消去しないようそこまでに制限する
+  const maxSpan = tlMaxSpanAvailable(timeline, hour);
+  newSpan = Math.max(1, Math.min(newSpan, maxSpan));
 
   slot.span = newSpan;
 
   // 新しいcoverをマーク
   for (let i = 1; i < newSpan; i++) {
     const coveredH = tlAddSteps(hour, i);
-    if (!timeline[coveredH]?.taskId) {
+    if (!timeline[coveredH]?.taskId && !timeline[coveredH]?.type) {
       timeline[coveredH] = { _covered: hour };
     }
   }
@@ -3098,7 +3147,8 @@ function confirmAddSpecialSlot(type) {
     if (timeline[h]._covered === hour) delete timeline[h];
   });
 
-  const finalSpan = Math.min(span, tlMaxSpan(hour));
+  // ※すでに後ろに別の予定が入っている場合は、それを上書き消去しないようそこまでに制限する
+  const finalSpan = Math.min(span, tlMaxSpanAvailable(timeline, hour));
   timeline[hour] = { type, label, span: finalSpan, ...(errandSub ? { errandSub, errandDealId } : {}) };
 
   for (let i = 1; i < finalSpan; i++) {
@@ -3600,8 +3650,9 @@ function assignTaskToTimeslot(taskId, hour) {
     }
   });
 
+  // ※すでに後ろに別の予定が入っている場合は、それを上書き消去しないようそこまでに制限する
   const wantSpan = Math.max(1, Math.round((task.estimatedHours || 0.5) * 2));
-  const span = Math.min(wantSpan, tlMaxSpan(hour));
+  const span = Math.min(wantSpan, tlMaxSpanAvailable(timeline, hour));
   timeline[hour] = { taskId, actualHours: '', span };
   for (let i = 1; i < span; i++) {
     timeline[tlAddSteps(hour, i)] = { _covered: hour };
@@ -4918,6 +4969,9 @@ function stopBreakTravelTimer() {
 
   // ログ表示を更新
   renderBTLog();
+
+  // 他端末（スマホ等）にすぐ反映されるよう、デバウンスを待たず即時にクラウド同期する
+  syncToSupabase();
 }
 
 function syncBTRecordToTimeline(date, record) {
@@ -4928,7 +4982,6 @@ function syncBTRecordToTimeline(date, record) {
   if (roundedMin < TL_DAY_START_MIN || roundedMin >= TL_DAY_END_MIN) return;
 
   const hour = tlMinToHHMM(roundedMin);
-  const span = Math.max(1, Math.min(Math.round(record.durationSec / 60 / TL_STEP_MIN), tlMaxSpan(hour)));
   const label = record.type === 'break' ? '休憩' : '移動';
 
   if (!state.journalEntries[date]) state.journalEntries[date] = {};
@@ -4939,6 +4992,9 @@ function syncBTRecordToTimeline(date, record) {
   Object.keys(timeline).forEach(h => {
     if (timeline[h]._covered === hour) delete timeline[h];
   });
+
+  // ※すでに後ろに別の予定が入っている場合は、それを上書き消去しないようそこまでに制限する
+  const span = Math.max(1, Math.min(Math.round(record.durationSec / 60 / TL_STEP_MIN), tlMaxSpanAvailable(timeline, hour)));
 
   timeline[hour] = { type: record.type, label, span };
   for (let i = 1; i < span; i++) {
