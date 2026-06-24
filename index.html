@@ -1616,6 +1616,11 @@
               <label class="form-label" for="task-estimated-hours">想定時間（h）</label>
               <input type="number" id="task-estimated-hours" class="form-control" placeholder="例: 3" min="0" step="0.5">
             </div>
+            <!-- Actual Hours（完了には必須） -->
+            <div class="form-group">
+              <label class="form-label" for="task-actual-hours">実績時間（h）<span style="color:var(--secondary);">※完了には必須</span></label>
+              <input type="number" id="task-actual-hours" class="form-control" placeholder="例: 3.5" min="0" step="0.1">
+            </div>
             <!-- 業務内容 -->
             <div class="form-group">
               <label class="form-label" for="task-work-type">業務内容</label>
@@ -1850,7 +1855,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=131"></script>
+  <script src="./app.js?v=133"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

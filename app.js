@@ -2766,8 +2766,14 @@ function renderJournalTimeline() {
         </div>`;
     }
 
+    // 実績時間が未入力かつ今日以前（記入を忘れていそうな枠）は赤く目立たせる
+    const todayStr = getLocalDateStr();
+    const needsActualInput = (actualH === '' || actualH == null) && date <= todayStr;
+    const missingClass = needsActualInput ? ' tl-actual-missing' : '';
+    const missingCellClass = needsActualInput ? ' tl-actual-needs-input' : '';
+
     return `
-      <div class="tl-slot tl-actual-cell tl-slot-filled" data-hour="${key}" data-span="${span}" style="${spanHeight}"
+      <div class="tl-slot tl-actual-cell tl-slot-filled${missingCellClass}" data-hour="${key}" data-span="${span}" style="${spanHeight}"
         ondragover="event.preventDefault(); this.classList.add('tl-slot-drag-over');"
         ondragleave="this.classList.remove('tl-slot-drag-over');"
         ondrop="handleTimelineDrop(event, '${key}')">
@@ -2785,9 +2791,9 @@ function renderJournalTimeline() {
               </div>` : ''}
             <div class="tl-slot-time-block tl-slot-actual-block">
               <span class="tl-slot-time-label">実績</span>
-              <input type="number" class="tl-slot-actual-input" min="0" max="24" step="0.5"
+              <input type="number" class="tl-slot-actual-input${missingClass}" min="0" max="24" step="0.5"
                 value="${actualH}"
-                placeholder="—"
+                placeholder="${needsActualInput ? '未入力' : '—'}"
                 onchange="saveTimelineActual('${date}', '${key}', this.value)"
                 onclick="event.stopPropagation()">
               <span class="tl-slot-time-label">h</span>
@@ -3325,7 +3331,9 @@ function toggleTimelineTimer(date, hour) {
     pauseTaskTimer();
   } else {
     // 開始（別タスクのタイマーが動いていれば自動停止）
-    startTaskTimer(task.id);
+    // どの日誌・どの枠から計測を開始したかを記録しておく（日付をまたいで停止しても
+    // 計測を始めた枠にきちんと実績時間が加算されるようにするため）
+    startTaskTimer(task.id, date, hour);
     // タイムラインカードのボタンを即時 running 状態に
     const btn = document.getElementById(`tl-sw-btn-${hour}`);
     if (btn) {
@@ -4333,6 +4341,18 @@ function renderTaskTray() {
         el.style.opacity   = '';
         el.style.boxShadow = '';
         if (dx > 72) {
+          // 右スワイプ → 完了（実績時間/業務内容が未入力なら完了させずに編集モーダルを開く）
+          const _swipeTask = (state.tasks || []).find(t => t.id == taskId);
+          if (_swipeTask && _swipeTask.status !== 'completed') {
+            const _blockReason = getTaskCompletionBlockReason(_swipeTask);
+            if (_blockReason) {
+              el.style.transform = '';
+              el.style.opacity = '';
+              showToastError(_blockReason);
+              openEditTaskModal(_swipeTask.id);
+              return;
+            }
+          }
           // 右スワイプ → 完了
           el.style.transform = 'translateX(110%)';
           el.style.opacity   = '0';
@@ -4670,6 +4690,17 @@ function createTaskCard(task) {
   return card;
 }
 
+// 完了にしてよいか判定する（実績時間の入力 / 金額ありなら業務内容の入力 が必須）
+function getTaskCompletionBlockReason(task) {
+  if (!(task.actualHours > 0)) {
+    return '⏱️ 完了にするには、実績時間を入力してください。';
+  }
+  if ((task.amount || 0) > 0 && !task.workType) {
+    return '💴 金額が入力されている案件は、業務内容（業種）を入力してください。';
+  }
+  return null;
+}
+
 function handleCheckboxToggle(event, taskId) {
   event.stopPropagation();
   const task = state.tasks.find(t => t.id === taskId);
@@ -4680,15 +4711,27 @@ function handleCheckboxToggle(event, taskId) {
       task.completedAt = null;
     } else if (task.status === 'revision') {
       // 修正中 → 完了（再完了）
+      const _blockReason = getTaskCompletionBlockReason(task);
+      if (_blockReason) {
+        showToastError(_blockReason);
+        openEditTaskModal(taskId);
+        return;
+      }
       task.status = 'completed';
       task.completedAt = getLocalDateStr();
       triggerConfettiParticles();
       const randomMsg = MOTIVATION_MESSAGES[Math.floor(Math.random() * MOTIVATION_MESSAGES.length)];
       showMotivatorToast(randomMsg, '🎉');
     } else {
+      const _blockReason = getTaskCompletionBlockReason(task);
+      if (_blockReason) {
+        showToastError(_blockReason);
+        openEditTaskModal(taskId);
+        return;
+      }
       task.status = 'completed';
       task.completedAt = getLocalDateStr();
-      
+
       // Stop the timer if it is running on this completed task
       if (state.activeTimerTaskId === taskId) {
         pauseTaskTimer();
@@ -4841,7 +4884,7 @@ function navigateDailyViewDate(days) {
 // ----------------------------------------------------------------------------
 // NEW: TASK STOPWATCH TIMER ENGINE
 // ----------------------------------------------------------------------------
-function startTaskTimer(taskId) {
+function startTaskTimer(taskId, originDate, originHour) {
   const task = state.tasks.find(t => t.id === taskId);
   if (!task) return;
 
@@ -4856,6 +4899,10 @@ function startTaskTimer(taskId) {
   state.activeTimerTaskId = taskId;
   state.timerStartEpoch = Date.now();
   state.timerAccumulatedSeconds = task.spentSeconds || 0;
+  // 日誌のタイムライン枠から計測を開始した場合、その枠を記録しておく
+  // （日付をまたいで停止しても、計測を始めた枠に実績時間が加算されるようにするため）
+  state.tlTimerOriginDate = originDate || null;
+  state.tlTimerOriginHour = originHour || null;
 
   // Save current active timer session to restore on reload
   localStorage.setItem('activeTimer', JSON.stringify({
@@ -5163,19 +5210,42 @@ function removeBTRecordFromModal(index) {
   if (state.activeTab === 'journal') renderJournalTimeline();
 }
 
-function syncTimerToJournalTimeline(task) {
-  if (!task || !task.spentSeconds) return;
-  const todayStr = getLocalDateStr();
-  const entry = state.journalEntries[todayStr];
-  if (!entry || !entry.timeline) return;
+// sessionElapsedSec: 今回の計測区間（開始〜停止）の秒数。日付をまたいで計測しても、
+// 計測を開始した日誌の枠（state.tlTimerOriginDate/Hour）にきちんと加算されるようにする。
+// 既存の実績時間（手入力で修正した値含む）には「上書き」ではなく「加算」する。
+// （以前は task.spentSeconds の累計を毎回上書きしていたため、日付をまたぐと反映先が
+// 見つからず消えたり、手動修正した値が次の計測で上書きされて消えるバグがあった）
+function syncTimerToJournalTimeline(task, sessionElapsedSec) {
+  if (!task) return;
+  const sessionHours = Math.round(((sessionElapsedSec || 0) / 3600) * 10) / 10;
+  if (sessionHours <= 0) return;
 
+  const originDate = state.tlTimerOriginDate;
+  const originHour = state.tlTimerOriginHour;
   let updated = false;
-  Object.entries(entry.timeline).forEach(([hour, slot]) => {
-    if (slot.taskId === task.id) {
-      slot.actualHours = Math.round(task.spentSeconds / 3600 * 10) / 10;
-      updated = true;
+
+  if (originDate && originHour && state.journalEntries[originDate]?.timeline?.[originHour]?.taskId === task.id) {
+    const slot = state.journalEntries[originDate].timeline[originHour];
+    const prev = (slot.actualHours !== '' && slot.actualHours != null) ? Number(slot.actualHours) : 0;
+    slot.actualHours = Math.round((prev + sessionHours) * 10) / 10;
+    updated = true;
+  } else {
+    // フォールバック: 計測開始の枠が特定できない場合は、今日の日誌から同タスクの枠を探して加算する
+    const todayStr = getLocalDateStr();
+    const entry = state.journalEntries[todayStr];
+    if (entry && entry.timeline) {
+      Object.values(entry.timeline).forEach(slot => {
+        if (slot.taskId === task.id) {
+          const prev = (slot.actualHours !== '' && slot.actualHours != null) ? Number(slot.actualHours) : 0;
+          slot.actualHours = Math.round((prev + sessionHours) * 10) / 10;
+          updated = true;
+        }
+      });
     }
-  });
+  }
+
+  state.tlTimerOriginDate = null;
+  state.tlTimerOriginHour = null;
 
   if (updated) {
     saveJournalToStorage();
@@ -5191,9 +5261,10 @@ function pauseTaskTimer() {
     const elapsed = Math.floor((Date.now() - state.timerStartEpoch) / 1000);
     const totalSecs = state.timerAccumulatedSeconds + elapsed;
     task.spentSeconds = totalSecs;
-    
+
     saveTasksToStorage();
-    syncTimerToJournalTimeline(task);
+    // 今回の計測区間（elapsed）だけを日誌の実績時間に加算する（日付をまたいでもOK）
+    syncTimerToJournalTimeline(task, elapsed);
     if (!isModalOpen()) renderApp();
   }
 
@@ -5416,6 +5487,7 @@ function openAddTaskModal(prefilledDate) {
   document.getElementById('task-client').value = '';
   document.getElementById('task-amount').value = '';
   document.getElementById('task-estimated-hours').value = '';
+  const _actualHEl = document.getElementById('task-actual-hours'); if (_actualHEl) _actualHEl.value = '';
   document.getElementById('task-predecessor').value = '';
   document.getElementById('task-deadline-fixed').checked = false;
   document.querySelector(`input[name="task-status"][value="not-started"]`).checked = true;
@@ -5475,6 +5547,13 @@ function openEditTaskModal(taskId) {
   setTimeout(updateSamePriceHint, 80);
   document.getElementById('task-amount').value = task.amount;
   document.getElementById('task-estimated-hours').value = task.estimatedHours || '';
+  const actualHEl = document.getElementById('task-actual-hours');
+  if (actualHEl) {
+    // 手入力の実績時間があればそれを優先、なければストップウォッチ計測値を参考表示
+    actualHEl.value = (task.actualHours != null && task.actualHours !== '')
+      ? task.actualHours
+      : (task.spentSeconds > 0 ? Math.round(task.spentSeconds / 3600 * 10) / 10 : '');
+  }
   const prioEl = document.getElementById('task-priority');
   if (prioEl) prioEl.value = task.priority || 'medium';
   const wtEl = document.getElementById('task-work-type');
@@ -5601,9 +5680,25 @@ function handleTaskFormSubmit(e) {
   const priority = document.getElementById('task-priority')?.value || 'medium';
   const workType = document.getElementById('task-work-type')?.value.trim() || '';
   const paymentStatus = document.getElementById('task-payment-status')?.value || '';
+  const _actualHRaw = document.getElementById('task-actual-hours')?.value;
+  const actualHours = (_actualHRaw !== '' && _actualHRaw != null) ? parseFloat(_actualHRaw) : null;
 
   if (!name || !client || (!isUnscheduled && !dueDate)) {
     showToastError('タスク名、クライアント名は必須です。期日がある場合は入力してください。');
+    return;
+  }
+
+  // 金銭が絡む案件（金額を入力した案件）は、業務内容（業種）の入力を必須にする
+  if (amount > 0 && !workType) {
+    showToastError('💴 金額が入力されている案件は、業務内容（業種）を入力してください。');
+    document.getElementById('task-work-type')?.focus();
+    return;
+  }
+
+  // 完了にする場合は実績時間の入力を必須にする
+  if (status === 'completed' && !(actualHours > 0)) {
+    showToastError('⏱️ 完了にするには、実績時間を入力してください。');
+    document.getElementById('task-actual-hours')?.focus();
     return;
   }
 
@@ -5625,6 +5720,7 @@ function handleTaskFormSubmit(e) {
       task.client = client;
       task.amount = amount;
       task.estimatedHours = estimatedHours;
+      task.actualHours = actualHours;
       task.status = status;
       task.dependsOnTaskId = dependsOnTaskId;
       task.isDeadlineFixed = isDeadlineFixed;
@@ -5679,6 +5775,7 @@ function handleTaskFormSubmit(e) {
       client,
       amount,
       estimatedHours,
+      actualHours,
       status,
       completedAt: status === 'completed' ? getLocalDateStr() : null,
       dependsOnTaskId,

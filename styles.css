@@ -3727,6 +3727,20 @@ h1, h2, h3, h4 {
   text-align: center;
 }
 
+/* 実績時間が未入力（過去日／本日のタスク）の場合、入力を促すために赤く強調 */
+.tl-slot-actual-input.tl-actual-missing {
+  border: 1.5px solid var(--danger, #e5484d);
+  background: rgba(229, 72, 77, 0.08);
+  color: var(--danger, #e5484d);
+}
+.tl-slot-actual-input.tl-actual-missing::placeholder {
+  color: var(--danger, #e5484d);
+  opacity: 0.85;
+}
+.tl-actual-cell.tl-actual-needs-input {
+  box-shadow: inset 3px 0 0 var(--danger, #e5484d);
+}
+
 .tl-slot-remove {
   margin-left: auto;
   background: none;
