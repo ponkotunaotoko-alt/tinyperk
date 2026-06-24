@@ -2935,8 +2935,10 @@ function handleTimelineDrop(e, hour) {
   // 既存の同タスクのスロット・coverを削除
   // （Object.keysの順序に依存すると、メインスロットを先に消した後にcoverを判定できず
   //   coverだけ残ってゴーストスロット化するバグがあったため、span分をまとめて削除する）
+  // ※span分の削除で後続キーが先に消えていることがあるため、timeline[h]の存在確認を必ず行う
+  //   （確認しないと再配置時にクラッシュし、結果としてスロットが表示されないバグになっていた）
   Object.keys(timeline).forEach(h => {
-    if (timeline[h].taskId === taskId) {
+    if (timeline[h] && timeline[h].taskId === taskId) {
       const span = timeline[h].span || 1;
       for (let i = 0; i < span; i++) {
         delete timeline[tlAddSteps(h, i)];
@@ -3654,8 +3656,10 @@ function assignTaskToTimeslot(taskId, hour) {
   const timeline = state.journalEntries[date].timeline;
 
   // 既存の同タスクスロットを削除
+  // ※spanが2以上のタスクの場合、後続のcoveredスロットが先のループで既に削除済みになることがあるため、
+  //   timeline[k]がundefinedになっていないか必ず確認する（確認しないと再配置時にクラッシュするバグがあった）
   Object.keys(timeline).forEach(k => {
-    if (timeline[k].taskId === taskId) {
+    if (timeline[k] && timeline[k].taskId === taskId) {
       const span = timeline[k].span || 1;
       for (let i = 0; i < span; i++) {
         delete timeline[tlAddSteps(k, i)];
