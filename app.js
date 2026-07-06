@@ -5342,21 +5342,37 @@ function formatSecondsToHHMMSS(totalSecs) {
 // Resume timer if active on page load
 function resumeActiveTimerOnLoad() {
   const activeTimerData = localStorage.getItem('activeTimer');
-  if (activeTimerData) {
-    try {
-      const data = JSON.parse(activeTimerData);
-      const task = state.tasks.find(t => t.id === data.taskId);
-      if (task) {
-        // ページリロード時はフォーカスモードを自動表示しない
-        _suppressFocusAutoOpen = true;
-        // state.activeTimerTaskId を事前にセットしないこと:
-        // startTaskTimer の先頭で「すでに動いている」判定になり早期リターンしてしまうため
-        startTaskTimer(data.taskId);
-      }
-    } catch (e) {
-      console.error('Failed to restore active timer:', e);
-      localStorage.removeItem('activeTimer');
-    }
+  if (!activeTimerData) return;
+  try {
+    const data = JSON.parse(activeTimerData);
+    const task = state.tasks.find(t => t.id === data.taskId);
+    if (!task) return;
+
+    // ページリロード時はフォーカスモードを自動表示しない
+    _suppressFocusAutoOpen = true;
+
+    // 【バグ修正】loadLocalStorage() が timerState から state.activeTimerTaskId を
+    // セット済みのため、startTaskTimer の「already running」ガードで即リターンしてしまう。
+    // 一時的に null にしてガードをバイパスし、インターバルを正常起動させる。
+    state.activeTimerTaskId = null;
+    startTaskTimer(data.taskId);
+
+    // startTaskTimer は timerStartEpoch = Date.now() に上書きするため、
+    // 保存されていた元の開始時刻・累積秒数を復元して経過時間を正しく継続する。
+    // (JS はシングルスレッドなので setInterval の初回発火前に確実に復元できる)
+    if (data.startEpoch) state.timerStartEpoch = data.startEpoch;
+    if (data.accumulatedSeconds != null) state.timerAccumulatedSeconds = data.accumulatedSeconds;
+
+    // 復元した正しい値でストレージを上書き保存
+    saveTimerState();
+    localStorage.setItem('activeTimer', JSON.stringify({
+      taskId: data.taskId,
+      startEpoch: state.timerStartEpoch,
+      accumulatedSeconds: state.timerAccumulatedSeconds
+    }));
+  } catch (e) {
+    console.error('Failed to restore active timer:', e);
+    localStorage.removeItem('activeTimer');
   }
 }
 
