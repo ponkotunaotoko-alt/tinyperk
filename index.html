@@ -944,6 +944,11 @@
               <label class="form-label">インボイス登録番号（任意）</label>
               <input type="text" id="biz-invoice-number" class="form-control" placeholder="例: T1234567890123">
             </div>
+            <div class="form-group">
+              <label class="form-label">💰 月次給与（自分への支払い）</label>
+              <input type="number" id="biz-owner-salary" class="form-control" placeholder="例: 250000" min="0" step="10000">
+              <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.35rem;">経費タブの「事業利益」はここで設定した額を差し引いて計算されます</div>
+            </div>
             <button class="btn btn-primary" onclick="saveBusinessInfo()" style="margin-top:0.5rem;">
               💾 事業者情報を保存
             </button>
@@ -1855,7 +1860,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=134"></script>
+  <script src="./app.js?v=135"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY

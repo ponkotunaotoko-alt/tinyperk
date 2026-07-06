@@ -166,7 +166,7 @@ async function syncFromSupabase(userId) {
     }
     if (!data) return; // First time user, no data yet
 
-    if (Array.isArray(data.tasks))     { state.tasks = data.tasks; saveTasksToStorage(); }
+    if (Array.isArray(data.tasks))     { state.tasks = data.tasks.map(t => ({...t, id: String(t.id)})); saveTasksToStorage(); }
     if (Array.isArray(data.timecards)) { state.timecards = data.timecards; saveTimecardsToStorage(); }
     if (data.journal_entries && typeof data.journal_entries === 'object') {
       state.journalEntries = data.journal_entries; saveJournalToStorage();
@@ -335,7 +335,8 @@ let state = {
   businessInfo: {
     name: '', company: '', address: '', phone: '', email: '',
     bankName: '', bankBranch: '', accountType: '普通', accountNumber: '', accountHolder: '',
-    invoiceNumber: ''
+    invoiceNumber: '',
+    ownerSalary: 0  // 自分への月次給与（役員報酬・生活費として事業から引き出す額）
   },
 
   // Work hours settings for AI scheduler
@@ -714,6 +715,9 @@ function _safeParseArray(key) {
 
 function loadLocalStorage() {
   state.tasks = _safeParseArray('tasks');
+  // 旧データで数値型IDが保存されていた場合は文字列に正規化する
+  // （openEditTaskModal等が t.id === taskId で厳密等価比較するため型が合わないと編集不能になる）
+  if (Array.isArray(state.tasks)) state.tasks.forEach(t => { t.id = String(t.id); });
 
   if (!state.tasks) {
     // Inject seed data with dependency fields and spentSeconds
@@ -5978,6 +5982,9 @@ function saveBusinessInfo() {
   // accountType special case
   const typeEl = document.getElementById('biz-account-type');
   if (typeEl) state.businessInfo.accountType = typeEl.value;
+  // ownerSalary（月次給与）: 数値として保存
+  const salaryEl = document.getElementById('biz-owner-salary');
+  if (salaryEl) state.businessInfo.ownerSalary = parseFloat(salaryEl.value) || 0;
   localStorage.setItem('businessInfo', JSON.stringify(state.businessInfo));
   const msg = document.getElementById('biz-save-msg');
   if (msg) { msg.style.display = 'block'; setTimeout(() => msg.style.display = 'none', 2000); }
@@ -5999,6 +6006,8 @@ function populateBusinessInfoForm() {
   setVal('biz-invoice-number', bi.invoiceNumber);
   const typeEl = document.getElementById('biz-account-type');
   if (typeEl) typeEl.value = bi.accountType || '普通';
+  const salaryEl = document.getElementById('biz-owner-salary');
+  if (salaryEl) salaryEl.value = bi.ownerSalary || '';
 }
 
 function openInvoiceModal() {
@@ -8332,39 +8341,110 @@ function renderExpenses() {
   if (!el) return;
   const today = getLocalDateStr();
   const thisMonth = today.slice(0,7);
+  const ownerSalary = parseFloat(state.businessInfo?.ownerSalary) || 0;
+
+  // ── 当月データ ──
   const monthExpenses = state.expenses.filter(e => e.date && e.date.startsWith(thisMonth));
   const totalExp = monthExpenses.reduce((s,e) => s + (e.amount||0), 0);
   const totalRev = state.tasks
     .filter(t => t.status === 'completed' && t.completedAt && t.completedAt.startsWith(thisMonth))
     .reduce((s,t) => s + (t.amount||0), 0);
+  const grossProfit = totalRev - totalExp;           // 粗利（経費差引後）
+  const netProfit   = grossProfit - ownerSalary;    // 純利益（給与控除後）
 
-  // Category breakdown
+  // ── カテゴリ別集計 ──
   const byCategory = {};
   EXPENSE_CATEGORIES.forEach(c => byCategory[c.key] = 0);
   monthExpenses.forEach(e => { byCategory[e.category] = (byCategory[e.category]||0) + (e.amount||0); });
 
-  // Month selector
-  const months = [...new Set(state.expenses.map(e => e.date?.slice(0,7)).filter(Boolean))];
-  months.sort().reverse();
+  // ── 直近6ヶ月トレンド ──
+  const trendMonths = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+    trendMonths.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+  const trendRows = trendMonths.map(m => {
+    const rev = state.tasks
+      .filter(t => t.status === 'completed' && t.completedAt && t.completedAt.startsWith(m))
+      .reduce((s,t) => s + (t.amount||0), 0);
+    const exp = state.expenses.filter(e => e.date && e.date.startsWith(m))
+      .reduce((s,e) => s + (e.amount||0), 0);
+    const net = rev - exp - ownerSalary;
+    const label = new Date(m + '-01').toLocaleDateString('ja-JP',{month:'short'}).replace('月','月');
+    return { m, label, rev, exp, net };
+  });
+
   const currentMonthLabel = new Date().toLocaleDateString('ja-JP',{year:'numeric',month:'long'});
+  const fmt = n => (n < 0 ? '-¥' : '¥') + Math.abs(Math.round(n)).toLocaleString();
+  const profitColor = n => n >= 0 ? 'var(--success)' : 'var(--danger)';
 
   el.innerHTML = `
     ${renderAnnualTaxSupportCard()}
-    <div class="expense-summary-row">
-      <div class="expense-summary-card">
-        <div class="expense-summary-label">今月の支出</div>
-        <div class="expense-summary-value" style="color:var(--danger)">¥${totalExp.toLocaleString()}</div>
+
+    <!-- 月次 P&L サマリー -->
+    <div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:14px;padding:1.25rem;margin-bottom:1.25rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+          <span style="font-size:1.1rem;">🏢</span>
+          <span style="font-weight:700;font-size:0.95rem;">${currentMonthLabel} 事業収支</span>
+        </div>
+        ${ownerSalary === 0 ? `<button onclick="document.getElementById('biz-owner-salary')?.focus();switchTab('settings');" style="font-size:0.75rem;color:var(--text-muted);background:none;border:1px dashed var(--border-color);border-radius:6px;padding:0.25rem 0.6rem;cursor:pointer;">給与未設定 →設定へ</button>` : ''}
       </div>
-      <div class="expense-summary-card">
-        <div class="expense-summary-label">今月の売上</div>
-        <div class="expense-summary-value" style="color:var(--success)">¥${totalRev.toLocaleString()}</div>
+      <div class="expense-summary-row" style="grid-template-columns:repeat(2,1fr);gap:0.75rem;">
+        <div class="expense-summary-card">
+          <div class="expense-summary-label">売上</div>
+          <div class="expense-summary-value" style="color:var(--success);">${fmt(totalRev)}</div>
+        </div>
+        <div class="expense-summary-card">
+          <div class="expense-summary-label">経費合計</div>
+          <div class="expense-summary-value" style="color:var(--danger);">−${fmt(totalExp)}</div>
+        </div>
+        <div class="expense-summary-card">
+          <div class="expense-summary-label">自分への給与</div>
+          <div class="expense-summary-value" style="color:var(--text-muted);">−${fmt(ownerSalary)}</div>
+        </div>
+        <div class="expense-summary-card" style="border-color:${profitColor(netProfit)};">
+          <div class="expense-summary-label">事業利益（税引前）</div>
+          <div class="expense-summary-value" style="color:${profitColor(netProfit)};">${fmt(netProfit)}</div>
+        </div>
       </div>
-      <div class="expense-summary-card" style="border-color:var(--primary)">
-        <div class="expense-summary-label">実質利益（概算）</div>
-        <div class="expense-summary-value" style="color:var(--primary)">¥${(totalRev - totalExp).toLocaleString()}</div>
+      ${ownerSalary > 0 ? `
+      <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border-color);font-size:0.82rem;color:var(--text-muted);display:flex;gap:1rem;flex-wrap:wrap;">
+        <span>粗利（経費前）: <strong>${fmt(grossProfit)}</strong></span>
+        <span>給与込み支出率: <strong>${totalRev > 0 ? Math.round((totalExp + ownerSalary)/totalRev*100) : '—'}%</strong></span>
+        <span>給与月次設定: <a href="#" onclick="switchTab('settings');return false;" style="color:var(--primary);">¥${ownerSalary.toLocaleString()}</a></span>
+      </div>` : ''}
+    </div>
+
+    <!-- 直近6ヶ月トレンド -->
+    <div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:14px;padding:1.25rem;margin-bottom:1.25rem;">
+      <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.75rem;">📈 月次推移（直近6ヶ月）</div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;min-width:400px;">
+          <thead>
+            <tr style="color:var(--text-muted);border-bottom:1px solid var(--border-color);">
+              <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:600;">月</th>
+              <th style="text-align:right;padding:0.4rem 0.5rem;font-weight:600;">売上</th>
+              <th style="text-align:right;padding:0.4rem 0.5rem;font-weight:600;">経費</th>
+              <th style="text-align:right;padding:0.4rem 0.5rem;font-weight:600;">給与</th>
+              <th style="text-align:right;padding:0.4rem 0.5rem;font-weight:600;">事業利益</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${trendRows.map(r => `
+              <tr style="border-bottom:1px solid var(--border-color);${r.m === thisMonth ? 'background:var(--primary-glow);font-weight:600;' : ''}">
+                <td style="padding:0.45rem 0.5rem;">${r.label}${r.m === thisMonth ? ' ◀' : ''}</td>
+                <td style="text-align:right;padding:0.45rem 0.5rem;color:${r.rev > 0 ? 'var(--success)' : 'var(--text-muted)'};">${r.rev > 0 ? fmt(r.rev) : '—'}</td>
+                <td style="text-align:right;padding:0.45rem 0.5rem;color:${r.exp > 0 ? 'var(--danger)' : 'var(--text-muted)'};">${r.exp > 0 ? fmt(r.exp) : '—'}</td>
+                <td style="text-align:right;padding:0.45rem 0.5rem;color:var(--text-muted);">${ownerSalary > 0 ? fmt(ownerSalary) : '—'}</td>
+                <td style="text-align:right;padding:0.45rem 0.5rem;color:${profitColor(r.net)};font-weight:700;">${r.rev === 0 && r.exp === 0 ? '—' : fmt(r.net)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
       </div>
     </div>
 
+    <!-- 経費カテゴリ内訳 -->
     <div class="expense-cat-chart">
       ${EXPENSE_CATEGORIES.map(cat => {
         const amt = byCategory[cat.key]||0;
@@ -8380,7 +8460,7 @@ function renderExpenses() {
     </div>
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin:1.25rem 0 0.75rem;">
-      <h3 style="font-size:1rem;margin:0;">${currentMonthLabel} の明細</h3>
+      <h3 style="font-size:1rem;margin:0;">${currentMonthLabel} の経費明細</h3>
       <button class="btn btn-secondary" onclick="exportExpensesCSV()" style="font-size:0.8rem;padding:0.4rem 0.75rem;">📥 CSV</button>
     </div>
     <div id="expenses-list">
