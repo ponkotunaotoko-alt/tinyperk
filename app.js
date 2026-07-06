@@ -6491,13 +6491,17 @@ function renderBillingDashboard() {
         : `<span style="background:#dcfce7;color:#16a34a;font-size:0.68rem;padding:0.15rem 0.5rem;border-radius:20px;font-weight:700;">入金済み ✅</span>`;
 
       const taskRows = tasks.slice(0, 5).map(t => {
-        const icon = !t.paymentStatus ? '⬜' : t.paymentStatus === 'invoiced' ? '📤' : '✅';
         const dateStr = t.completedAt ? t.completedAt.slice(5, 10) : '';
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;font-size:0.8rem;border-bottom:1px solid var(--border-light);">
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${icon} ${escapeHTML(t.name)}</span>
-          <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;margin-left:0.5rem;">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;padding-right:0.3rem;">${escapeHTML(t.name)}</span>
+          <div style="display:flex;align-items:center;gap:0.4rem;flex-shrink:0;">
             <span style="color:var(--text-muted);font-size:0.73rem;">${dateStr}</span>
             <span style="font-weight:700;">${fmt(t.amount || 0)}</span>
+            <select onchange="setPaymentStatus('${t.id}',this.value)" style="font-size:0.7rem;padding:0.12rem 0.2rem;border-radius:5px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-primary);cursor:pointer;">
+              <option value="" ${!t.paymentStatus ? 'selected' : ''}>未請求</option>
+              <option value="invoiced" ${t.paymentStatus === 'invoiced' ? 'selected' : ''}>請求済</option>
+              <option value="paid" ${t.paymentStatus === 'paid' ? 'selected' : ''}>入金済</option>
+            </select>
           </div>
         </div>`;
       }).join('');
@@ -6530,20 +6534,68 @@ function renderBillingDashboard() {
 }
 
 function bulkSetPaymentStatus(client, status, month) {
+  // アンドゥ用に変更対象の現在ステータスを保存
+  const undoSnapshot = [];
   let updated = false;
+
   state.tasks.forEach(t => {
     if (t.status !== 'completed' || (t.amount || 0) === 0) return;
     if (t.client !== client) return;
     if (month && t.completedAt && !t.completedAt.startsWith(month)) return;
     // 前進のみ: 未請求→請求済み or 請求済み→入金済み
-    if (status === 'invoiced' && !t.paymentStatus) { t.paymentStatus = 'invoiced'; updated = true; }
-    if (status === 'paid' && t.paymentStatus === 'invoiced') { t.paymentStatus = 'paid'; updated = true; }
+    if (status === 'invoiced' && !t.paymentStatus) {
+      undoSnapshot.push({ id: t.id, prev: t.paymentStatus });
+      t.paymentStatus = 'invoiced';
+      updated = true;
+    }
+    if (status === 'paid' && t.paymentStatus === 'invoiced') {
+      undoSnapshot.push({ id: t.id, prev: t.paymentStatus });
+      t.paymentStatus = 'paid';
+      updated = true;
+    }
   });
+
   if (updated) {
+    window._billingUndoState = undoSnapshot;
     saveTasksToStorage();
     renderBillingDashboard();
     renderPaymentTracker();
+    showBillingUndoToast(undoSnapshot.length);
   }
+}
+
+function showBillingUndoToast(count) {
+  const existing = document.getElementById('billing-undo-toast');
+  if (existing) { existing.remove(); clearTimeout(window._billingUndoTimer); }
+
+  const toast = document.createElement('div');
+  toast.id = 'billing-undo-toast';
+  toast.style.cssText = 'position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--bg-card);border:1px solid var(--border-color);border-radius:12px;padding:0.6rem 1rem;display:flex;align-items:center;gap:0.75rem;font-size:0.83rem;box-shadow:0 4px 20px rgba(0,0,0,0.18);z-index:9999;white-space:nowrap;';
+  toast.innerHTML = `
+    <span>${count}件のステータスを更新しました</span>
+    <button onclick="undoBillingStatus()" style="padding:0.28rem 0.7rem;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-secondary);cursor:pointer;font-size:0.8rem;font-weight:700;">↩ 取り消し</button>
+  `;
+  document.body.appendChild(toast);
+
+  window._billingUndoTimer = setTimeout(() => {
+    toast.remove();
+    window._billingUndoState = null;
+  }, 8000);
+}
+
+function undoBillingStatus() {
+  if (!window._billingUndoState) return;
+  window._billingUndoState.forEach(({ id, prev }) => {
+    const t = state.tasks.find(t => t.id === id);
+    if (t) t.paymentStatus = prev;
+  });
+  window._billingUndoState = null;
+  clearTimeout(window._billingUndoTimer);
+  const toast = document.getElementById('billing-undo-toast');
+  if (toast) toast.remove();
+  saveTasksToStorage();
+  renderBillingDashboard();
+  renderPaymentTracker();
 }
 
 function openInvoiceModalForClient(client) {
