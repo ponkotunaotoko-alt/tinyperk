@@ -5346,16 +5346,11 @@ function resumeActiveTimerOnLoad() {
     try {
       const data = JSON.parse(activeTimerData);
       const task = state.tasks.find(t => t.id === data.taskId);
-      
       if (task) {
-        state.activeTimerTaskId = data.taskId;
-        
-        // Compute how much time elapsed while browser was closed/inactive
-        const closedTimeElapsed = Math.floor((Date.now() - data.startEpoch) / 1000);
-        state.timerStartEpoch = data.startEpoch;
-        state.timerAccumulatedSeconds = data.accumulatedSeconds;
-        
-        // Start running immediately
+        // ページリロード時はフォーカスモードを自動表示しない
+        _suppressFocusAutoOpen = true;
+        // state.activeTimerTaskId を事前にセットしないこと:
+        // startTaskTimer の先頭で「すでに動いている」判定になり早期リターンしてしまうため
         startTaskTimer(data.taskId);
       }
     } catch (e) {
@@ -9578,6 +9573,9 @@ const FOCUS_RADIO_FALLBACKS = {
               { name:'Pop Hits', url:'https://streams.ilovemusic.de/iloveradio.mp3' }]
 };
 
+// フォーカスモードをページリロード時・タイムライン経由の計測開始時に自動表示しないためのフラグ
+let _suppressFocusAutoOpen = false;
+
 let _focusState = {
   active: false,
   bgIndex: 0,
@@ -9693,7 +9691,12 @@ function loadFocusBackground(immediate) {
 
 // ---- Timer ring update ----
 function updateFocusTimer() {
-  if (!state.activeTimerTaskId) return;
+  if (!state.activeTimerTaskId || !state.timerStartEpoch) {
+    // タイマーが停止中: 表示を 00:00:00 にリセット
+    const disp = document.getElementById('focus-timer-display');
+    if (disp) disp.textContent = '00:00:00';
+    return;
+  }
   const elapsed = Math.floor((Date.now() - state.timerStartEpoch) / 1000);
   const total = (state.timerAccumulatedSeconds || 0) + elapsed;
 
@@ -9962,14 +9965,17 @@ function releaseWakeLock() {
 // ---- Hook into existing startTaskTimer / pauseTaskTimer ----
 // Use assignment (not function declaration) to avoid hoisting conflict
 const _origStartTaskTimer = startTaskTimer;
-startTaskTimer = function(taskId) {
-  _origStartTaskTimer(taskId);
-  // Small delay so timer state is fully set
-  setTimeout(() => {
-    if (state.activeTimerTaskId && !_focusState.active) {
-      openFocusMode(state.activeTimerTaskId);
-    }
-  }, 300);
+startTaskTimer = function(taskId, originDate, originHour) {
+  _origStartTaskTimer(taskId, originDate, originHour);  // 引数を正しく引き継ぐ
+  // タイムライン経由（originDate あり）やリロード復元時はフォーカスモードを自動表示しない
+  if (!_suppressFocusAutoOpen && !originDate) {
+    setTimeout(() => {
+      if (state.activeTimerTaskId && !_focusState.active) {
+        openFocusMode(state.activeTimerTaskId);
+      }
+    }, 300);
+  }
+  _suppressFocusAutoOpen = false;
 };
 
 const _origPauseTaskTimer = pauseTaskTimer;
