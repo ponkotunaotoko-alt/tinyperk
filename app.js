@@ -6202,6 +6202,9 @@ function renderInvoiceReport() {
   const selectedClient = document.getElementById('report-client-filter').value;
   const selectedMonth = document.getElementById('report-month-filter').value;
 
+  // 請求ダッシュボードは月未選択でも常に描画（全期間表示）
+  renderBillingDashboard();
+
   if (!selectedMonth) return;
 
   // Render trend chart
@@ -6396,6 +6399,169 @@ function setPaymentStatus(taskId, status) {
   task.paymentStatus = status;
   saveTasksToStorage();
   renderPaymentTracker();
+  renderBillingDashboard();
+}
+
+// ── 請求ダッシュボード ──────────────────────────────────────────────────────
+function renderBillingDashboard() {
+  const el = document.getElementById('billing-dashboard-section');
+  if (!el) return;
+
+  const selectedMonth = document.getElementById('report-month-filter')?.value || '';
+  const selectedClient = document.getElementById('report-client-filter')?.value || 'all';
+  const fmt = n => '¥' + Math.round(n).toLocaleString('ja-JP');
+
+  // 請求対象タスク（完了済み・金額あり・フィルター一致）
+  const billable = state.tasks.filter(t => {
+    if (t.status !== 'completed' || (t.amount || 0) === 0) return false;
+    if (selectedClient !== 'all' && t.client !== selectedClient) return false;
+    if (selectedMonth && t.completedAt && !t.completedAt.startsWith(selectedMonth)) return false;
+    return true;
+  });
+
+  const totalUnbilled = billable.filter(t => !t.paymentStatus).reduce((s, t) => s + (t.amount || 0), 0);
+  const totalInvoiced = billable.filter(t => t.paymentStatus === 'invoiced').reduce((s, t) => s + (t.amount || 0), 0);
+  const totalPaid = billable.filter(t => t.paymentStatus === 'paid').reduce((s, t) => s + (t.amount || 0), 0);
+
+  // クライアント別グループ化
+  const byClient = {};
+  billable.forEach(t => {
+    const c = t.client || '（未設定）';
+    if (!byClient[c]) byClient[c] = [];
+    byClient[c].push(t);
+  });
+
+  // 未請求→入金待ち→入金済み の優先順でソート
+  const clients = Object.entries(byClient).sort(([, a], [, b]) => {
+    const pri = tasks => tasks.some(t => !t.paymentStatus) ? 0 : tasks.some(t => t.paymentStatus === 'invoiced') ? 1 : 2;
+    return pri(a) - pri(b);
+  });
+
+  const monthLabel = selectedMonth
+    ? new Date(selectedMonth + '-01').toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })
+    : '全期間';
+
+  if (billable.length === 0) {
+    el.innerHTML = `
+      <div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:14px;padding:1.75rem;margin-bottom:0.75rem;text-align:center;color:var(--text-muted);">
+        <div style="font-size:1.5rem;margin-bottom:0.5rem;">💼</div>
+        <div style="font-size:0.9rem;">${monthLabel}の請求対象タスクはありません</div>
+        <div style="font-size:0.78rem;margin-top:0.25rem;">完了済み・金額設定済みのタスクが表示されます</div>
+      </div>`;
+    return;
+  }
+
+  // onclick 用クライアント名リスト（グローバル参照）
+  window._bdClients = clients.map(([c]) => c);
+
+  el.innerHTML = `
+    <div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:14px;padding:1rem 1.25rem;margin-bottom:0.75rem;">
+      <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:0.6rem;letter-spacing:0.03em;">${monthLabel} 請求サマリー</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;">
+        <div style="text-align:center;">
+          <div style="font-size:0.7rem;color:var(--text-muted);">未請求</div>
+          <div style="font-weight:800;font-size:1.05rem;color:${totalUnbilled > 0 ? '#ef4444' : 'var(--text-muted)'};">${fmt(totalUnbilled)}</div>
+        </div>
+        <div style="text-align:center;border-left:1px solid var(--border-color);border-right:1px solid var(--border-color);">
+          <div style="font-size:0.7rem;color:var(--text-muted);">請求済み</div>
+          <div style="font-weight:800;font-size:1.05rem;color:#f59e0b;">${fmt(totalInvoiced)}</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:0.7rem;color:var(--text-muted);">入金済み</div>
+          <div style="font-weight:800;font-size:1.05rem;color:#16a34a;">${fmt(totalPaid)}</div>
+        </div>
+      </div>
+    </div>
+
+    ${clients.map(([client, tasks], idx) => {
+      const unbilledTasks = tasks.filter(t => !t.paymentStatus);
+      const invoicedTasks = tasks.filter(t => t.paymentStatus === 'invoiced');
+      const paidTasks     = tasks.filter(t => t.paymentStatus === 'paid');
+      const totalAmt      = tasks.reduce((s, t) => s + (t.amount || 0), 0);
+      const unbilledAmt   = unbilledTasks.reduce((s, t) => s + (t.amount || 0), 0);
+      const invoicedAmt   = invoicedTasks.reduce((s, t) => s + (t.amount || 0), 0);
+
+      const hasUnbilled = unbilledTasks.length > 0;
+      const hasInvoiced = invoicedTasks.length > 0;
+      const borderColor = hasUnbilled ? '#ef4444' : hasInvoiced ? '#f59e0b' : '#16a34a';
+      const badge = hasUnbilled
+        ? `<span style="background:#fee2e2;color:#dc2626;font-size:0.68rem;padding:0.15rem 0.5rem;border-radius:20px;font-weight:700;">未請求あり</span>`
+        : hasInvoiced
+        ? `<span style="background:#fef3c7;color:#d97706;font-size:0.68rem;padding:0.15rem 0.5rem;border-radius:20px;font-weight:700;">入金待ち</span>`
+        : `<span style="background:#dcfce7;color:#16a34a;font-size:0.68rem;padding:0.15rem 0.5rem;border-radius:20px;font-weight:700;">入金済み ✅</span>`;
+
+      const taskRows = tasks.slice(0, 5).map(t => {
+        const icon = !t.paymentStatus ? '⬜' : t.paymentStatus === 'invoiced' ? '📤' : '✅';
+        const dateStr = t.completedAt ? t.completedAt.slice(5, 10) : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;font-size:0.8rem;border-bottom:1px solid var(--border-light);">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${icon} ${escapeHTML(t.name)}</span>
+          <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;margin-left:0.5rem;">
+            <span style="color:var(--text-muted);font-size:0.73rem;">${dateStr}</span>
+            <span style="font-weight:700;">${fmt(t.amount || 0)}</span>
+          </div>
+        </div>`;
+      }).join('');
+      const moreCount = tasks.length > 5 ? tasks.length - 5 : 0;
+
+      return `
+        <div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-left:3px solid ${borderColor};border-radius:0 12px 12px 0;padding:1rem 1.1rem;margin-bottom:0.65rem;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.65rem;gap:0.5rem;">
+            <div>
+              <div style="font-weight:700;font-size:0.95rem;margin-bottom:0.25rem;">${escapeHTML(client)}</div>
+              ${badge}
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+              <div style="font-weight:800;font-size:1.1rem;">${fmt(totalAmt)}</div>
+              <div style="font-size:0.72rem;color:var(--text-muted);">${tasks.length}件</div>
+            </div>
+          </div>
+          <div style="margin-bottom:0.75rem;">
+            ${taskRows}
+            ${moreCount > 0 ? `<div style="font-size:0.73rem;color:var(--text-muted);padding-top:0.3rem;">他 ${moreCount} 件...</div>` : ''}
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+            ${hasUnbilled ? `<button data-idx="${idx}" data-status="invoiced" data-month="${selectedMonth}" onclick="bulkSetPaymentStatus(window._bdClients[+this.dataset.idx],this.dataset.status,this.dataset.month)" class="btn btn-secondary" style="font-size:0.78rem;padding:0.4rem 0.7rem;">📤 全件請求済み（${unbilledTasks.length}件 ${fmt(unbilledAmt)}）</button>` : ''}
+            ${hasInvoiced ? `<button data-idx="${idx}" data-status="paid" data-month="${selectedMonth}" onclick="bulkSetPaymentStatus(window._bdClients[+this.dataset.idx],this.dataset.status,this.dataset.month)" class="btn btn-secondary" style="font-size:0.78rem;padding:0.4rem 0.7rem;border-color:#16a34a;color:#16a34a;">✅ 入金済み（${invoicedTasks.length}件 ${fmt(invoicedAmt)}）</button>` : ''}
+            <button data-idx="${idx}" onclick="openInvoiceModalForClient(window._bdClients[+this.dataset.idx])" class="btn btn-primary" style="font-size:0.78rem;padding:0.4rem 0.75rem;margin-left:auto;">🧾 請求書作成</button>
+          </div>
+        </div>`;
+    }).join('')}
+  `;
+}
+
+function bulkSetPaymentStatus(client, status, month) {
+  let updated = false;
+  state.tasks.forEach(t => {
+    if (t.status !== 'completed' || (t.amount || 0) === 0) return;
+    if (t.client !== client) return;
+    if (month && t.completedAt && !t.completedAt.startsWith(month)) return;
+    // 前進のみ: 未請求→請求済み or 請求済み→入金済み
+    if (status === 'invoiced' && !t.paymentStatus) { t.paymentStatus = 'invoiced'; updated = true; }
+    if (status === 'paid' && t.paymentStatus === 'invoiced') { t.paymentStatus = 'paid'; updated = true; }
+  });
+  if (updated) {
+    saveTasksToStorage();
+    renderBillingDashboard();
+    renderPaymentTracker();
+  }
+}
+
+function openInvoiceModalForClient(client) {
+  const clientFilter = document.getElementById('report-client-filter');
+  if (clientFilter && client) {
+    clientFilter.value = client;
+    renderInvoiceReport();
+  }
+  openInvoiceModal();
+}
+
+function toggleReportAnalytics() {
+  const wrap = document.getElementById('report-analytics-wrap');
+  const caret = document.getElementById('report-analytics-caret');
+  if (!wrap) return;
+  const isOpen = wrap.style.display !== 'none';
+  wrap.style.display = isOpen ? 'none' : 'block';
+  if (caret) caret.textContent = isOpen ? '▼' : '▲';
 }
 
 // ── 見積書 ──────────────────────────────────────────────────────────────────

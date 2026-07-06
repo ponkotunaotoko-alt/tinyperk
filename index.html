@@ -588,6 +588,14 @@
           </div>
         </div>
 
+        <!-- 請求ダッシュボード（JS で描画） -->
+        <div id="billing-dashboard-section"></div>
+
+        <!-- 詳細分析トグル -->
+        <button onclick="toggleReportAnalytics()" id="report-analytics-toggle" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:0.65rem 1rem;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:10px;cursor:pointer;font-size:0.82rem;color:var(--text-muted);margin:0.5rem 0 0.25rem;">
+          <span>📊 KPI・グラフ・詳細分析</span><span id="report-analytics-caret">▼</span>
+        </button>
+        <div id="report-analytics-wrap" style="display:none;">
         <div class="report-grid">
           <div class="report-card">
             <span class="report-card-title">完了タスク件数</span>
@@ -667,6 +675,8 @@
           <h3 style="margin-bottom:1.25rem;">📊 業務内容別 分析（今月）</h3>
           <div id="work-type-table"></div>
         </div>
+
+        </div><!-- /report-analytics-wrap -->
 
         <div class="calendar-wrapper" style="padding: 2rem; overflow-x: auto;">
           <h3 style="margin-bottom: 1rem;">完了タスク明細一覧</h3>
@@ -1860,7 +1870,7 @@
     window.SUPABASE_URL = "https://kygongbytcihwxhbolmo.supabase.co";
     window.SUPABASE_KEY = "sb_publishable_Z1K3kfcGItnRGC9iyyJfAQ_DogRXXkU";
   </script>
-  <script src="./app.js?v=138"></script>
+  <script src="./app.js?v=139"></script>
 
   <!-- =====================================================
        FOCUS MODE OVERLAY
