@@ -184,6 +184,7 @@ async function syncFromSupabase(userId) {
       if (Array.isArray(ex.contacts))     { state.contacts = ex.contacts; saveContacts(); }
       if (Array.isArray(ex.deals))        { state.deals = ex.deals; saveDeals(); }
       if (Array.isArray(ex.expenses))     { state.expenses = ex.expenses; saveExpenses(); }
+      if (Array.isArray(ex.fixedCosts))   { state.fixedCosts = ex.fixedCosts; saveFixedCosts(); }
       if (Array.isArray(ex.ideas))        { state.ideas = ex.ideas; saveIdeas(); }
       if (Array.isArray(ex.learningLogs)) { state.learningLogs = ex.learningLogs; saveLearningLogs(); }
       if (Array.isArray(ex.projects))     { state.projects = ex.projects; saveProjectsToStorage(); }
@@ -219,6 +220,7 @@ async function syncToSupabase() {
         contacts: state.contacts,
         deals: state.deals,
         expenses: state.expenses,
+        fixedCosts: state.fixedCosts,
         ideas: state.ideas,
         learningLogs: state.learningLogs,
         projects: state.projects,
@@ -364,6 +366,9 @@ let state = {
 
   // NEW: Expenses
   expenses: [],
+
+  // 固定費（毎月・毎年かかる必要経費）
+  fixedCosts: [],
 
   // NEW: Ideas
   ideas: [],
@@ -856,6 +861,9 @@ function loadLocalStorage() {
 
   // NEW: 経費データ
   state.expenses = _safeParseArray('expenses') || [];
+
+  // 固定費（毎月・毎年かかるもの）
+  state.fixedCosts = _safeParseArray('fixedCosts') || [];
 
   // NEW: ひらめきメモ
   state.ideas = _safeParseArray('ideas') || [];
@@ -7444,7 +7452,8 @@ function saveDeals()    { try { localStorage.setItem('deals',    JSON.stringify(
 function saveContacts() { try { localStorage.setItem('contacts', JSON.stringify(state.contacts)); } catch(e){} scheduleSyncToSupabase(); }
 function saveGoals()    { try { localStorage.setItem('goals',    JSON.stringify(state.goals));    } catch(e){} scheduleSyncToSupabase(); }
 function saveLearningLogs() { try { localStorage.setItem('learningLogs', JSON.stringify(state.learningLogs)); } catch(e){} scheduleSyncToSupabase(); }
-function saveExpenses() { try { localStorage.setItem('expenses', JSON.stringify(state.expenses)); } catch(e){} scheduleSyncToSupabase(); }
+function saveExpenses()    { try { localStorage.setItem('expenses',    JSON.stringify(state.expenses));    } catch(e){} scheduleSyncToSupabase(); }
+function saveFixedCosts() { try { localStorage.setItem('fixedCosts', JSON.stringify(state.fixedCosts)); } catch(e){} scheduleSyncToSupabase(); }
 function saveIdeas()    { try { localStorage.setItem('ideas',    JSON.stringify(state.ideas));    } catch(e){} scheduleSyncToSupabase(); }
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
@@ -8325,8 +8334,125 @@ function saveGoalSettings() {
 }
 
 // ============================================================
-// 💴 EXPENSES — 経費管理
+// 💴 EXPENSES — 経費管理 + 固定費 + 単価シミュレーター
 // ============================================================
+const FIXED_COST_CATEGORIES = [
+  { key: 'rent',        label: '家賃・事務所費',   emoji: '🏠' },
+  { key: 'software',    label: 'ソフト・SaaS',     emoji: '💻' },
+  { key: 'equipment',   label: '機材・設備',       emoji: '🖥️' },
+  { key: 'comm',        label: '通信費',           emoji: '📡' },
+  { key: 'insurance',   label: '保険・共済',       emoji: '🛡️' },
+  { key: 'other',       label: 'その他固定費',     emoji: '📦' },
+];
+
+// 固定費の月換算額（月次→そのまま、年次→÷12）
+function fixedCostMonthly(fc) {
+  return fc.frequency === 'annual' ? (fc.amount || 0) / 12 : (fc.amount || 0);
+}
+// 全固定費の月換算合計
+function totalFixedCostMonthly() {
+  return (state.fixedCosts || []).reduce((s, fc) => s + fixedCostMonthly(fc), 0);
+}
+
+// ── 固定費 CRUD ──────────────────────────────────────────────
+function openFixedCostModal(id = null) {
+  const fc = id ? state.fixedCosts.find(x => x.id === id) : null;
+  const catOptions = FIXED_COST_CATEGORIES.map(c =>
+    `<option value="${c.key}" ${(fc?.category || 'other') === c.key ? 'selected' : ''}>${c.emoji} ${c.label}</option>`
+  ).join('');
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay active';
+  overlay.id = 'fixed-cost-modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:420px;">
+      <div class="modal-header">
+        <h2 class="modal-title">${fc ? '固定費を編集' : '固定費を追加'}</h2>
+        <button class="close-btn" onclick="closeFixedCostModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="fc-edit-id" value="${fc?.id || ''}">
+        <div class="form-group">
+          <label class="form-label">名称 <span style="color:var(--danger)">*</span></label>
+          <input type="text" id="fc-name" class="form-control" placeholder="例: 自宅兼事務所 家賃" value="${escHtml(fc?.name || '')}">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+          <div class="form-group">
+            <label class="form-label">金額（円）<span style="color:var(--danger)">*</span></label>
+            <input type="number" id="fc-amount" class="form-control" placeholder="0" min="0" value="${fc?.amount || ''}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">頻度</label>
+            <select id="fc-frequency" class="form-control">
+              <option value="monthly" ${(fc?.frequency || 'monthly') === 'monthly' ? 'selected' : ''}>毎月</option>
+              <option value="annual"  ${fc?.frequency === 'annual'  ? 'selected' : ''}>毎年</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">カテゴリ</label>
+          <select id="fc-category" class="form-control">${catOptions}</select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">メモ</label>
+          <input type="text" id="fc-memo" class="form-control" placeholder="備考" value="${escHtml(fc?.memo || '')}">
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content:space-between;">
+        ${fc ? `<button class="btn btn-danger" onclick="deleteFixedCost('${fc.id}')">削除</button>` : '<div></div>'}
+        <div style="display:flex;gap:0.75rem;">
+          <button class="btn btn-secondary" onclick="closeFixedCostModal()">キャンセル</button>
+          <button class="btn btn-primary" onclick="saveFixedCostItem()">保存</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  state._scrollY = window.scrollY;
+  document.body.style.top = `-${state._scrollY}px`;
+  document.body.classList.add('modal-open');
+  setTimeout(() => document.getElementById('fc-name')?.focus(), 100);
+}
+function closeFixedCostModal() {
+  const el = document.getElementById('fixed-cost-modal-overlay');
+  if (el) el.remove();
+  const sy = state._scrollY || 0;
+  document.body.classList.remove('modal-open');
+  document.body.style.top = '';
+  window.scrollTo(0, sy);
+}
+function saveFixedCostItem() {
+  const name = document.getElementById('fc-name')?.value.trim();
+  const amount = parseFloat(document.getElementById('fc-amount')?.value);
+  if (!name || !amount || amount <= 0) {
+    showToastError('名称と金額は必須です');
+    return;
+  }
+  const id = document.getElementById('fc-edit-id')?.value;
+  const item = {
+    id: id || genId(),
+    name,
+    amount,
+    frequency: document.getElementById('fc-frequency')?.value || 'monthly',
+    category:  document.getElementById('fc-category')?.value  || 'other',
+    memo:      document.getElementById('fc-memo')?.value.trim() || ''
+  };
+  if (id) {
+    const idx = state.fixedCosts.findIndex(x => x.id === id);
+    if (idx >= 0) state.fixedCosts[idx] = item; else state.fixedCosts.push(item);
+  } else {
+    state.fixedCosts.push(item);
+  }
+  saveFixedCosts();
+  closeFixedCostModal();
+  renderExpenses();
+}
+function deleteFixedCost(id) {
+  if (!confirm('この固定費を削除しますか？')) return;
+  state.fixedCosts = state.fixedCosts.filter(x => x.id !== id);
+  saveFixedCosts();
+  closeFixedCostModal();
+  renderExpenses();
+}
+
 const EXPENSE_CATEGORIES = [
   { key: 'transport',    label: '交通費',     emoji: '🚃', color: '#0ea5e9' },
   { key: 'equipment',    label: '機材・消耗品', emoji: '🖥️', color: '#7c6af5' },
@@ -8349,8 +8475,9 @@ function renderExpenses() {
   const totalRev = state.tasks
     .filter(t => t.status === 'completed' && t.completedAt && t.completedAt.startsWith(thisMonth))
     .reduce((s,t) => s + (t.amount||0), 0);
-  const grossProfit = totalRev - totalExp;           // 粗利（経費差引後）
-  const netProfit   = grossProfit - ownerSalary;    // 純利益（給与控除後）
+  const totalFixedMonthly = totalFixedCostMonthly();
+  const grossProfit = totalRev - totalExp;           // 粗利（変動経費差引後）
+  const netProfit   = grossProfit - totalFixedMonthly - ownerSalary;  // 純利益（固定費・給与控除後）
 
   // ── カテゴリ別集計 ──
   const byCategory = {};
@@ -8369,7 +8496,7 @@ function renderExpenses() {
       .reduce((s,t) => s + (t.amount||0), 0);
     const exp = state.expenses.filter(e => e.date && e.date.startsWith(m))
       .reduce((s,e) => s + (e.amount||0), 0);
-    const net = rev - exp - ownerSalary;
+    const net = rev - exp - totalFixedMonthly - ownerSalary;
     const label = new Date(m + '-01').toLocaleDateString('ja-JP',{month:'short'}).replace('月','月');
     return { m, label, rev, exp, net };
   });
@@ -8396,24 +8523,192 @@ function renderExpenses() {
           <div class="expense-summary-value" style="color:var(--success);">${fmt(totalRev)}</div>
         </div>
         <div class="expense-summary-card">
-          <div class="expense-summary-label">経費合計</div>
+          <div class="expense-summary-label">変動経費</div>
           <div class="expense-summary-value" style="color:var(--danger);">−${fmt(totalExp)}</div>
+        </div>
+        <div class="expense-summary-card">
+          <div class="expense-summary-label">固定費（月換算）</div>
+          <div class="expense-summary-value" style="color:var(--danger);">−${fmt(totalFixedMonthly)}</div>
         </div>
         <div class="expense-summary-card">
           <div class="expense-summary-label">自分への給与</div>
           <div class="expense-summary-value" style="color:var(--text-muted);">−${fmt(ownerSalary)}</div>
         </div>
-        <div class="expense-summary-card" style="border-color:${profitColor(netProfit)};">
+        <div class="expense-summary-card" style="grid-column:span 2;border-color:${profitColor(netProfit)};">
           <div class="expense-summary-label">事業利益（税引前）</div>
           <div class="expense-summary-value" style="color:${profitColor(netProfit)};">${fmt(netProfit)}</div>
         </div>
       </div>
-      ${ownerSalary > 0 ? `
       <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border-color);font-size:0.82rem;color:var(--text-muted);display:flex;gap:1rem;flex-wrap:wrap;">
-        <span>粗利（経費前）: <strong>${fmt(grossProfit)}</strong></span>
-        <span>給与込み支出率: <strong>${totalRev > 0 ? Math.round((totalExp + ownerSalary)/totalRev*100) : '—'}%</strong></span>
-        <span>給与月次設定: <a href="#" onclick="switchTab('settings');return false;" style="color:var(--primary);">¥${ownerSalary.toLocaleString()}</a></span>
-      </div>` : ''}
+        <span>粗利（変動経費後）: <strong>${fmt(grossProfit)}</strong></span>
+        <span>支出率（全費用）: <strong>${totalRev > 0 ? Math.round((totalExp + totalFixedMonthly + ownerSalary)/totalRev*100) : '—'}%</strong></span>
+        ${ownerSalary === 0 ? `<a href="#" onclick="switchTab('settings');return false;" style="color:var(--primary);font-size:0.8rem;">給与を設定する →</a>` : `<span>給与設定: <a href="#" onclick="switchTab('settings');return false;" style="color:var(--primary);">¥${ownerSalary.toLocaleString()}</a></span>`}
+      </div>
+    </div>
+
+    <!-- 固定費パネル -->
+    <div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:14px;padding:1.25rem;margin-bottom:1.25rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+        <div style="font-weight:700;font-size:0.9rem;">🏗️ 固定費（毎月・毎年かかるもの）</div>
+        <button class="btn btn-secondary" onclick="openFixedCostModal()" style="font-size:0.8rem;padding:0.35rem 0.7rem;">＋ 追加</button>
+      </div>
+      ${state.fixedCosts.length === 0 ? `
+        <div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:1rem 0;">
+          家賃・ソフト代・機材代などを登録して、月の固定費を把握しましょう
+        </div>` : (() => {
+          const rows = state.fixedCosts.map(fc => {
+            const cat = FIXED_COST_CATEGORIES.find(c => c.key === fc.category) || FIXED_COST_CATEGORIES.at(-1);
+            const monthly = fixedCostMonthly(fc);
+            return `<div onclick="openFixedCostModal('${fc.id}')" style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.4rem;border-bottom:1px solid var(--border-color);cursor:pointer;">
+              <span style="font-size:1.1rem;">${cat.emoji}</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:0.88rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(fc.name||cat.label)}</div>
+                <div style="font-size:0.78rem;color:var(--text-muted);">${cat.label}・${fc.frequency === 'annual' ? '年払い → 月換算' : '月払い'}</div>
+              </div>
+              <div style="text-align:right;white-space:nowrap;">
+                <div style="font-size:0.88rem;font-weight:600;">${fmt(monthly)}<span style="font-size:0.75rem;font-weight:400;color:var(--text-muted);">/月</span></div>
+                ${fc.frequency === 'annual' ? `<div style="font-size:0.75rem;color:var(--text-muted);">年計: ${fmt(fc.amount)}</div>` : ''}
+              </div>
+            </div>`;
+          }).join('');
+          return `<div>${rows}
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:0.65rem 0.4rem 0;font-size:0.88rem;font-weight:700;">
+              <span>月次固定費合計</span>
+              <span style="color:var(--danger);">${fmt(totalFixedMonthly)}</span>
+            </div></div>`;
+        })()}
+    </div>
+
+    <!-- 単価シミュレーター -->
+    <div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:14px;padding:1.25rem;margin-bottom:1.25rem;">
+      <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.35rem;">🧮 単価シミュレーター</div>
+      <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:1rem;">月にかかるすべてのコストを賄うために必要な最低時間単価を計算します</div>
+      ${(() => {
+        const ws = state.workSettings || {};
+        const workDays = Array.isArray(ws.workDays) ? ws.workDays : [1,2,3,4,5];
+        const startH = parseFloat(ws.startHour || 9);
+        const endH = parseFloat(ws.endHour || 18);
+        const defaultHours = Math.round(workDays.length * (endH - startH) * 4.33);
+        const savedHours = parseInt(localStorage.getItem('rateSimHours') || defaultHours);
+        const avg3MonthExp = (() => {
+          const now = new Date(); let total = 0;
+          for (let i = 1; i <= 3; i++) {
+            const d = new Date(now); d.setDate(1); d.setMonth(d.getMonth() - i);
+            const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+            total += state.expenses.filter(e => e.date && e.date.startsWith(key)).reduce((s,e) => s + (e.amount||0), 0);
+          }
+          return Math.round(total / 3);
+        })();
+        const totalMonthlyCost = totalFixedMonthly + avg3MonthExp + ownerSalary;
+        const requiredRate = savedHours > 0 ? Math.ceil(totalMonthlyCost / savedHours) : 0;
+        return `
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.6rem;margin-bottom:1rem;">
+          <div style="background:var(--bg-primary);border-radius:10px;padding:0.7rem 0.9rem;">
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.2rem;">固定費（月換算）</div>
+            <div style="font-weight:700;font-size:0.95rem;">${fmt(totalFixedMonthly)}</div>
+          </div>
+          <div style="background:var(--bg-primary);border-radius:10px;padding:0.7rem 0.9rem;">
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.2rem;">変動経費（直近3ヶ月平均）</div>
+            <div style="font-weight:700;font-size:0.95rem;">${fmt(avg3MonthExp)}</div>
+          </div>
+          <div style="background:var(--bg-primary);border-radius:10px;padding:0.7rem 0.9rem;">
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.2rem;">自分への給与</div>
+            <div style="font-weight:700;font-size:0.95rem;">${fmt(ownerSalary)}</div>
+          </div>
+          <div style="background:var(--bg-primary);border-radius:10px;padding:0.7rem 0.9rem;border:1px solid var(--primary);">
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.2rem;">月の総コスト</div>
+            <div style="font-weight:700;font-size:0.95rem;color:var(--primary);">${fmt(totalMonthlyCost)}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
+          <label style="font-size:0.85rem;font-weight:600;white-space:nowrap;">月の稼働時間</label>
+          <input type="number" id="rate-sim-hours" value="${savedHours}" min="1" max="400" step="1"
+            style="width:90px;padding:0.4rem 0.6rem;font-size:0.95rem;font-weight:700;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary);text-align:center;"
+            oninput="localStorage.setItem('rateSimHours',this.value||'${defaultHours}');renderExpenses();">
+          <span style="font-size:0.82rem;color:var(--text-muted);">h（稼働日 ${workDays.length}日 × ${endH-startH}h × 4.33週 = 約${defaultHours}h）</span>
+        </div>
+        <div style="background:var(--primary-glow);border:1.5px solid var(--primary);border-radius:12px;padding:1rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <div>
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem;">必要最低時間単価</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);">${fmt(totalMonthlyCost)} ÷ ${savedHours}h</div>
+          </div>
+          <div style="font-size:1.75rem;font-weight:900;color:var(--primary);white-space:nowrap;">${requiredRate > 0 ? fmt(requiredRate) + '/h' : '—'}</div>
+        </div>`;
+      })()}
+    </div>
+
+    <!-- 経営診断 -->
+    <div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:14px;padding:1.25rem;margin-bottom:1.25rem;">
+      <div style="font-weight:700;font-size:0.9rem;margin-bottom:0.75rem;">📊 経営診断</div>
+      ${(() => {
+        // KPI計算
+        const now2 = new Date(); let expTotal3 = 0;
+        for (let i = 1; i <= 3; i++) {
+          const d = new Date(now2); d.setDate(1); d.setMonth(d.getMonth() - i);
+          const k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+          expTotal3 += state.expenses.filter(e => e.date && e.date.startsWith(k)).reduce((s,e) => s + (e.amount||0), 0);
+        }
+        const avg3exp = Math.round(expTotal3 / 3);
+        const breakevenMon = totalFixedMonthly + ownerSalary + avg3exp;
+        const profitPct = totalRev > 0 ? Math.round(netProfit / totalRev * 100) : null;
+        const varExpPct = totalRev > 0 ? Math.round(totalExp / totalRev * 100) : null;
+        const ws3 = state.workSettings || {};
+        const wdays3 = Array.isArray(ws3.workDays) ? ws3.workDays : [1,2,3,4,5];
+        const defH3 = Math.round(wdays3.length * (parseFloat(ws3.endHour||18) - parseFloat(ws3.startHour||9)) * 4.33);
+        const simH3 = parseInt(localStorage.getItem('rateSimHours') || defH3);
+        const reqRate3 = breakevenMon > 0 && simH3 > 0 ? Math.ceil(breakevenMon / simH3) : 0;
+        const recRate3 = Math.ceil(reqRate3 * 1.25);
+        const profitColor3 = profitPct === null ? 'var(--text-muted)' : profitPct >= 15 ? 'var(--success)' : profitPct >= 0 ? '#f59e0b' : 'var(--danger)';
+        const varColor3 = varExpPct === null ? 'var(--text-muted)' : varExpPct > 20 ? '#f59e0b' : 'var(--success)';
+
+        // アドバイス生成
+        const advice = [];
+        if (ownerSalary === 0)
+          advice.push({ color: '#f59e0b', icon: '⚠️', text: '給与が未設定です。設定タブで月次給与を入力すると、正確な事業利益と必要単価が計算できます。' });
+        if (state.fixedCosts.length === 0)
+          advice.push({ color: 'var(--primary)', icon: '💡', text: '固定費が未登録です。家賃・ソフト代・機材代を登録すると損益分岐点の精度が上がります。' });
+        if (totalRev === 0) {
+          advice.push({ color: 'var(--text-muted)', icon: '📝', text: 'タスクを完了させると今月の収支が集計されます。' });
+        } else if (profitPct < 0) {
+          advice.push({ color: 'var(--danger)', icon: '🔴', text: `今月は赤字（利益率 ${profitPct}%）です。損益分岐点の売上 ${fmt(breakevenMon)}/月 を確保することが急務です。単価引き上げか固定費削減を検討してください。` });
+        } else if (profitPct < 15) {
+          advice.push({ color: '#f59e0b', icon: '🟡', text: `利益率 ${profitPct}% は低めです。税金・社会保険（売上の約15〜25%）を差し引くと実質的な余裕が少ない状態です。単価の見直しを検討しましょう。` });
+        } else if (profitPct >= 30) {
+          advice.push({ color: 'var(--success)', icon: '🟢', text: `利益率 ${profitPct}% は健全です。給与引き上げや設備投資を検討できる状態です。` });
+        } else {
+          advice.push({ color: 'var(--success)', icon: '🟢', text: `利益率 ${profitPct}% は安定圏です。税負担分を意識しながら維持を目指しましょう。` });
+        }
+        if (varExpPct !== null && varExpPct > 20)
+          advice.push({ color: '#f59e0b', icon: '📉', text: `変動経費率 ${varExpPct}%（売上の${varExpPct}%が経費）は高めです。外注・ツールコストを見直しましょう。` });
+        if (recRate3 > 0)
+          advice.push({ color: 'var(--primary)', icon: '💰', text: `推奨最低単価は ${fmt(recRate3)}/h（必要単価 ${fmt(reqRate3)}/h × 安全係数 1.25）。値下げ交渉ではこれを下限ラインにしてください。` });
+
+        return `
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.6rem;margin-bottom:1rem;">
+          <div style="background:var(--bg-primary);border-radius:10px;padding:0.7rem 0.9rem;">
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">今月の利益率</div>
+            <div style="font-weight:800;font-size:1.2rem;color:${profitColor3};">${profitPct === null ? '—' : profitPct + '%'}</div>
+          </div>
+          <div style="background:var(--bg-primary);border-radius:10px;padding:0.7rem 0.9rem;">
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">損益分岐点売上（月）</div>
+            <div style="font-weight:700;font-size:0.95rem;">${fmt(breakevenMon)}</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);">固定費＋変動経費(3M平均)＋給与</div>
+          </div>
+          <div style="background:var(--bg-primary);border-radius:10px;padding:0.7rem 0.9rem;">
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">変動経費率</div>
+            <div style="font-weight:800;font-size:1.2rem;color:${varColor3};">${varExpPct === null ? '—' : varExpPct + '%'}</div>
+          </div>
+          <div style="background:var(--bg-primary);border-radius:10px;padding:0.7rem 0.9rem;">
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">推奨最低単価（×1.25）</div>
+            <div style="font-weight:700;font-size:0.95rem;color:var(--primary);">${recRate3 > 0 ? fmt(recRate3) + '/h' : '—'}</div>
+          </div>
+        </div>
+        ${advice.map(a => `
+        <div style="display:flex;gap:0.65rem;align-items:flex-start;padding:0.7rem 0.9rem;background:var(--bg-primary);border-left:3px solid ${a.color};border-radius:0 8px 8px 0;margin-bottom:0.5rem;font-size:0.84rem;line-height:1.55;">
+          <span style="flex-shrink:0;margin-top:0.05rem;">${a.icon}</span>
+          <span>${a.text}</span>
+        </div>`).join('')}`;
+      })()}
     </div>
 
     <!-- 直近6ヶ月トレンド -->
@@ -8425,7 +8720,8 @@ function renderExpenses() {
             <tr style="color:var(--text-muted);border-bottom:1px solid var(--border-color);">
               <th style="text-align:left;padding:0.4rem 0.5rem;font-weight:600;">月</th>
               <th style="text-align:right;padding:0.4rem 0.5rem;font-weight:600;">売上</th>
-              <th style="text-align:right;padding:0.4rem 0.5rem;font-weight:600;">経費</th>
+              <th style="text-align:right;padding:0.4rem 0.5rem;font-weight:600;">変動経費</th>
+              <th style="text-align:right;padding:0.4rem 0.5rem;font-weight:600;">固定費</th>
               <th style="text-align:right;padding:0.4rem 0.5rem;font-weight:600;">給与</th>
               <th style="text-align:right;padding:0.4rem 0.5rem;font-weight:600;">事業利益</th>
             </tr>
@@ -8436,6 +8732,7 @@ function renderExpenses() {
                 <td style="padding:0.45rem 0.5rem;">${r.label}${r.m === thisMonth ? ' ◀' : ''}</td>
                 <td style="text-align:right;padding:0.45rem 0.5rem;color:${r.rev > 0 ? 'var(--success)' : 'var(--text-muted)'};">${r.rev > 0 ? fmt(r.rev) : '—'}</td>
                 <td style="text-align:right;padding:0.45rem 0.5rem;color:${r.exp > 0 ? 'var(--danger)' : 'var(--text-muted)'};">${r.exp > 0 ? fmt(r.exp) : '—'}</td>
+                <td style="text-align:right;padding:0.45rem 0.5rem;color:${totalFixedMonthly > 0 ? 'var(--danger)' : 'var(--text-muted)'};">${totalFixedMonthly > 0 ? fmt(totalFixedMonthly) : '—'}</td>
                 <td style="text-align:right;padding:0.45rem 0.5rem;color:var(--text-muted);">${ownerSalary > 0 ? fmt(ownerSalary) : '—'}</td>
                 <td style="text-align:right;padding:0.45rem 0.5rem;color:${profitColor(r.net)};font-weight:700;">${r.rev === 0 && r.exp === 0 ? '—' : fmt(r.net)}</td>
               </tr>`).join('')}
