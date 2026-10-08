@@ -6455,6 +6455,223 @@ function renderInvoicePreview(selectedMonth, selectedClient) {
   `;
 }
 
+
+// ===== チーム向け実績レポート（総務・経理・ディレクターが読む用） =====
+function _trRange(kind) {
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const dow = (now.getDay() + 6) % 7; // 月曜=0
+  let a, b;
+  if (kind === 'thisweek') { a = new Date(now); a.setDate(a.getDate() - dow); b = new Date(a); b.setDate(b.getDate() + 6); }
+  else if (kind === 'lastweek') { a = new Date(now); a.setDate(a.getDate() - dow - 7); b = new Date(a); b.setDate(b.getDate() + 6); }
+  else if (kind === 'lastmonth') { a = new Date(now.getFullYear(), now.getMonth() - 1, 1); b = new Date(now.getFullYear(), now.getMonth(), 0); }
+  else if (kind === 'last30') { b = new Date(now); a = new Date(now); a.setDate(a.getDate() - 29); }
+  else { a = new Date(now.getFullYear(), now.getMonth(), 1); b = new Date(now.getFullYear(), now.getMonth() + 1, 0); } // thismonth
+  return { from: toLocalDateStr(a), to: toLocalDateStr(b) };
+}
+function buildTeamReportData(kind) {
+  const { from, to } = _trRange(kind);
+  const taskById = new Map(state.tasks.map(t => [String(t.id), t]));
+  const rows = []; // {date, task, client, hours}
+  Object.keys(state.journalEntries || {}).sort().forEach(date => {
+    if (date < from || date > to) return;
+    const tl = (state.journalEntries[date] && state.journalEntries[date].timeline) || {};
+    const agg = new Map();
+    Object.keys(tl).forEach(h => {
+      const slot = tl[h];
+      if (!slot || slot.taskId == null) return;
+      const hrs = (slot.actualHours !== '' && slot.actualHours != null) ? Number(slot.actualHours) : 0;
+      if (!(hrs > 0)) return;
+      const k = String(slot.taskId);
+      agg.set(k, (agg.get(k) || 0) + hrs);
+    });
+    agg.forEach((hrs, k) => {
+      const t = taskById.get(k);
+      rows.push({ date, task: t ? t.name : '(削除された案件)', client: t ? (t.client || '') : '', hours: Math.round(hrs * 10) / 10 });
+    });
+  });
+  const cards = (state.timecards || []).filter(c => c.date >= from && c.date <= to).sort((x, y) => x.date < y.date ? -1 : 1);
+  const done = state.tasks.filter(t => t.completedAt && t.completedAt >= from && t.completedAt <= to);
+  const open = state.tasks.filter(t => t.status !== 'completed');
+  return { from, to, rows, cards, done, open };
+}
+function buildTeamReportMarkdown(kind, labelText) {
+  const d = buildTeamReportData(kind);
+  const sum = d.rows.reduce((a, r) => a + r.hours, 0);
+  const byTask = new Map();
+  d.rows.forEach(r => { const k = r.client + '｜' + r.task; byTask.set(k, (byTask.get(k) || 0) + r.hours); });
+  const cardHours = d.cards.reduce((a, c) => a + (Number(c.totalHours) || 0), 0);
+  const L = [];
+  L.push('# TINYPERK 実績レポート（' + labelText + '）');
+  L.push('期間：' + d.from + ' 〜 ' + d.to + '　／　作成：' + getLocalDateStr());
+  L.push('');
+  L.push('## サマリー');
+  L.push('- 日誌に記録した作業時間：**' + (Math.round(sum * 10) / 10) + ' 時間**（' + byTask.size + ' 案件）');
+  L.push('- タイムカードの稼働：' + d.cards.length + ' 日／' + (Math.round(cardHours * 10) / 10) + ' 時間');
+  L.push('- 期間内に完了した案件：' + d.done.length + ' 件');
+  L.push('- 未完了の案件：' + d.open.length + ' 件');
+  L.push('');
+  L.push('## 案件別の作業時間');
+  if (byTask.size === 0) L.push('（この期間の記録なし）');
+  else {
+    L.push('| クライアント｜案件 | 時間(h) |', '|---|---|');
+    [...byTask.entries()].sort((a, b) => b[1] - a[1]).forEach(([k, v]) => L.push('| ' + k.replace(/\|/g, '/').replace('／', '/') + ' | ' + (Math.round(v * 10) / 10) + ' |'));
+  }
+  L.push('');
+  L.push('## 日ごとの内訳');
+  if (d.rows.length === 0) L.push('（この期間の記録なし）');
+  else {
+    L.push('| 日付 | クライアント | 案件 | 時間(h) |', '|---|---|---|---|');
+    d.rows.forEach(r => L.push('| ' + r.date + ' | ' + (r.client || '') + ' | ' + r.task.replace(/\|/g, '/') + ' | ' + r.hours + ' |'));
+  }
+  L.push('');
+  L.push('## 期間内に完了した案件');
+  if (d.done.length === 0) L.push('（なし）');
+  else d.done.forEach(t => L.push('- ' + t.completedAt + '　' + (t.client || '') + '｜' + t.name + (t.amount ? '（' + Number(t.amount).toLocaleString() + '円）' : '')));
+  L.push('');
+  L.push('## 未完了の案件（期日順）');
+  if (d.open.length === 0) L.push('（なし）');
+  else d.open.slice().sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999'))).forEach(t =>
+    L.push('- 期日 ' + (t.dueDate || '未設定') + '　' + (t.client || '') + '｜' + t.name + '　[' + statusToJapanese(t.status) + ']　累計計測 ' + (t.spentSeconds ? (Math.round(t.spentSeconds / 360) / 10) + 'h' : '0h')));
+  L.push('');
+  L.push('## タイムカード');
+  if (d.cards.length === 0) L.push('（この期間の記録なし）');
+  else {
+    L.push('| 日付 | 出勤 | 退勤 | 稼働(h) |', '|---|---|---|---|');
+    d.cards.forEach(c => L.push('| ' + c.date + ' | ' + (c.clockIn || '') + ' | ' + (c.clockOut || '') + ' | ' + (Math.round((Number(c.totalHours) || 0) * 10) / 10) + ' |'));
+  }
+  const noLog = d.cards.filter(c => !d.rows.some(r => r.date === c.date)).map(c => c.date);
+  if (noLog.length) { L.push(''); L.push('## ⚠️ 打刻はあるが、日誌に作業時間がない日'); L.push(noLog.join('、')); }
+  return L.join('\n');
+}
+function buildTeamReportCsv(kind) {
+  const d = buildTeamReportData(kind);
+  const rows = [['日付', '案件', 'クライアント', '作業時間(h)']];
+  d.rows.forEach(r => rows.push([r.date, r.task, r.client, r.hours]));
+  return '﻿' + rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
+}
+function _trDownload(text, name, mime) {
+  const blob = new Blob([text], { type: mime + ';charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function openTeamReport() {
+  if (document.getElementById('team-report-overlay')) return;
+  const labels = { thisweek: '今週', lastweek: '先週', thismonth: '今月', lastmonth: '先月', last30: '直近30日' };
+  const o = document.createElement('div');
+  o.id = 'team-report-overlay';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:100002;display:flex;align-items:center;justify-content:center;';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;color:#37352f;border-radius:16px;padding:1.2rem;width:94vw;max-width:640px;max-height:90vh;display:flex;flex-direction:column;gap:.6rem;box-shadow:0 8px 40px rgba(0,0,0,.3);';
+  box.innerHTML = '<h2 style="font-size:1.1rem;margin:0;">📋 チーム向け実績レポート</h2>' +
+    '<p style="font-size:.8rem;margin:0;color:#6b6a67;">保存したファイルを、Vaultの「TINY PERK/実績」フォルダに置くと、総務・ロス・モニカが読めます。</p>';
+  const sel = document.createElement('select');
+  sel.style.cssText = 'padding:.6rem;border-radius:8px;border:1px solid #ddd;font-size:1rem;';
+  Object.keys(labels).forEach(k => { const op = document.createElement('option'); op.value = k; op.textContent = labels[k]; sel.appendChild(op); });
+  sel.value = 'thisweek';
+  const ta = document.createElement('textarea');
+  ta.readOnly = true;
+  ta.style.cssText = 'flex:1;min-height:200px;font-size:.78rem;line-height:1.5;padding:.6rem;border:1px solid #ddd;border-radius:8px;font-family:ui-monospace,Menlo,monospace;';
+  const refresh = () => { ta.value = buildTeamReportMarkdown(sel.value, labels[sel.value]); };
+  sel.onchange = refresh; refresh();
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:.5rem;flex-wrap:wrap;';
+  const mk = (txt, bg, color, fn) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = txt; b.style.cssText = 'flex:1;min-width:120px;min-height:44px;border:0;border-radius:10px;font-weight:700;background:' + bg + ';color:' + color + ';'; b.onclick = fn; row.appendChild(b); };
+  mk('ファイルで保存', '#2f7d4f', '#fff', () => _trDownload(ta.value, 'TINYPERK実績_' + getLocalDateStr() + '_' + labels[sel.value] + '.md', 'text/markdown'));
+  mk('コピー', '#37352f', '#fff', async () => { try { await navigator.clipboard.writeText(ta.value); showToastSuccess('コピーしました'); } catch (e) { ta.select(); showToastInfo('選択しました。コピーしてください'); } });
+  mk('シート用CSV', '#eee', '#37352f', () => _trDownload(buildTeamReportCsv(sel.value), 'TINYPERK作業ログ_' + getLocalDateStr() + '_' + labels[sel.value] + '.csv', 'text/csv'));
+  mk('閉じる', '#eee', '#37352f', () => o.remove());
+  box.appendChild(sel); box.appendChild(ta); box.appendChild(row);
+  o.appendChild(box);
+  o.addEventListener('click', e => { if (e.target === o) o.remove(); });
+  document.body.appendChild(o);
+}
+
+
+// ===== 案件の一括取り込み（ファイルから登録＋指定日までの未完了を完了に） =====
+function openBulkImport() {
+  if (document.getElementById('bulk-import-overlay')) return;
+  const o = document.createElement('div');
+  o.id = 'bulk-import-overlay';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:100002;display:flex;align-items:center;justify-content:center;';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;color:#37352f;border-radius:16px;padding:1.2rem;width:94vw;max-width:640px;max-height:90vh;overflow:auto;display:flex;flex-direction:column;gap:.7rem;box-shadow:0 8px 40px rgba(0,0,0,.3);';
+  box.innerHTML = '<h2 style="font-size:1.1rem;margin:0;">📥 案件の一括取り込み</h2>' +
+    '<p style="font-size:.8rem;margin:0;color:#6b6a67;">実行前に、いまのタスクをこの端末に控えとして保存します。同じ名前・期日・クライアントの案件は二重に登録しません。</p>';
+  const sec1 = document.createElement('div');
+  const lbl = document.createElement('label'); lbl.style.cssText = 'font-size:.9rem;font-weight:700;display:block;margin-bottom:.3rem;'; lbl.textContent = '① この日までの未完了を「完了」にする';
+  const cut = document.createElement('input'); cut.type = 'date'; cut.value = '2026-09-30'; cut.style.cssText = 'padding:.5rem;border:1px solid #ddd;border-radius:8px;font-size:1rem;';
+  const cbox = document.createElement('label'); cbox.style.cssText = 'display:flex;gap:.5rem;align-items:center;font-size:.9rem;margin-top:.4rem;';
+  const chk = document.createElement('input'); chk.type = 'checkbox'; chk.checked = true; chk.style.cssText = 'width:20px;height:20px;';
+  const chkTxt = document.createElement('span'); cbox.appendChild(chk); cbox.appendChild(chkTxt);
+  const list1 = document.createElement('div'); list1.style.cssText = 'font-size:.78rem;color:#6b6a67;max-height:120px;overflow:auto;margin-top:.3rem;line-height:1.5;';
+  sec1.appendChild(lbl); sec1.appendChild(cut); sec1.appendChild(cbox); sec1.appendChild(list1);
+  const sec2 = document.createElement('div');
+  const lbl2 = document.createElement('label'); lbl2.style.cssText = 'font-size:.9rem;font-weight:700;display:block;margin-bottom:.3rem;'; lbl2.textContent = '② 案件ファイル（.json）から新しく登録する';
+  const file = document.createElement('input'); file.type = 'file'; file.accept = '.json,application/json'; file.style.cssText = 'font-size:.9rem;';
+  const info2 = document.createElement('div'); info2.style.cssText = 'font-size:.8rem;margin-top:.3rem;';
+  const list2 = document.createElement('div'); list2.style.cssText = 'font-size:.78rem;color:#6b6a67;max-height:160px;overflow:auto;margin-top:.3rem;line-height:1.5;';
+  sec2.appendChild(lbl2); sec2.appendChild(file); sec2.appendChild(info2); sec2.appendChild(list2);
+  let toAdd = [];
+  const key = t => [String(t.name || '').trim(), String(t.dueDate || ''), String(t.client || '').trim()].join('\u0001');
+  const refresh1 = () => {
+    const open = state.tasks.filter(t => t.status !== 'completed' && t.dueDate && t.dueDate <= cut.value);
+    chkTxt.textContent = '対象 ' + open.length + ' 件を完了にする（完了日は期日）';
+    list1.innerHTML = open.map(t => escapeHTML((t.dueDate || '') + '　' + (t.client || '') + '｜' + (t.name || ''))).join('<br>') || '（対象なし）';
+  };
+  cut.onchange = refresh1; refresh1();
+  file.onchange = () => {
+    const f = file.files && file.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const arr = JSON.parse(String(r.result).replace(/^﻿/, ''));
+        if (!Array.isArray(arr)) throw new Error('配列ではありません');
+        const have = new Set(state.tasks.map(key));
+        const ok = arr.filter(t => t && t.name && t.dueDate);
+        toAdd = ok.filter(t => !have.has(key(t)));
+        const skip = ok.length - toAdd.length;
+        info2.textContent = '新規 ' + toAdd.length + ' 件／すでにある ' + skip + ' 件（スキップ）' + (arr.length - ok.length ? '／不正 ' + (arr.length - ok.length) + ' 件' : '');
+        list2.innerHTML = toAdd.map(t => escapeHTML((t.dueDate || '') + '　[' + statusToJapanese(t.status || 'not-started') + ']　' + (t.client || '') + '｜' + t.name + (t.amount ? '（' + Number(t.amount).toLocaleString() + '円）' : ''))).join('<br>');
+      } catch (e) { toAdd = []; info2.textContent = 'ファイルを読めませんでした：' + e.message; list2.textContent = ''; }
+    };
+    r.readAsText(f, 'utf-8');
+  };
+  const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:.5rem;flex-wrap:wrap;';
+  const mk = (txt, bg, color, fn) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = txt; b.style.cssText = 'flex:1;min-width:120px;min-height:44px;border:0;border-radius:10px;font-weight:700;background:' + bg + ';color:' + color + ';'; b.onclick = fn; row.appendChild(b); };
+  mk('実行する', '#2f7d4f', '#fff', () => {
+    try { localStorage.setItem('tp_backup_before_import_' + getLocalDateStr(), JSON.stringify(state.tasks)); } catch (e) {}
+    let done = 0, added = 0;
+    if (chk.checked) {
+      state.tasks.forEach(t => {
+        if (t.status !== 'completed' && t.dueDate && t.dueDate <= cut.value) { t.status = 'completed'; t.completedAt = t.completedAt || t.dueDate; done++; }
+      });
+    }
+    const used = new Set(state.tasks.map(t => String(t.id)));
+    toAdd.forEach((t, i) => {
+      let id = String(t.id || (Date.now() + i));
+      while (used.has(id)) id = String(Number(id) + 1);
+      used.add(id);
+      state.tasks.push({ details: '', memo: '', client: '未設定', amount: 0, priority: 'medium', steps: [], spentSeconds: 0, actualHours: 0,
+        estimatedHours: 0, paymentStatus: '', projectId: null, startDate: null, targetDate: null, dependsOnTaskId: null,
+        isCompressed: false, isDeadlineFixed: false, isUnscheduled: false, createdAt: getLocalDateStr(), completedAt: null,
+        originalDueDate: t.dueDate, ...t, id });
+      added++;
+    });
+    saveTasksToStorage();
+    renderApp();
+    scheduleSyncToSupabase();
+    o.remove();
+    showToastSuccess('完了にした ' + done + ' 件／新しく登録した ' + added + ' 件');
+  });
+  mk('やめる', '#eee', '#37352f', () => o.remove());
+  box.appendChild(sec1); box.appendChild(sec2); box.appendChild(row);
+  o.appendChild(box);
+  o.addEventListener('click', e => { if (e.target === o) o.remove(); });
+  document.body.appendChild(o);
+}
+
 function exportCSV() {
   const selectedMonth = document.getElementById('report-month-filter').value;
   const selectedClient = document.getElementById('report-client-filter').value;
