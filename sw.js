@@ -1,16 +1,11 @@
-const CACHE_NAME = 'task-invoice-v140';
-const ASSETS = [
-  './',
-  './index.html',
-  './styles.css',
-  './app.js',
-  './manifest.json',
-  './app-icon.png'
-];
+const CACHE_NAME = 'task-invoice-v141';
+const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.json'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME)
+      .then((cache) => Promise.all(ASSETS.map((a) => cache.add(a).catch(() => null))))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -22,24 +17,19 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// 自分のアプリのファイルは「ネットワーク優先」。つながるときは常に最新版を使い、
+// つながらないときだけ保存済みを使う（古い版が居座って不具合が直らない問題を防ぐ）。
 self.addEventListener('fetch', (e) => {
-  if (e.request.url.includes('googleapis.com') ||
-      e.request.url.includes('google.com') ||
-      e.request.url.includes('supabase.co') ||
-      e.request.url.includes('anthropic.com') ||
-      e.request.url.includes('jsdelivr.net') ||
-      e.request.url.includes('cdn.') ||
-      e.request.url.includes('reset.html')) return;
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (url.pathname.endsWith('reset.html')) return;
   e.respondWith(
-    caches.match(e.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(e.request).then((res) => {
-        if (res && res.status === 200 && res.type === 'basic') {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
-        }
-        return res;
-      });
-    })
+    fetch(e.request).then((res) => {
+      if (res && res.status === 200 && res.type === 'basic') {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
+      }
+      return res;
+    }).catch(() => caches.match(e.request))
   );
 });

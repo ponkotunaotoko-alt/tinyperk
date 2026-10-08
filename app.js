@@ -1,3 +1,4 @@
+const IS_TOUCH_DEVICE = !!(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
 
 // ===================== DATE HELPERS (timezone-safe) =====================
 // YYYY-MM-DD文字列 → ローカル時刻のDateオブジェクト
@@ -68,6 +69,38 @@ async function authSignup() {
   else { setAuthError(''); showToastSuccess('確認メールを送りました。メール内のリンクをクリックして認証を完了してください。\n※メールが届かない場合はSpamフォルダを確認してください。'); }
 }
 
+
+async function authForgot() {
+  const email = document.getElementById('auth-email').value.trim();
+  if (!email) { setAuthError('メールアドレスを入力してから、もう一度押してください'); return; }
+  const { error } = await getSupabase().auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  if (error) { setAuthError(error.message); }
+  else { setAuthError(''); showToastSuccess('パスワード再設定のメールを送りました。メール内のリンクを開いてください。（迷惑メールも確認してください）'); }
+}
+function showRecoveryModal() {
+  if (document.getElementById('auth-recovery-overlay')) { document.getElementById('auth-recovery-overlay').style.display = 'flex'; return; }
+  const o = document.createElement('div');
+  o.id = 'auth-recovery-overlay';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:100000;display:flex;align-items:center;justify-content:center;';
+  o.innerHTML = '<div style="background:#fff;color:#37352f;border-radius:16px;padding:2rem;width:92vw;max-width:400px;box-shadow:0 8px 40px rgba(0,0,0,.3);">' +
+    '<h2 style="font-size:1.2rem;margin:0 0 .5rem;">新しいパスワードを決める</h2>' +
+    '<p style="font-size:.85rem;color:#9b9997;margin:0 0 1rem;">8文字以上で入力してください。</p>' +
+    '<div id="auth-recovery-error" style="display:none;color:#c0392b;font-size:.85rem;margin-bottom:.75rem;"></div>' +
+    '<input type="password" id="auth-new-password" class="form-control" style="background:#f7f7f5;color:#37352f;border-color:#e9e8e2;width:100%;box-sizing:border-box;" placeholder="新しいパスワード" autocomplete="new-password">' +
+    '<button class="btn btn-primary" style="width:100%;margin-top:1rem;" onclick="authSetNewPassword()">パスワードを変更する</button></div>';
+  document.body.appendChild(o);
+}
+async function authSetNewPassword() {
+  const pw = document.getElementById('auth-new-password').value;
+  const err = document.getElementById('auth-recovery-error');
+  if (pw.length < 8) { err.textContent = 'パスワードは8文字以上にしてください'; err.style.display = 'block'; return; }
+  const { error } = await getSupabase().auth.updateUser({ password: pw });
+  if (error) { err.textContent = error.message; err.style.display = 'block'; return; }
+  document.getElementById('auth-recovery-overlay').style.display = 'none';
+  showToastSuccess('パスワードを変更しました。');
+  history.replaceState(null, '', location.pathname);
+}
+
 let _authLogoutInProgress = false;
 async function authLogout() {
   if (_authLogoutInProgress) return;
@@ -77,7 +110,7 @@ async function authLogout() {
   try {
     const sb = getSupabase();
     if (sb) await sb.auth.signOut();
-    localStorage.clear();
+    Object.keys(localStorage).filter(k => k.startsWith('sb-')).forEach(k => localStorage.removeItem(k));
     location.reload();
   } catch(e) {
     console.error('[TINYPERK] authLogout error:', e);
@@ -154,101 +187,143 @@ function showSyncStatus(msg, durationMs = 2000) {
   el._timeout = setTimeout(() => el.style.display = 'none', durationMs);
 }
 
-// Pull data from Supabase into state + localStorage
-async function syncFromSupabase(userId) {
-  const sb = getSupabase();
-  if (!sb) { console.warn('[SYNC] Supabase not initialized'); return; }
-  try {
-    const { data, error } = await sb.from('user_data').select('*').eq('user_id', userId).single();
-    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found (first time)
-      console.warn('[SYNC] load error:', error.message);
-      return;
-    }
-    if (!data) return; // First time user, no data yet
+// ===== 3-way merge sync (2026-10 rewrite) =====
+// 旧方式は「新しい方がクラウド全体を丸ごと上書き」で、端末間の入力が消えていた。
+// 今回は「前回同期した時点の状態（スナップショット）」を基準に、手元の変更とクラウドの変更を1件ずつ混ぜる。
+const SYNC_SNAPSHOT_KEY = 'tp_sync_snapshot_v1';
+let _applyingMerge = false;
+let _syncInProgress = false, _syncAgain = false, _lastSyncErrAt = 0;
+const _ARRAY_KEYS = ['tasks','timecards','contacts','deals','expenses','fixedCosts','ideas','learningLogs','projects'];
+const _OBJECT_KEYS = ['journalEntries','goals','businessInfo','clientTemplates'];
 
-    if (Array.isArray(data.tasks))     { state.tasks = data.tasks.map(t => ({...t, id: String(t.id)})); saveTasksToStorage(); }
-    if (Array.isArray(data.timecards)) { state.timecards = data.timecards; saveTimecardsToStorage(); }
-    if (data.journal_entries && typeof data.journal_entries === 'object') {
-      state.journalEntries = data.journal_entries; saveJournalToStorage();
-    }
-    if (data.business_info && typeof data.business_info === 'object' && Object.keys(data.business_info).length) {
-      state.businessInfo = { ...state.businessInfo, ...data.business_info };
-      localStorage.setItem('businessInfo', JSON.stringify(state.businessInfo));
-    }
-    if (data.client_templates && typeof data.client_templates === 'object' && Object.keys(data.client_templates).length) {
-      state.clientTemplates = data.client_templates;
-      saveClientTemplatesToStorage();
-    }
-    if (data.extra_data && typeof data.extra_data === 'object') {
-      const ex = data.extra_data;
-      if (Array.isArray(ex.contacts))     { state.contacts = ex.contacts; saveContacts(); }
-      if (Array.isArray(ex.deals))        { state.deals = ex.deals; saveDeals(); }
-      if (Array.isArray(ex.expenses))     { state.expenses = ex.expenses; saveExpenses(); }
-      if (Array.isArray(ex.fixedCosts))   { state.fixedCosts = ex.fixedCosts; saveFixedCosts(); }
-      if (Array.isArray(ex.ideas))        { state.ideas = ex.ideas; saveIdeas(); }
-      if (Array.isArray(ex.learningLogs)) { state.learningLogs = ex.learningLogs; saveLearningLogs(); }
-      if (Array.isArray(ex.projects))     { state.projects = ex.projects; saveProjectsToStorage(); }
-      if (ex.goals && typeof ex.goals === 'object') { state.goals = ex.goals; saveGoals(); }
-    }
-    showSyncStatus('☁️ データを同期しました');
-  } catch(e) {
-    console.error('[SYNC] syncFromSupabase error:', e);
-    showSyncStatus('❌ 読込み失敗');
-  }
+function _canon(v) {
+  if (Array.isArray(v)) return '[' + v.map(_canon).join(',') + ']';
+  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + _canon(v[k])).join(',') + '}';
+  return JSON.stringify(v === undefined ? null : v);
+}
+function _same(a, b) { return _canon(a) === _canon(b); }
+function _ikey(it) { return (it && typeof it === 'object' && it.id != null) ? 'id:' + String(it.id) : 'j:' + _canon(it); }
+
+function _syncCollect() {
+  const o = {};
+  _ARRAY_KEYS.forEach(k => { o[k] = Array.isArray(state[k]) ? state[k] : []; });
+  _OBJECT_KEYS.forEach(k => { o[k] = (state[k] && typeof state[k] === 'object' && !Array.isArray(state[k])) ? state[k] : {}; });
+  return o;
+}
+function _syncFromRow(row) {
+  const ex = (row && row.extra_data && typeof row.extra_data === 'object') ? row.extra_data : {};
+  const arr = v => Array.isArray(v) ? v : [];
+  const obj = v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
+  return {
+    tasks: arr(row && row.tasks).map(t => ({ ...t, id: String(t.id) })),
+    timecards: arr(row && row.timecards),
+    contacts: arr(ex.contacts), deals: arr(ex.deals), expenses: arr(ex.expenses), fixedCosts: arr(ex.fixedCosts),
+    ideas: arr(ex.ideas), learningLogs: arr(ex.learningLogs), projects: arr(ex.projects),
+    journalEntries: obj(row && row.journal_entries), goals: obj(ex.goals),
+    businessInfo: obj(row && row.business_info), clientTemplates: obj(row && row.client_templates)
+  };
+}
+function _syncToPayload(userId, c) {
+  return {
+    user_id: userId, tasks: c.tasks, timecards: c.timecards, journal_entries: c.journalEntries,
+    business_info: c.businessInfo, client_templates: c.clientTemplates,
+    extra_data: { contacts: c.contacts, deals: c.deals, expenses: c.expenses, fixedCosts: c.fixedCosts,
+                  ideas: c.ideas, learningLogs: c.learningLogs, projects: c.projects, goals: c.goals }
+  };
+}
+// 初回同期（スナップショットなし）は、クラウドを優先し、手元にしかない実データだけ足す（初期サンプルのIDは短いので除外）
+function _isSeedItem(it) { return it && it.id != null && String(it.id).length < 8; }
+function _mergeArr(base, local, cloud, first) {
+  const bm = new Map((base || []).map(x => [_ikey(x), x]));
+  const lm = new Map((local || []).map(x => [_ikey(x), x]));
+  const out = new Map((cloud || []).map(x => [_ikey(x), x]));
+  if (first) { lm.forEach((v, k) => { if (!out.has(k) && !_isSeedItem(v)) out.set(k, v); }); return [...out.values()]; }
+  lm.forEach((v, k) => { if (!bm.has(k) || !_same(bm.get(k), v)) out.set(k, v); }); // 手元で追加・変更 → 手元を優先
+  bm.forEach((_, k) => { if (!lm.has(k)) out.delete(k); });                          // 手元で削除
+  return [...out.values()];
+}
+function _mergeObj(base, local, cloud, first) {
+  const out = { ...(cloud || {}) };
+  local = local || {};
+  if (first) { Object.keys(local).forEach(k => { if (!(k in out)) out[k] = local[k]; }); return out; }
+  Object.keys(local).forEach(k => { if (!base || !(k in base) || !_same(base[k], local[k])) out[k] = local[k]; });
+  Object.keys(base || {}).forEach(k => { if (!(k in local)) delete out[k]; });
+  return out;
+}
+function _applyMerged(m) {
+  _applyingMerge = true;
+  try {
+    state.tasks = m.tasks.map(t => ({ ...t, id: String(t.id) })); saveTasksToStorage();
+    state.timecards = m.timecards; saveTimecardsToStorage();
+    state.journalEntries = m.journalEntries; saveJournalToStorage();
+    state.businessInfo = { ...state.businessInfo, ...m.businessInfo };
+    localStorage.setItem('businessInfo', JSON.stringify(state.businessInfo));
+    state.clientTemplates = m.clientTemplates; saveClientTemplatesToStorage();
+    state.contacts = m.contacts; saveContacts();
+    state.deals = m.deals; saveDeals();
+    state.expenses = m.expenses; saveExpenses();
+    state.fixedCosts = m.fixedCosts; saveFixedCosts();
+    state.ideas = m.ideas; saveIdeas();
+    state.learningLogs = m.learningLogs; saveLearningLogs();
+    state.projects = m.projects; saveProjectsToStorage();
+    state.goals = m.goals; saveGoals();
+  } finally { _applyingMerge = false; }
 }
 
-// Push state to Supabase
-let _syncToSupabaseInProgress = false;
-async function syncToSupabase() {
+async function _syncMerge() {
   const sb = getSupabase();
-  if (!sb) return;
-  if (_syncToSupabaseInProgress) return;
-  _syncToSupabaseInProgress = true;
+  if (!sb) return false;
+  if (_syncInProgress) { _syncAgain = true; return false; }
+  _syncInProgress = true;
   try {
-    const { data: authData, error: authError } = await sb.auth.getUser();
-    if (authError || !authData?.user) { _syncToSupabaseInProgress = false; return; }
-    const user = authData.user;
-
-    const payload = {
-      user_id: user.id,
-      tasks: state.tasks,
-      timecards: state.timecards,
-      journal_entries: state.journalEntries,
-      business_info: state.businessInfo,
-      client_templates: state.clientTemplates,
-      extra_data: {
-        contacts: state.contacts,
-        deals: state.deals,
-        expenses: state.expenses,
-        fixedCosts: state.fixedCosts,
-        ideas: state.ideas,
-        learningLogs: state.learningLogs,
-        projects: state.projects,
-        goals: state.goals
-      }
-    };
-
-    const { error } = await sb.from('user_data').upsert(payload, { onConflict: 'user_id' });
-    if (error) {
-      console.warn('[SYNC] save error:', error.message);
-      showSyncStatus('❌ 保存失敗');
-    } else {
-      showSyncStatus('☁️ 保存済み');
+    const { data: au, error: ae } = await sb.auth.getUser();
+    if (ae || !au || !au.user) return false;
+    const user = au.user;
+    const { data: row, error } = await sb.from('user_data').select('*').eq('user_id', user.id).maybeSingle();
+    if (error) throw error;
+    const cloud = _syncFromRow(row);
+    const local = _syncCollect();
+    let snap = null;
+    try { snap = JSON.parse(localStorage.getItem(SYNC_SNAPSHOT_KEY)); } catch (e) { snap = null; }
+    const first = !snap;
+    const merged = {};
+    _ARRAY_KEYS.forEach(k => { merged[k] = _mergeArr(snap && snap[k], local[k], cloud[k], first); });
+    _OBJECT_KEYS.forEach(k => { merged[k] = _mergeObj(snap && snap[k], local[k], cloud[k], first); });
+    if (!_same(merged, local)) _applyMerged(merged);
+    if (!row || !_same(merged, cloud)) {
+      const { error: ue } = await sb.from('user_data').upsert(_syncToPayload(user.id, merged), { onConflict: 'user_id' });
+      if (ue) throw ue;
     }
-  } catch(e) {
-    console.error('[SYNC] syncToSupabase exception:', e);
-    showSyncStatus('❌ 保存失敗');
+    try { localStorage.setItem(SYNC_SNAPSHOT_KEY, JSON.stringify(merged)); } catch (e) {}
+    showSyncStatus('☁️ 同期済み');
+    return true;
+  } catch (e) {
+    console.error('[SYNC] failed:', e);
+    showSyncStatus('❌ 同期失敗');
+    if (Date.now() - _lastSyncErrAt > 60000) {
+      _lastSyncErrAt = Date.now();
+      const m = (e && e.message) ? e.message : '不明なエラー';
+      const hint = /paused|503|Failed to fetch|NetworkError/i.test(m) ? '（通信できないか、クラウド側が停止している可能性があります）' : '';
+      showToastError('同期に失敗しました。手元のデータは消えていません。' + hint);
+    }
+    return false;
   } finally {
-    _syncToSupabaseInProgress = false;
+    _syncInProgress = false;
+    if (_syncAgain) { _syncAgain = false; setTimeout(() => _syncMerge(), 500); }
   }
 }
+// 旧い関数名は互換のため残す（呼び出し側は変更しない）
+async function syncFromSupabase() { return _syncMerge(); }
+async function syncToSupabase() { return _syncMerge(); }
 
 // Debounced sync (wait 2s after last change)
 let _syncTimer = null;
 function scheduleSyncToSupabase() {
+  if (_applyingMerge) return;
   clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(syncToSupabase, 2000);
+  _syncTimer = setTimeout(() => _syncMerge(), 2000);
 }
+window.addEventListener('online', () => { _syncMerge().then(() => { try { renderApp(); } catch (e) {} }); });
 
 // 打刻・休憩/移動・日誌画面を開いたタイミングで、他端末での操作をすぐ取り込む。
 // （visibilitychangeだけでは、アプリを閉じずに同じ画面を見ている場合などに反映が遅れることがあるため）
@@ -532,6 +607,7 @@ function initPullToRefresh() {
   if (!mainContent || !indicator) return;
 
   mainContent.addEventListener('touchstart', e => {
+    if (e.target && e.target.closest && e.target.closest('.tray-task-card,[data-task-id],.tl-task,.modal-overlay,input,textarea,select,button')) { pulling = false; return; }
     if (mainContent.scrollTop === 0) {
       startY = e.touches[0].clientY;
       pulling = true;
@@ -683,6 +759,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
     _sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') { showRecoveryModal(); }
       if (session && session.user) {
         hideAuthModal();
         updateSidebarUser(session.user);
@@ -2571,7 +2648,7 @@ function renderJournalTimeline() {
           ${todayTasks.map(t => `
             <button class="tl-quickbar-btn"
               onclick="showTimeslotPicker('${t.id}')"
-              draggable="true"
+              ${IS_TOUCH_DEVICE ? '' : 'draggable="true"'}
               ondragstart="handleTaskDragStart(event,'${t.id}')"
               ontouchstart="tlTouchDragStart(event,'${t.id}')"
               ontouchmove="tlTouchDragMove(event)"
@@ -3465,7 +3542,7 @@ function renderTaskList() {
       <div class="task-row-wrap" data-task-id="${task.id}">
         <div class="task-row-delete-bg">🗑️</div>
         <div class="task-row-swipe tl-task-row" onclick="openEditTaskModal('${task.id}')" role="button" tabindex="0"
-          draggable="true"
+          ${IS_TOUCH_DEVICE ? '' : 'draggable="true"'}
           ondragstart="handleTaskDragStart(event, '${task.id}')"
           title="ドラッグして日誌に追加 / 左スワイプで削除">
           <div class="tl-status-strip ${task.status}"></div>
@@ -3837,7 +3914,7 @@ function renderJournal() {
           const spent = fmtSeconds(t.spentSeconds);
           tlHtml += `
             <div class="journal-task-row" onclick="openEditTaskModal('${t.id}')" title="ドラッグして振り返りに追加 / クリックで編集"
-              draggable="true" ondragstart="handleTaskDragStart(event, '${t.id}')">
+              ${IS_TOUCH_DEVICE ? '' : 'draggable="true"'} ondragstart="handleTaskDragStart(event, '${t.id}')">
               <span class="journal-task-dot" style="background:${statusColor[t.status] || 'var(--text-muted)'}"></span>
               <span class="journal-task-name">${escapeHtml(t.name)}</span>
               <span class="journal-task-client">${escapeHtml(t.client)}</span>
@@ -4258,14 +4335,21 @@ function wrapWithSwipeDelete(cardEl, taskId) {
     currentX = 0;
   });
 
-  // 他の場所タップでスナップバック
-  document.addEventListener('touchstart', (e) => {
-    if (!wrap.contains(e.target)) {
-      cardEl.style.transition = 'transform 0.2s ease';
-      cardEl.style.transform = 'translateX(0)';
-      delBtn.style.width = '0';
-    }
-  }, { passive: true });
+  // 他の場所タップでスナップバック（documentへのリスナーは全カードで1つだけ）
+  (window.__tpSwipeCards = window.__tpSwipeCards || new Set()).add({ wrap, cardEl, delBtn });
+  if (!window.__tpSwipeGlobal) {
+    window.__tpSwipeGlobal = true;
+    document.addEventListener('touchstart', (e) => {
+      window.__tpSwipeCards.forEach(o => {
+        if (!o.wrap.isConnected) { window.__tpSwipeCards.delete(o); return; }
+        if (!o.wrap.contains(e.target)) {
+          o.cardEl.style.transition = 'transform 0.2s ease';
+          o.cardEl.style.transform = 'translateX(0)';
+          o.delBtn.style.width = '0';
+        }
+      });
+    }, { passive: true });
+  }
 
   wrap.appendChild(delBtn);
   wrap.appendChild(cardEl);
@@ -4299,7 +4383,7 @@ function renderTaskTray() {
   filtered.forEach(task => {
     const card = document.createElement('div');
     card.className = 'tray-task-card';
-    card.setAttribute('draggable', 'true');
+    if (!IS_TOUCH_DEVICE) card.setAttribute('draggable', 'true');
     card.setAttribute('data-task-id', task.id);
 
     const stepsTotal = (task.steps || []).length;
@@ -7588,6 +7672,10 @@ function renderGoogleStatusUI() {
 }
 
 function connectGoogleCalendar() {
+  showToastError('Googleカレンダー連携は停止しました。予定は毎朝の自動連携で反映されます。');
+  return;
+}
+function _legacyConnectGoogleCalendar() {
   if (!state.googleClientId) {
     showToastError('まずSettingsでGoogle Client IDを入力し保存してください。');
     return;
@@ -7619,6 +7707,9 @@ function connectGoogleCalendar() {
 }
 
 function googleCalendarSync(task, action) {
+  return; // 連携停止（2026-10）
+}
+function _legacyGoogleCalendarSync(task, action) {
   if (!state.googleAccessToken) return;
 
   const calendarId = 'primary';
@@ -7665,6 +7756,9 @@ function googleCalendarSync(task, action) {
 }
 
 function bulkSyncTasksToGoogle() {
+  return; // 連携停止（2026-10）
+}
+function _legacyBulkSyncTasksToGoogle() {
   state.tasks.forEach(task => {
     if (!task.googleEventId) {
       googleCalendarSync(task, 'create');
