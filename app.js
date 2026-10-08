@@ -16,6 +16,20 @@ function toLocalDateStr(date) {
 // ===================== SUPABASE SYNC =====================
 let _supabase = null;
 
+// 再設定メールのリンクで開かれたかを、Supabaseが URL を書き換える前に控えておく
+const _INITIAL_HASH = location.hash || '';
+const _INITIAL_SEARCH = location.search || '';
+const _RECOVERY_PARAMS = new URLSearchParams(_INITIAL_HASH.replace(/^#/, ''));
+let _recoveryShown = false;
+function _recoveryLinkError() {
+  const code = _RECOVERY_PARAMS.get('error_code') || _RECOVERY_PARAMS.get('error');
+  if (!code) return null;
+  if (/otp_expired|expired|access_denied/i.test(code + ' ' + (_RECOVERY_PARAMS.get('error_description') || ''))) {
+    return '再設定メールのリンクが無効になっていました（1回しか使えず、約1時間で切れます。メールアプリが先に開いてしまうと無効になることがあります）。ログイン画面の「パスワードを忘れた」からもう一度メールを送り、届いたらすぐにリンクを長押しして「Safariで開く」か、リンクをコピーしてSafariに貼って開いてください。';
+  }
+  return '再設定リンクの処理でエラーになりました: ' + (_RECOVERY_PARAMS.get('error_description') || code);
+}
+
 function getSupabase() {
   if (!_supabase && window.supabase && window.SUPABASE_URL) {
     _supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
@@ -204,10 +218,91 @@ function _canon(v) {
 function _same(a, b) { return _canon(a) === _canon(b); }
 function _ikey(it) { return (it && typeof it === 'object' && it.id != null) ? 'id:' + String(it.id) : 'j:' + _canon(it); }
 
+// ===== タイマーの端末間共有 =====
+// 動いているタイマーを1件だけクラウドに置き、別の端末でも見える・止められるようにする。
+// 新しい操作（updatedAtが大きい方）が勝つ。
+const TIMER_SHARED_KEY = 'tp_timer_shared';
+function _getTimerShared() {
+  if (state.timerShared === undefined) {
+    try { state.timerShared = JSON.parse(localStorage.getItem(TIMER_SHARED_KEY)) || null; } catch (e) { state.timerShared = null; }
+  }
+  return state.timerShared;
+}
+function _setTimerShared(rec) {
+  state.timerShared = rec;
+  try { localStorage.setItem(TIMER_SHARED_KEY, JSON.stringify(rec)); } catch (e) {}
+}
+function _shareTimer(running) {
+  if (running && state.activeTimerTaskId) {
+    _setTimerShared({
+      taskId: state.activeTimerTaskId, startEpoch: state.timerStartEpoch,
+      accumulatedSeconds: state.timerAccumulatedSeconds,
+      originDate: state.tlTimerOriginDate || null, originHour: state.tlTimerOriginHour || null,
+      updatedAt: Date.now()
+    });
+  } else {
+    _setTimerShared({ taskId: null, updatedAt: Date.now() });
+  }
+  setTimeout(() => { try { _syncMerge(); } catch (e) {} }, 300);
+}
+// クラウド側の記録が新しければ、手元のタイマーを合わせる。戻り値：同期のあとで開始すべき記録（なければnull）
+function _reconcileSharedTimer(cloudRec, cloudTasks) {
+  const local = _getTimerShared();
+  if (!cloudRec || typeof cloudRec !== 'object') return null;
+  if (local && (local.updatedAt || 0) >= (cloudRec.updatedAt || 0)) return null;
+  _setTimerShared(cloudRec);
+  if (!cloudRec.taskId) {
+    if (state.activeTimerTaskId && state.timerStartEpoch && (cloudRec.updatedAt || 0) < state.timerStartEpoch) return null; // こちらの方が後に始めた
+    // 他の端末で停止された → こちらの計測は記録を足さずに捨てる（時間はクラウドのタスク側に入っている）
+    if (state.activeTimerTaskId) {
+      const t = state.tasks.find(x => x.id === state.activeTimerTaskId);
+      const ct = (cloudTasks || []).find(x => String(x.id) === String(state.activeTimerTaskId));
+      if (t && ct) t.spentSeconds = ct.spentSeconds || 0;
+      _dropLocalTimer();
+      showToastSuccess('⏱ 他の端末で計測が止められました');
+    }
+    return null;
+  }
+  // 他の端末で開始された（または別のタスクに切り替わった）
+  if (state.activeTimerTaskId && state.activeTimerTaskId === cloudRec.taskId && state.timerStartEpoch === cloudRec.startEpoch) return null;
+  if (state.activeTimerTaskId) pauseTaskTimer({ noShare: true });
+  return cloudRec;
+}
+function _startFromSharedRec(rec) {
+  if (!rec || !rec.taskId) return;
+  if (!state.tasks.find(t => t.id === rec.taskId)) return;
+  state.activeTimerTaskId = null;
+  startTaskTimer(rec.taskId, rec.originDate, rec.originHour, { noShare: true });
+  state.timerStartEpoch = rec.startEpoch;
+  state.timerAccumulatedSeconds = rec.accumulatedSeconds || 0;
+  saveTimerState();
+  localStorage.setItem('activeTimer', JSON.stringify({ taskId: rec.taskId, startEpoch: rec.startEpoch, accumulatedSeconds: rec.accumulatedSeconds || 0 }));
+  showToastSuccess('⏱ 他の端末で始めた計測を引き継ぎました');
+  setTimeout(checkStaleTimer, 800);
+}
+function _dropLocalTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = null;
+  state.activeTimerTaskId = null; state.timerStartEpoch = null; state.timerAccumulatedSeconds = 0;
+  try { localStorage.removeItem('activeTimer'); } catch (e) {}
+  clearTimerState();
+  const sb = document.getElementById('btn-timer-start'), pb = document.getElementById('btn-timer-pause');
+  if (sb) sb.style.display = 'inline-flex';
+  if (pb) pb.style.display = 'none';
+  const bn = document.getElementById('floating-timer-banner');
+  if (bn) bn.classList.remove('active');
+  document.querySelectorAll('.tl-slot-sw-btn.running').forEach(b => b.classList.remove('running'));
+}
+
 function _syncCollect() {
   const o = {};
   _ARRAY_KEYS.forEach(k => { o[k] = Array.isArray(state[k]) ? state[k] : []; });
+  // 計測中のタスクは毎秒値が変わるので、同期には「計測開始前の累計」を使う（途中の値をクラウドへ流さない）
+  if (state.activeTimerTaskId) {
+    o.tasks = o.tasks.map(t => t.id === state.activeTimerTaskId ? { ...t, spentSeconds: state.timerAccumulatedSeconds } : t);
+  }
   _OBJECT_KEYS.forEach(k => { o[k] = (state[k] && typeof state[k] === 'object' && !Array.isArray(state[k])) ? state[k] : {}; });
+  o.activeTimer = _getTimerShared() || null;
   return o;
 }
 function _syncFromRow(row) {
@@ -220,7 +315,8 @@ function _syncFromRow(row) {
     contacts: arr(ex.contacts), deals: arr(ex.deals), expenses: arr(ex.expenses), fixedCosts: arr(ex.fixedCosts),
     ideas: arr(ex.ideas), learningLogs: arr(ex.learningLogs), projects: arr(ex.projects),
     journalEntries: obj(row && row.journal_entries), goals: obj(ex.goals),
-    businessInfo: obj(row && row.business_info), clientTemplates: obj(row && row.client_templates)
+    businessInfo: obj(row && row.business_info), clientTemplates: obj(row && row.client_templates),
+    activeTimer: (ex.activeTimer && typeof ex.activeTimer === 'object') ? ex.activeTimer : null
   };
 }
 function _syncToPayload(userId, c) {
@@ -228,7 +324,7 @@ function _syncToPayload(userId, c) {
     user_id: userId, tasks: c.tasks, timecards: c.timecards, journal_entries: c.journalEntries,
     business_info: c.businessInfo, client_templates: c.clientTemplates,
     extra_data: { contacts: c.contacts, deals: c.deals, expenses: c.expenses, fixedCosts: c.fixedCosts,
-                  ideas: c.ideas, learningLogs: c.learningLogs, projects: c.projects, goals: c.goals }
+                  ideas: c.ideas, learningLogs: c.learningLogs, projects: c.projects, goals: c.goals, activeTimer: c.activeTimer || null }
   };
 }
 // 初回同期（スナップショットなし）は、クラウドを優先し、手元にしかない実データだけ足す（初期サンプルのIDは短いので除外）
@@ -282,6 +378,7 @@ async function _syncMerge() {
     const { data: row, error } = await sb.from('user_data').select('*').eq('user_id', user.id).maybeSingle();
     if (error) throw error;
     const cloud = _syncFromRow(row);
+    const _timerToStart = _reconcileSharedTimer(cloud.activeTimer, cloud.tasks);
     const local = _syncCollect();
     let snap = null;
     try { snap = JSON.parse(localStorage.getItem(SYNC_SNAPSHOT_KEY)); } catch (e) { snap = null; }
@@ -289,7 +386,9 @@ async function _syncMerge() {
     const merged = {};
     _ARRAY_KEYS.forEach(k => { merged[k] = _mergeArr(snap && snap[k], local[k], cloud[k], first); });
     _OBJECT_KEYS.forEach(k => { merged[k] = _mergeObj(snap && snap[k], local[k], cloud[k], first); });
+    merged.activeTimer = local.activeTimer;
     if (!_same(merged, local)) _applyMerged(merged);
+    if (_timerToStart) { _startFromSharedRec(_timerToStart); try { renderApp(); } catch (e) {} }
     if (!row || !_same(merged, cloud)) {
       const { error: ue } = await sb.from('user_data').upsert(_syncToPayload(user.id, merged), { onConflict: 'user_id' });
       if (ue) throw ue;
@@ -752,14 +851,31 @@ document.addEventListener('DOMContentLoaded', () => {
   // Supabase: optional login — check existing session silently
   const _sb = getSupabase();
   if (_sb) {
-    _sb.auth.getSession().then(({ data: { session } }) => {
+    const _isRecoveryLink = _RECOVERY_PARAMS.get('type') === 'recovery' && !!_RECOVERY_PARAMS.get('access_token');
+    const _linkErr = _recoveryLinkError();
+    if (_linkErr) {
+      setTimeout(() => { alert(_linkErr); history.replaceState(null, '', location.pathname); }, 600);
+    }
+    _sb.auth.getSession().then(async ({ data: { session } }) => {
+      // イベントを取り逃した場合に備え、リンクで開かれていれば必ず新パスワード画面を出す
+      if (_isRecoveryLink && !_recoveryShown) {
+        let ok = !!(session && session.user);
+        if (!ok) {
+          const r = await _sb.auth.setSession({
+            access_token: _RECOVERY_PARAMS.get('access_token'),
+            refresh_token: _RECOVERY_PARAMS.get('refresh_token') || ''
+          });
+          ok = !!(r && r.data && r.data.session);
+        }
+        if (ok) { _recoveryShown = true; showRecoveryModal(); return; }
+      }
       if (session && session.user) {
         updateSidebarUser(session.user);
         syncFromSupabase(session.user.id).then(() => renderApp());
       }
     });
     _sb.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY') { showRecoveryModal(); }
+      if (event === 'PASSWORD_RECOVERY') { _recoveryShown = true; showRecoveryModal(); }
       if (session && session.user) {
         hideAuthModal();
         updateSidebarUser(session.user);
@@ -4394,6 +4510,7 @@ function renderTaskTray() {
     const _h = escapeHtml;
     card.innerHTML = `
       <button type="button" class="tray-card-edit" onclick="openEditTaskModal('${_h(String(task.id))}')">✏️</button>
+      ${timerBtnHtml(task, 'tray-timer-btn')}
       <div class="tray-card-name">${_h(task.name || '')}</div>
       <div class="tray-card-meta">
         <span class="tray-card-status" style="color:${statusColor[task.status]||'var(--text-muted)'};">${statusLabel[task.status]||_h(task.status||'')}</span>
@@ -4775,6 +4892,7 @@ function createTaskCard(task) {
       </div>
     </div>
     <div class="task-card-right">
+      ${timerBtnHtml(task, 'task-timer-btn')}
       ${task.priority === 'high' ? '<span class="priority-badge priority-high">🔴 高</span>' : task.priority === 'low' ? '<span class="priority-badge priority-low">🟢 低</span>' : ''}
       <span class="task-badge ${task.status}">${statusToJapanese(task.status)}</span>
       <span class="task-amount-badge">${formattedAmount}</span>
@@ -4984,7 +5102,7 @@ function navigateDailyViewDate(days) {
 // ----------------------------------------------------------------------------
 // NEW: TASK STOPWATCH TIMER ENGINE
 // ----------------------------------------------------------------------------
-function startTaskTimer(taskId, originDate, originHour) {
+function startTaskTimer(taskId, originDate, originHour, opts) {
   const task = state.tasks.find(t => t.id === taskId);
   if (!task) return;
 
@@ -5011,6 +5129,7 @@ function startTaskTimer(taskId, originDate, originHour) {
     accumulatedSeconds: state.timerAccumulatedSeconds
   }));
   saveTimerState();
+  if (!(opts && opts.noShare)) _shareTimer(true);
 
   // Render buttons immediately (modal may not be open)
   const _startBtn = document.getElementById('btn-timer-start');
@@ -5353,12 +5472,14 @@ function syncTimerToJournalTimeline(task, sessionElapsedSec) {
   }
 }
 
-function pauseTaskTimer() {
+function pauseTaskTimer(opts) {
   if (!state.activeTimerTaskId) return;
 
   const task = state.tasks.find(t => t.id === state.activeTimerTaskId);
   if (task) {
-    const elapsed = Math.floor((Date.now() - state.timerStartEpoch) / 1000);
+    const elapsed = (opts && typeof opts.overrideElapsedSec === 'number')
+      ? Math.max(0, Math.floor(opts.overrideElapsedSec))
+      : Math.floor((Date.now() - state.timerStartEpoch) / 1000);
     const totalSecs = state.timerAccumulatedSeconds + elapsed;
     task.spentSeconds = totalSecs;
 
@@ -5378,6 +5499,7 @@ function pauseTaskTimer() {
   state.timerAccumulatedSeconds = 0;
   localStorage.removeItem('activeTimer');
   clearTimerState();
+  if (!(opts && opts.noShare)) _shareTimer(false);
 
   // Update UI components
   document.getElementById('btn-timer-start').style.display = 'inline-flex';
@@ -5439,7 +5561,7 @@ function resumeActiveTimerOnLoad() {
     // セット済みのため、startTaskTimer の「already running」ガードで即リターンしてしまう。
     // 一時的に null にしてガードをバイパスし、インターバルを正常起動させる。
     state.activeTimerTaskId = null;
-    startTaskTimer(data.taskId);
+    startTaskTimer(data.taskId, null, null, { noShare: true });
 
     // startTaskTimer は timerStartEpoch = Date.now() に上書きするため、
     // 保存されていた元の開始時刻・累積秒数を復元して経過時間を正しく継続する。
@@ -5454,10 +5576,87 @@ function resumeActiveTimerOnLoad() {
       startEpoch: state.timerStartEpoch,
       accumulatedSeconds: state.timerAccumulatedSeconds
     }));
+    const _sh = _getTimerShared();
+    if (!_sh || _sh.taskId !== data.taskId || _sh.startEpoch !== state.timerStartEpoch) {
+      _setTimerShared({ taskId: data.taskId, startEpoch: state.timerStartEpoch, accumulatedSeconds: state.timerAccumulatedSeconds,
+        originDate: state.tlTimerOriginDate || null, originHour: state.tlTimerOriginHour || null, updatedAt: state.timerStartEpoch });
+    }
+    setTimeout(checkStaleTimer, 1200);
   } catch (e) {
     console.error('Failed to restore active timer:', e);
     localStorage.removeItem('activeTimer');
   }
+}
+
+// ===== 止め忘れ対策 =====
+// 3時間以上続いている／日付をまたいだ計測は「まだ作業中ですか？」と聞く。
+const TIMER_STALE_SEC = 3 * 3600;
+let _timerSnoozeUntil = 0;
+function checkStaleTimer() {
+  if (!state.activeTimerTaskId || !state.timerStartEpoch) return;
+  if (document.getElementById('timer-stale-overlay')) return;
+  if (Date.now() < _timerSnoozeUntil) return;
+  const elapsed = Math.floor((Date.now() - state.timerStartEpoch) / 1000);
+  const crossedDay = new Date(state.timerStartEpoch).toDateString() !== new Date().toDateString();
+  if (elapsed < TIMER_STALE_SEC && !(crossedDay && elapsed > 3600)) return;
+  const task = state.tasks.find(t => t.id === state.activeTimerTaskId);
+  const name = task ? task.name : '(不明なタスク)';
+  const fmt = sec => { const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60); return (h ? h + '時間' : '') + m + '分'; };
+  const st = new Date(state.timerStartEpoch);
+  const stTxt = (st.getMonth() + 1) + '/' + st.getDate() + ' ' + String(st.getHours()).padStart(2, '0') + ':' + String(st.getMinutes()).padStart(2, '0');
+  const o = document.createElement('div');
+  o.id = 'timer-stale-overlay';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:100001;display:flex;align-items:center;justify-content:center;';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;color:#37352f;border-radius:16px;padding:1.5rem;width:92vw;max-width:400px;box-shadow:0 8px 40px rgba(0,0,0,.3);';
+  box.innerHTML = '<h2 style="font-size:1.1rem;margin:0 0 .5rem;">⏱ まだ作業中ですか？</h2>' +
+    '<p style="font-size:.9rem;line-height:1.6;margin:0 0 1rem;">「' + escapeHTML(name) + '」の計測が <b>' + fmt(elapsed) + '</b> 続いています（開始 ' + stTxt + '）。</p>';
+  const mk = (label, bg, color, fn) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = label;
+    b.style.cssText = 'display:block;width:100%;margin-top:.5rem;padding:.8rem;border:0;border-radius:10px;font-weight:700;font-size:.95rem;background:' + bg + ';color:' + color + ';';
+    b.onclick = () => { o.remove(); fn(); };
+    box.appendChild(b);
+  };
+  mk('続ける（2時間後にまた聞く）', '#2f7d4f', '#fff', () => { _timerSnoozeUntil = Date.now() + 2 * 3600 * 1000; });
+  mk('今止める（' + fmt(elapsed) + 'を記録）', '#37352f', '#fff', () => pauseTaskTimer());
+  mk('作業した時間を入力して止める', '#eee', '#37352f', () => {
+    const v = prompt('実際に作業した時間は何分ですか？', '60');
+    if (v === null) { _timerSnoozeUntil = Date.now() + 10 * 60 * 1000; return; }
+    const min = parseFloat(String(v).replace(/[^0-9.]/g, ''));
+    if (!(min >= 0)) { _timerSnoozeUntil = Date.now() + 60 * 1000; return; }
+    pauseTaskTimer({ overrideElapsedSec: min * 60 });
+    showToastSuccess('⏱ ' + Math.round(min) + '分で記録して止めました');
+  });
+  o.appendChild(box);
+  document.body.appendChild(o);
+}
+setInterval(checkStaleTimer, 60000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(checkStaleTimer, 500); });
+// 計測が動いている間（またはどこかで動いている間）は、画面を開いていれば45秒ごとに他端末の操作を取り込む
+setInterval(() => {
+  if (document.visibilityState !== 'visible') return;
+  const sh = _getTimerShared();
+  if (!(state.activeTimerTaskId || (sh && sh.taskId))) return;
+  _syncMerge().then(ok => { if (ok) { try { renderApp(); } catch (e) {} } });
+}, 45000);
+
+// 案件カードの ▶ / ⏸ ボタン（1タップで計測開始・停止）
+function toggleTimerFromCard(event, taskId) {
+  if (event) { event.stopPropagation(); event.preventDefault(); }
+  if (state.activeTimerTaskId === taskId) {
+    pauseTaskTimer();
+  } else {
+    const t = state.tasks.find(x => x.id === taskId);
+    startTaskTimer(taskId, null, null, { quiet: true });
+    if (t && t.status === 'not-started') { t.status = 'in-progress'; saveTasksToStorage(); }
+  }
+  renderApp();
+}
+function timerBtnHtml(task, cls) {
+  if (!task || task.status === 'completed') return '';
+  const on = state.activeTimerTaskId === task.id;
+  return '<button type="button" class="' + cls + '" aria-label="' + (on ? '計測を止める' : '計測を始める') + '" onclick="toggleTimerFromCard(event, \'' + String(task.id).replace(/'/g, '') + '\')" style="min-width:44px;min-height:44px;border-radius:50%;border:0;font-size:1.1rem;font-weight:800;cursor:pointer;background:' + (on ? '#d9534f' : '#2f7d4f') + ';color:#fff;flex:none;">' + (on ? '⏸' : '▶') + '</button>';
 }
 
 // Page unload protection
@@ -10293,10 +10492,10 @@ function releaseWakeLock() {
 // ---- Hook into existing startTaskTimer / pauseTaskTimer ----
 // Use assignment (not function declaration) to avoid hoisting conflict
 const _origStartTaskTimer = startTaskTimer;
-startTaskTimer = function(taskId, originDate, originHour) {
-  _origStartTaskTimer(taskId, originDate, originHour);  // 引数を正しく引き継ぐ
-  // タイムライン経由（originDate あり）やリロード復元時はフォーカスモードを自動表示しない
-  if (!_suppressFocusAutoOpen && !originDate) {
+startTaskTimer = function(taskId, originDate, originHour, opts) {
+  _origStartTaskTimer(taskId, originDate, originHour, opts);  // 引数を正しく引き継ぐ
+  // タイムライン経由（originDate あり）・リロード復元・他端末からの引き継ぎ・カードの▶ボタンではフォーカスモードを自動表示しない
+  if (!_suppressFocusAutoOpen && !originDate && !(opts && (opts.noShare || opts.quiet))) {
     setTimeout(() => {
       if (state.activeTimerTaskId && !_focusState.active) {
         openFocusMode(state.activeTimerTaskId);
@@ -10307,8 +10506,8 @@ startTaskTimer = function(taskId, originDate, originHour) {
 };
 
 const _origPauseTaskTimer = pauseTaskTimer;
-pauseTaskTimer = function() {
-  _origPauseTaskTimer();
+pauseTaskTimer = function(opts) {
+  _origPauseTaskTimer(opts);
   if (_focusState.active) closeFocusMode();
 };
 

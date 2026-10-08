@@ -7971,3 +7971,8 @@ button,
     border-width: 0.5px;
   }
 }
+
+/* 計測の ▶/⏸ ボタン（カード右下・タップしやすい大きさ） */
+.tray-timer-btn { position: absolute; right: 0.45rem; bottom: 0.45rem; }
+.tray-task-card { padding-bottom: 2.9rem; }
+.task-timer-btn { align-self: flex-end; }
